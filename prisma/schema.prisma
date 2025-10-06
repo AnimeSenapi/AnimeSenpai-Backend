@@ -1,0 +1,251 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth", "content", "user_data"]
+}
+
+model User {
+  id                       String           @id @default(cuid())
+  email                    String           @unique
+  name                     String?
+  avatar                   String?
+  bio                      String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  password                 String
+  emailVerified            Boolean          @default(false)
+  emailVerifiedAt          DateTime?
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+  passwordResetToken       String?
+  passwordResetExpires     DateTime?
+  twoFactorEnabled         Boolean          @default(false)
+  twoFactorSecret          String?
+  lastLoginAt              DateTime?
+  loginAttempts            Int              @default(0)
+  lockedUntil              DateTime?
+  gdprConsent              Boolean          @default(false)
+  gdprConsentAt            DateTime?
+  marketingConsent         Boolean          @default(false)
+  marketingConsentAt       DateTime?
+  dataProcessingConsent    Boolean          @default(false)
+  dataProcessingConsentAt  DateTime?
+  followers                Follow[]         @relation("UserFollowers")
+  following                Follow[]         @relation("UserFollowing")
+  securityEvents           SecurityEvent[]
+  preferences              UserPreferences?
+  sessions                 UserSession[]
+
+  @@index([email])
+  @@index([emailVerificationToken])
+  @@index([passwordResetToken])
+  @@index([lastLoginAt])
+  @@index([createdAt])
+  @@map("users")
+  @@schema("auth")
+}
+
+model UserPreferences {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  theme              String   @default("dark")
+  language           String   @default("en")
+  timezone           String   @default("UTC")
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  weeklyDigest       Boolean  @default(true)
+  profileVisibility  String   @default("public")
+  showWatchHistory   Boolean  @default(true)
+  showFavorites      Boolean  @default(true)
+  showRatings        Boolean  @default(true)
+  autoplay           Boolean  @default(true)
+  quality            String   @default("auto")
+  subtitles          Boolean  @default(true)
+  subtitleLanguage   String   @default("en")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+  @@schema("auth")
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  accessToken  String?
+  expiresAt    DateTime
+  userAgent    String?
+  ipAddress    String?
+  deviceInfo   String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([expiresAt])
+  @@index([refreshToken])
+  @@map("user_sessions")
+  @@schema("auth")
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  eventType String
+  eventData String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("security_events")
+  @@schema("auth")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+  @@schema("auth")
+}
+
+model Anime {
+  id            String       @id @default(cuid())
+  title         String
+  slug          String       @unique
+  description   String?
+  coverImage    String?
+  bannerImage   String?
+  trailerUrl    String?
+  status        String
+  type          String
+  episodes      Int?
+  duration      Int?
+  season        String?
+  year          Int?
+  rating        String?
+  malId         Int?         @unique
+  anilistId     Int?         @unique
+  kitsuId       Int?         @unique
+  viewCount     Int          @default(0)
+  ratingCount   Int          @default(0)
+  averageRating Float?       @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  genres        AnimeGenre[]
+
+  @@index([slug])
+  @@index([status, type])
+  @@index([year, season])
+  @@index([viewCount(sort: Desc)])
+  @@index([averageRating(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([title])
+  @@index([malId])
+  @@index([anilistId])
+  @@map("anime")
+  @@schema("content")
+}
+
+model Genre {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  description String?
+  color       String?
+  anime       AnimeGenre[]
+
+  @@map("genres")
+  @@schema("content")
+}
+
+model AnimeGenre {
+  animeId String
+  genreId String
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  genre   Genre  @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([animeId, genreId])
+  @@index([genreId, animeId])
+  @@map("anime_genres")
+  @@schema("content")
+}
+
+model UserAnimeList {
+  id          String    @id @default(cuid())
+  userId      String
+  animeId     String
+  status      String
+  score       Int?
+  progress    Int       @default(0)
+  notes       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, animeId])
+  @@index([userId, status])
+  @@index([animeId, userId])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([status, updatedAt(sort: Desc)])
+  @@map("user_anime_lists")
+  @@schema("user_data")
+}
+
+model UserAnimeRating {
+  id        String   @id @default(cuid())
+  userId    String
+  animeId   String
+  score     Int
+  review    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, animeId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([animeId, score(sort: Desc)])
+  @@index([score(sort: Desc), createdAt(sort: Desc)])
+  @@map("user_anime_ratings")
+  @@schema("user_data")
+}
+
+model UserAnimeReview {
+  id        String   @id @default(cuid())
+  userId    String
+  animeId   String
+  title     String
+  content   String
+  score     Int
+  isSpoiler Boolean  @default(false)
+  likes     Int      @default(0)
+  dislikes  Int      @default(0)
+  isPublic  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, animeId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([animeId, isPublic, likes(sort: Desc)])
+  @@index([isPublic, createdAt(sort: Desc)])
+  @@index([likes(sort: Desc)])
+  @@map("user_anime_reviews")
+  @@schema("user_data")
+}

@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "buildCommand": "npm install && npx prisma generate",
+  "installCommand": "npm install",
   "builds": [
     {
       "src": "src/index.ts",
@@ -17,12 +19,14 @@
     {
       "src": "/health",
       "dest": "/src/index.ts"
+    },
+    {
+      "src": "/metrics",
+      "dest": "/src/index.ts"
     }
   ],
   "env": {
-    "NODE_ENV": "production",
-    "FRONTEND_URL": "https://animesenpai.app",
-    "CORS_ORIGINS": "https://animesenpai.app"
+    "NODE_ENV": "production"
   },
   "functions": {
     "src/index.ts": {

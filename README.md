@@ -133,25 +133,6 @@ AnimeSenpai Backend is a production-ready, type-safe API server that powers the 
 
 ---
 
-## 📚 Documentation
-
-Comprehensive guides and references:
-
-### Core Documentation
-- **[README.md](README.md)** - This file - Complete backend guide
-- **[API_ENDPOINTS.md](API_ENDPOINTS.md)** - Full API reference with 30+ endpoints
-
-### Additional Guides (`/docs`)
-- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment checklist
-- **[BETA_TESTING_GUIDE.md](docs/BETA_TESTING_GUIDE.md)** - Role & feature flag system guide
-- **[FINAL_TEST_RESULTS.md](docs/FINAL_TEST_RESULTS.md)** - Latest test results (Score: 100/100)
-
-### Quick Links
-- 🚀 **[Getting Started](#-getting-started)** - Setup in 5 minutes
-- 📡 **[API Reference](API_ENDPOINTS.md)** - Complete endpoint docs
-- 🚢 **[Deployment](docs/DEPLOYMENT.md)** - Production ready guide
-- 🧪 **[Testing](#-testing)** - Run benchmarks
-
 ---
 
 ## 📁 Project Structure
@@ -564,38 +545,39 @@ bun run type-check
 
 ### Vercel (Recommended)
 
-1. **Install Vercel CLI**
-```bash
-bun add -g vercel
-   ```
+#### Quick Start
 
-2. **Login to Vercel**
-   ```bash
-   vercel login
-   ```
-
-3. **Configure Environment Variables**
-   
-   In Vercel Dashboard, add:
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-   - `JWT_REFRESH_SECRET`
-   - `SESSION_SECRET`
-   - `RESEND_API_KEY`
-   - `NODE_ENV=production`
-   - `FRONTEND_URL`
-
-4. **Deploy**
-   ```bash
-vercel --prod
+**Build Settings**:
+```
+Framework Preset: Other
+Root Directory: ./
+Build Command: npm install && npx prisma generate
+Output Directory: (leave empty)
+Install Command: npm install
 ```
 
-5. **Setup Custom Domain** (optional)
-   - Add `api.animesenpai.app` in Vercel
-   - Configure DNS:
-     ```
-     CNAME  api  cname.vercel-dns.com
-     ```
+**Important**: Use **npm** (not bun) - Vercel uses Node.js runtime
+
+**Required Environment Variables**:
+- `DATABASE_URL` - PostgreSQL connection string
+- `JWT_SECRET` - Generate with `openssl rand -base64 64`
+- `JWT_REFRESH_SECRET` - Generate a different one
+- `SESSION_SECRET` - Generate another one
+- `RESEND_API_KEY` - From resend.com
+- `NODE_ENV=production`
+- `FRONTEND_URL` - Your frontend URL
+- `CORS_ORIGINS` - Comma-separated allowed origins
+
+**Note**: `API_PORT` is NOT needed for Vercel (port is auto-assigned)
+
+**Deploy**:
+1. Push to GitHub
+2. Import to Vercel
+3. Add environment variables
+4. Click Deploy!
+
+📖 **[Complete Vercel Setup Guide →](VERCEL_SETUP.md)**  
+⚡ **[Quick Start Guide →](VERCEL_QUICK_START.md)**
 
 ### Other Platforms
 

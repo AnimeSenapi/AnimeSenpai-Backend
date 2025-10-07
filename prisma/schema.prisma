@@ -15,6 +15,7 @@ model User {
   name                     String?
   avatar                   String?
   bio                      String?
+  role                     String           @default("user") // user, tester, admin
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
   password                 String
@@ -46,6 +47,7 @@ model User {
   @@index([passwordResetToken])
   @@index([lastLoginAt])
   @@index([createdAt])
+  @@index([role])
   @@map("users")
   @@schema("auth")
 }
@@ -123,6 +125,22 @@ model Follow {
 
   @@unique([followerId, followingId])
   @@map("follows")
+  @@schema("auth")
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g., "new-player", "advanced-search"
+  name        String   // Display name
+  description String?  // What this feature does
+  enabled     Boolean  @default(false) // Global feature toggle
+  roles       String[] @default([]) // Roles that have access: ["tester", "admin"]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([enabled])
+  @@map("feature_flags")
   @@schema("auth")
 }
 

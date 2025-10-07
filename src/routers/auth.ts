@@ -102,6 +102,7 @@ export const authRouter = router({
             name: user.name,
             avatar: user.avatar,
             bio: user.bio,
+            role: user.role,
             emailVerified: user.emailVerified,
             preferences: user.preferences
           },
@@ -211,6 +212,7 @@ export const authRouter = router({
           name: user.name,
           avatar: user.avatar,
           bio: user.bio,
+          role: user.role,
           emailVerified: user.emailVerified,
           preferences: user.preferences
         },
@@ -229,6 +231,7 @@ export const authRouter = router({
         name: ctx.user.name,
         avatar: ctx.user.avatar,
         bio: ctx.user.bio,
+        role: ctx.user.role,
         emailVerified: ctx.user.emailVerified,
         preferences: ctx.user.preferences
       }
@@ -254,6 +257,7 @@ export const authRouter = router({
         name: user.name,
         avatar: user.avatar,
         bio: user.bio,
+        role: user.role,
         emailVerified: user.emailVerified,
         preferences: user.preferences
       }

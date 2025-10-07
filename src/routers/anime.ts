@@ -6,15 +6,30 @@ import { cache, cacheKeys, cacheTTL } from '../lib/cache'
 export const animeRouter = router({
   // Get all anime with pagination and filters
   getAll: publicProcedure
-    .query(async () => {
-      const page = 1
-      const limit = 20
-      const search = undefined
-      const genre = undefined
-      const status = undefined
-      const year = undefined
-      const sortBy = 'averageRating'
-      const sortOrder = 'desc'
+    .input(z.object({
+      page: z.number().min(1).default(1),
+      limit: z.number().min(1).max(100).default(20),
+      search: z.string().optional(),
+      genre: z.string().optional(),
+      status: z.string().optional(),
+      year: z.number().optional(),
+      type: z.string().optional(),
+      sortBy: z.enum(['title', 'year', 'averageRating', 'viewCount', 'createdAt']).default('averageRating'),
+      sortOrder: z.enum(['asc', 'desc']).default('desc')
+    }).optional())
+    .query(async ({ input = {} }) => {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        genre,
+        status,
+        year,
+        type,
+        sortBy = 'averageRating',
+        sortOrder = 'desc'
+      } = input
+      
       const skip = (page - 1) * limit
 
       const where: any = {}
@@ -22,8 +37,7 @@ export const animeRouter = router({
       if (search) {
         where.OR = [
           { title: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-          { studio: { contains: search, mode: 'insensitive' } }
+          { description: { contains: search, mode: 'insensitive' } }
         ]
       }
 
@@ -43,6 +57,10 @@ export const animeRouter = router({
 
       if (year) {
         where.year = year
+      }
+
+      if (type) {
+        where.type = type
       }
 
       const [anime, total] = await Promise.all([
@@ -116,6 +134,64 @@ export const animeRouter = router({
           pages: Math.ceil(total / limit)
         }
       }
+    }),
+
+  // Search anime (dedicated endpoint with better performance)
+  search: publicProcedure
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().min(1).max(50).default(10)
+    }))
+    .query(async ({ input }) => {
+      const { query, limit } = input
+
+      const anime = await db.anime.findMany({
+        where: {
+          OR: [
+            { title: { contains: query, mode: 'insensitive' } },
+            { description: { contains: query, mode: 'insensitive' } }
+          ]
+        },
+        take: limit,
+        orderBy: [
+          { averageRating: 'desc' },
+          { viewCount: 'desc' }
+        ],
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          coverImage: true,
+          year: true,
+          type: true,
+          status: true,
+          averageRating: true,
+          genres: {
+            select: {
+              genre: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  color: true,
+                }
+              }
+            }
+          }
+        }
+      })
+
+      return anime.map(item => ({
+        id: item.id,
+        slug: item.slug,
+        title: item.title,
+        coverImage: item.coverImage,
+        year: item.year,
+        type: item.type,
+        status: item.status,
+        averageRating: item.averageRating,
+        genres: item.genres.map(g => g.genre)
+      }))
     }),
 
   // Get anime by slug

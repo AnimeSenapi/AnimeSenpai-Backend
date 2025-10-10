@@ -12,6 +12,7 @@ datasource db {
 model User {
   id                       String           @id @default(cuid())
   email                    String           @unique
+  username                 String           @unique
   name                     String?
   avatar                   String?
   bio                      String?
@@ -43,6 +44,7 @@ model User {
   sessions                 UserSession[]
 
   @@index([email])
+  @@index([username])
   @@index([emailVerificationToken])
   @@index([passwordResetToken])
   @@index([lastLoginAt])
@@ -69,6 +71,26 @@ model UserPreferences {
   quality            String   @default("auto")
   subtitles          Boolean  @default(true)
   subtitleLanguage   String   @default("en")
+  
+  // Recommendation preferences
+  onboardingCompleted      Boolean  @default(false)
+  favoriteGenres           String[] @default([])
+  favoriteTags             String[] @default([])
+  discoveryMode            String   @default("balanced") // focused, balanced, exploratory
+  useWatchHistory          Boolean  @default(true)
+  useRatings               Boolean  @default(true)
+  useSearchHistory         Boolean  @default(true)
+  useBrowsingPatterns      Boolean  @default(true)
+  shareDataForRecommendations Boolean @default(true)
+  
+  // Social preferences
+  showActivityFeed         Boolean  @default(true)
+  showFollowersCount       Boolean  @default(true)
+  allowFollowers           Boolean  @default(true)
+  activityPrivacy          String   @default("friends") // public, friends, private
+  notifyOnFollow           Boolean  @default(true)
+  notifyOnFriendActivity   Boolean  @default(true)
+  
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -124,8 +146,43 @@ model Follow {
   following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
   @@map("follows")
   @@schema("auth")
+}
+
+model ActivityFeed {
+  id          String   @id @default(cuid())
+  userId      String
+  activityType String  // 'rated_anime', 'completed_anime', 'added_to_list', 'started_watching', 'followed_user'
+  animeId     String?
+  targetUserId String? // For follow activities
+  metadata    String?  // JSON for additional data (rating score, etc.)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([activityType, createdAt(sort: Desc)])
+  @@index([isPublic, createdAt(sort: Desc)])
+  @@map("activity_feed")
+  @@schema("user_data")
+}
+
+model Notification {
+  id            String   @id @default(cuid())
+  userId        String   // Who receives the notification
+  fromUserId    String?  // Who triggered it
+  type          String   // 'new_follower', 'friend_rated', 'friend_completed', 'review_liked'
+  animeId       String?
+  message       String
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+  @@schema("user_data")
 }
 
 model FeatureFlag {
@@ -146,28 +203,83 @@ model FeatureFlag {
 
 model Anime {
   id            String       @id @default(cuid())
+  
+  // Basic Information
   title         String
+  titleEnglish  String?
+  titleJapanese String?
+  titleSynonyms String[]     @default([])
   slug          String       @unique
-  description   String?
+  
+  // Type & Status
+  type          String       // TV, Movie, OVA, Special, ONA, Music
+  source        String?      // Manga, Light Novel, Original, etc.
+  status        String       // Finished Airing, Currently Airing, Not yet aired
+  airing        Boolean      @default(false)
+  
+  // Episodes & Duration
+  episodes      Int?
+  duration      String?      // "24 min per ep" from Jikan
+  
+  // Dates
+  aired         String?      // "Apr 3, 2007 to Jun 27, 2007" format
+  startDate     DateTime?
+  endDate       DateTime?
+  season        String?      // winter, spring, summer, fall
+  year          Int?
+  broadcast     String?      // "Tuesdays at 01:29 (JST)"
+  
+  // Rating & Classification
+  rating        String?      // PG-13, R, G, etc.
+  
+  // Scores & Rankings
+  averageRating Float?       @default(0)
+  scoredBy      Int          @default(0)
+  rank          Int?         // MyAnimeList rank
+  popularity    Int?         // MyAnimeList popularity rank
+  members       Int          @default(0) // MAL members count
+  favorites     Int          @default(0) // MAL favorites count
+  viewCount     Int          @default(0) // AnimeSenpai views
+  ratingCount   Int          @default(0) // AnimeSenpai ratings
+  
+  // Content
+  synopsis      String?
+  background    String?      // Additional background info from MAL
+  
+  // Production
+  producers     String[]     @default([])
+  licensors     String[]     @default([])
+  studios       String[]     @default([])
+  
+  // Classification
+  themes        String[]     @default([]) // Themes from MAL
+  demographics  String[]     @default([]) // Shounen, Seinen, Josei, Shoujo, Kids
+  
+  // For recommendations (AnimeSenpai specific)
+  tags          String[]     @default([]) // dark, wholesome, action-packed, etc.
+  studio        String?      // Deprecated: use studios[] instead
+  
+  // Media
   coverImage    String?
   bannerImage   String?
-  trailerUrl    String?
-  status        String
-  type          String
-  episodes      Int?
-  duration      Int?
-  season        String?
-  year          Int?
-  rating        String?
+  trailer       String?      // YouTube trailer URL
+  trailerUrl    String?      // Deprecated: use trailer
+  
+  // External IDs
   malId         Int?         @unique
   anilistId     Int?         @unique
   kitsuId       Int?         @unique
-  viewCount     Int          @default(0)
-  ratingCount   Int          @default(0)
-  averageRating Float?       @default(0)
+  
+  // Metadata
+  approved      Boolean      @default(false) // MAL approval status
+  description   String?      // Deprecated: use synopsis
+  
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  
+  // Relations
   genres        AnimeGenre[]
+  streamingPlatforms AnimeStreamingPlatform[]
 
   @@index([slug])
   @@index([status, type])
@@ -178,6 +290,9 @@ model Anime {
   @@index([title])
   @@index([malId])
   @@index([anilistId])
+  @@index([rank])
+  @@index([popularity])
+  @@index([airing])
   @@map("anime")
   @@schema("content")
 }
@@ -203,6 +318,36 @@ model AnimeGenre {
   @@id([animeId, genreId])
   @@index([genreId, animeId])
   @@map("anime_genres")
+  @@schema("content")
+}
+
+model StreamingPlatform {
+  id          String                   @id @default(cuid())
+  name        String                   @unique  // "Crunchyroll", "Netflix", "Hulu", etc.
+  slug        String                   @unique  // "crunchyroll", "netflix", "hulu"
+  logoUrl     String?                  // Platform logo
+  baseUrl     String?                  // "https://www.crunchyroll.com"
+  color       String?                  // Brand color for UI
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  anime       AnimeStreamingPlatform[]
+
+  @@map("streaming_platforms")
+  @@schema("content")
+}
+
+model AnimeStreamingPlatform {
+  animeId    String
+  platformId String
+  url        String                   // Direct URL to anime on platform
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+  anime      Anime                    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  platform   StreamingPlatform        @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@id([animeId, platformId])
+  @@index([platformId, animeId])
+  @@map("anime_streaming_platforms")
   @@schema("content")
 }
 
@@ -266,4 +411,51 @@ model UserAnimeReview {
   @@index([likes(sort: Desc)])
   @@map("user_anime_reviews")
   @@schema("user_data")
+}
+
+model RecommendationFeedback {
+  id           String   @id @default(cuid())
+  userId       String
+  animeId      String
+  feedbackType String   // 'dismiss', 'hide', 'not_interested_genre'
+  reason       String?
+  createdAt    DateTime @default(now())
+  
+  @@unique([userId, animeId])
+  @@index([userId])
+  @@index([animeId])
+  @@index([feedbackType])
+  @@map("recommendation_feedback")
+  @@schema("user_data")
+}
+
+model UserInteraction {
+  id         String   @id @default(cuid())
+  userId     String
+  animeId    String?
+  actionType String   // 'view_page', 'search', 'click', 'hover', 'add_to_list'
+  metadata   String?  // JSON string for additional data
+  duration   Int?     // seconds spent (for views)
+  createdAt  DateTime @default(now())
+  
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([animeId])
+  @@index([actionType])
+  @@map("user_interactions")
+  @@schema("user_data")
+}
+
+model AnimeEmbedding {
+  id               String   @id @default(cuid())
+  animeId          String   @unique
+  descriptionVector String? // JSON array of floats for description embedding
+  genreVector      String?  // JSON array for genre-based embedding
+  combinedVector   String?  // Combined embedding for similarity search
+  version          String   @default("1.0") // Track embedding version for updates
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([animeId])
+  @@map("anime_embeddings")
+  @@schema("content")
 }

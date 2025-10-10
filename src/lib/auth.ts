@@ -1,3 +1,10 @@
+/**
+ * 🔐 AnimeSenpai Authentication Library
+ * 
+ * Handles everything auth-related: passwords, tokens, sessions, and email verification.
+ * Built with security in mind — your users' data is safe with Senpai.
+ */
+
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
@@ -5,10 +12,12 @@ import { db } from './db'
 import { emailService } from './email'
 
 // JWT Configuration
+// Access tokens are short-lived (15min), refresh tokens last longer (7 days)
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret-key'
 const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '15m'
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+// 12 rounds of bcrypt = secure but still fast enough
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12')
 
 export interface JWTPayload {

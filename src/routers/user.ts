@@ -1,7 +1,10 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { getUserFeatures, hasFeatureAccess } from '../lib/roles'
+import { invalidateUserCaches } from '../lib/recommendations'
+import { createActivity } from '../lib/social'
+import { TRPCError } from '@trpc/server'
 
 export const userRouter = router({
   // Get user's anime list with full anime details
@@ -283,6 +286,42 @@ export const userRouter = router({
         data: updateData
       })
 
+      // If score was updated, invalidate recommendation caches
+      if (score !== undefined) {
+        invalidateUserCaches(ctx.user.id)
+        
+        // Create activity for rating
+        await createActivity(
+          ctx.user.id,
+          'rated_anime',
+          animeId,
+          null,
+          { score }
+        )
+      }
+      
+      // If status changed to completed, create activity
+      if (status === 'completed') {
+        await createActivity(
+          ctx.user.id,
+          'completed_anime',
+          animeId,
+          null,
+          null
+        )
+      }
+      
+      // If status changed to watching, create activity
+      if (status === 'watching') {
+        await createActivity(
+          ctx.user.id,
+          'started_watching',
+          animeId,
+          null,
+          null
+        )
+      }
+
       return animeList
     }),
 
@@ -321,6 +360,18 @@ export const userRouter = router({
           score: rating
         }
       })
+
+      // Invalidate caches to refresh recommendations
+      invalidateUserCaches(ctx.user.id)
+      
+      // Create activity
+      await createActivity(
+        ctx.user.id,
+        'rated_anime',
+        animeId,
+        null,
+        { score: rating }
+      )
 
       return animeRating
     }),
@@ -657,5 +708,260 @@ export const userRouter = router({
         hasAccess,
         role: ctx.user.role
       }
+    }),
+
+  // Get user by username (public endpoint for viewing profiles)
+  getUserByUsername: publicProcedure
+    .input(z.object({
+      username: z.string().min(2).max(50)
+    }))
+    .query(async ({ input }) => {
+      // Normalize username (trim, lowercase for case-insensitive search)
+      const normalizedUsername = input.username.trim()
+      
+      // Try exact match first
+      let user = await db.user.findUnique({
+        where: { username: normalizedUsername },
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          avatar: true,
+          bio: true,
+          role: true,
+          createdAt: true,
+          preferences: {
+            select: {
+              profileVisibility: true,
+              showWatchHistory: true,
+              showFavorites: true,
+              showRatings: true
+            }
+          }
+        }
+      })
+
+      // If not found, try case-insensitive search
+      if (!user) {
+        const users = await db.user.findMany({
+          where: {
+            username: {
+              mode: 'insensitive',
+              equals: normalizedUsername
+            }
+          },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatar: true,
+            bio: true,
+            role: true,
+            createdAt: true,
+            preferences: {
+              select: {
+                profileVisibility: true,
+                showWatchHistory: true,
+                showFavorites: true,
+                showRatings: true
+              }
+            }
+          },
+          take: 1
+        })
+        
+        user = users[0] || null
+      }
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `User "@${normalizedUsername}" not found. This username doesn't exist yet!`
+        })
+      }
+
+      // Check if profile is public
+      if (user.preferences?.profileVisibility === 'private') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'This profile is private.'
+        })
+      }
+
+      // Get user stats
+      const [
+        totalAnime,
+        totalEpisodes,
+        favoriteCount,
+        completedCount
+      ] = await Promise.all([
+        db.userAnimeList.count({
+          where: { userId: user.id }
+        }),
+        db.userAnimeList.aggregate({
+          where: { userId: user.id },
+          _sum: { progress: true }
+        }),
+        db.userAnimeList.count({
+          where: { userId: user.id, status: 'favorite' }
+        }),
+        db.userAnimeList.count({
+          where: { userId: user.id, status: 'completed' }
+        })
+      ])
+
+      return {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        avatar: user.avatar,
+        bio: user.bio,
+        role: user.role,
+        createdAt: user.createdAt,
+        stats: {
+          totalAnime,
+          totalEpisodes: totalEpisodes._sum.progress || 0,
+          favorites: favoriteCount,
+          completed: completedCount
+        },
+        preferences: {
+          showWatchHistory: user.preferences?.showWatchHistory ?? true,
+          showFavorites: user.preferences?.showFavorites ?? true,
+          showRatings: user.preferences?.showRatings ?? true
+        }
+      }
+    }),
+
+  // Check username availability (public endpoint)
+  checkUsernameAvailability: publicProcedure
+    .input(z.object({
+      username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
+    }))
+    .query(async ({ input }) => {
+      const existingUser = await db.user.findUnique({
+        where: { username: input.username },
+        select: { id: true }
+      })
+
+      return {
+        available: !existingUser,
+        username: input.username
+      }
+    }),
+
+  // Get user's public anime list (for viewing other users' profiles)
+  getUserAnimeList: publicProcedure
+    .input(z.object({
+      username: z.string().min(2).max(50),
+      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch']).optional(),
+      limit: z.number().min(1).max(100).default(20)
+    }))
+    .query(async ({ input }) => {
+      const { username, status, limit } = input
+
+      // Find user
+      const user = await db.user.findUnique({
+        where: { username },
+        select: {
+          id: true,
+          preferences: {
+            select: {
+              showWatchHistory: true,
+              showFavorites: true,
+              profileVisibility: true
+            }
+          }
+        }
+      })
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'User not found'
+        })
+      }
+
+      // Check privacy settings
+      if (user.preferences?.profileVisibility === 'private') {
+        return { items: [] }
+      }
+
+      if (!user.preferences?.showWatchHistory) {
+        return { items: [] }
+      }
+
+      // Build where clause
+      const where: any = { userId: user.id }
+      if (status) {
+        where.status = status
+      }
+
+      // Fetch anime list
+      const animeList = await db.userAnimeList.findMany({
+        where,
+        take: limit,
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          animeId: true,
+          status: true,
+          score: true,
+          progress: true
+        }
+      })
+
+      // Fetch anime details
+      const animeIds = animeList.map(item => item.animeId)
+      const animeDetails = await db.anime.findMany({
+        where: { id: { in: animeIds } },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          coverImage: true,
+          year: true,
+          rating: true,
+          status: true,
+          type: true,
+          episodes: true,
+          duration: true,
+          genres: {
+            select: {
+              genre: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true
+                }
+              }
+            }
+          }
+        }
+      })
+
+      // Merge data
+      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
+      const items = animeList.map(listItem => {
+        const anime = animeMap.get(listItem.animeId)
+        if (!anime) return null
+        
+        return {
+          id: anime.id,
+          slug: anime.slug,
+          title: anime.title,
+          coverImage: anime.coverImage,
+          year: anime.year,
+          rating: anime.rating,
+          status: anime.status,
+          type: anime.type,
+          episodes: anime.episodes,
+          duration: anime.duration,
+          genres: anime.genres.map(g => g.genre),
+          tags: [],
+          listStatus: listItem.status,
+          userScore: listItem.score
+        }
+      }).filter(Boolean)
+
+      return { items }
     })
 })

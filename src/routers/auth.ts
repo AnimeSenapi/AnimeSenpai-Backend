@@ -34,19 +34,30 @@ export const authRouter = router({
       
       try {
         // Direct input validation
-        const { email, password, firstName, lastName, gdprConsent, marketingConsent, dataProcessingConsent } = input
-        const fullName = `${firstName} ${lastName || ''}`.trim()
+        const { email, username, password, gdprConsent, marketingConsent, dataProcessingConsent } = input
 
-        logger.auth('Signup attempt started', logContext, { email })
+        logger.auth('Signup attempt started', logContext, { email, username })
 
-        // Check if user already exists
-        const existingUser = await db.user.findUnique({
-          where: { email }
+        // Check if user already exists (email or username)
+        const existingUser = await db.user.findFirst({
+          where: {
+            OR: [
+              { email },
+              { username }
+            ]
+          }
         })
 
         if (existingUser) {
-          logAuth.registration(email, false, logContext)
-          throw createError.userAlreadyExists(email)
+          if (existingUser.email === email) {
+            logAuth.registration(email, false, logContext)
+            throw createError.userAlreadyExists(email)
+          } else {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Username is already taken. Please choose a different username.'
+            })
+          }
         }
 
         // Hash password and create user
@@ -55,8 +66,8 @@ export const authRouter = router({
         const user = await db.user.create({
           data: {
             email,
+            username,
             password: hashedPassword,
-            name: fullName,
             gdprConsent,
             gdprConsentAt: new Date(),
             marketingConsent,
@@ -82,13 +93,13 @@ export const authRouter = router({
         const tokens = await createSession(user.id, sessionInfo)
 
         // Send email verification
-        await sendEmailVerification(email, fullName)
+        await sendEmailVerification(email, username)
 
         // Log security event
         await logSecurityEvent(
           user.id,
           'user_registration',
-          { email, name: fullName },
+          { email, username },
           sessionInfo.ipAddress,
           sessionInfo.userAgent
         )
@@ -99,6 +110,7 @@ export const authRouter = router({
           user: {
             id: user.id,
             email: user.email,
+            username: user.username,
             name: user.name,
             avatar: user.avatar,
             bio: user.bio,
@@ -209,6 +221,7 @@ export const authRouter = router({
         user: {
           id: user.id,
           email: user.email,
+          username: user.username,
           name: user.name,
           avatar: user.avatar,
           bio: user.bio,
@@ -228,6 +241,7 @@ export const authRouter = router({
       return {
         id: ctx.user.id,
         email: ctx.user.email,
+        username: ctx.user.username,
         name: ctx.user.name,
         avatar: ctx.user.avatar,
         bio: ctx.user.bio,
@@ -240,11 +254,27 @@ export const authRouter = router({
   // Update profile
   updateProfile: protectedProcedure
     .input(z.object({
+      username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens').optional(),
       name: z.string().min(2).optional(),
-      bio: z.string().optional(),
+      bio: z.string().max(200).optional(),
       avatar: z.string().url().optional()
     }))
     .mutation(async ({ input, ctx }) => {
+      // If username is being changed, check if it's available
+      if (input.username && input.username !== ctx.user.username) {
+        const existingUser = await db.user.findUnique({
+          where: { username: input.username },
+          select: { id: true }
+        })
+
+        if (existingUser) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Username is already taken. Please choose a different username.'
+          })
+        }
+      }
+
       const user = await db.user.update({
         where: { id: ctx.user.id },
         data: input,
@@ -254,6 +284,7 @@ export const authRouter = router({
       return {
         id: user.id,
         email: user.email,
+        username: user.username,
         name: user.name,
         avatar: user.avatar,
         bio: user.bio,
@@ -267,10 +298,19 @@ export const authRouter = router({
   changePassword: protectedProcedure
     .input(z.object({
       currentPassword: z.string(),
-      newPassword: z.string().min(8)
+      newPassword: z.string().min(8),
+      confirmPassword: z.string().min(8)
     }))
     .mutation(async ({ input, ctx }) => {
-      const { currentPassword, newPassword } = input
+      const { currentPassword, newPassword, confirmPassword } = input
+
+      // Verify passwords match
+      if (newPassword !== confirmPassword) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'New passwords do not match'
+        })
+      }
 
       // Verify current password
       const isValidPassword = await verifyPassword(currentPassword, ctx.user.password)
@@ -290,6 +330,16 @@ export const authRouter = router({
         where: { id: ctx.user.id },
         data: { password: hashedPassword }
       })
+
+      // Log security event
+      const logCtx = extractLogContext(ctx.req)
+      await logSecurityEvent(
+        ctx.user.id,
+        'password_changed',
+        { username: ctx.user.username },
+        logCtx.ipAddress,
+        logCtx.userAgent
+      )
 
       return { success: true }
     }),
@@ -472,7 +522,7 @@ export const authRouter = router({
         })
       }
 
-      await sendEmailVerification(ctx.user.email, ctx.user.name ?? undefined)
+      await sendEmailVerification(ctx.user.email, ctx.user.username)
 
       await logSecurityEvent(
         ctx.user.id,

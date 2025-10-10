@@ -58,10 +58,9 @@ export const ratingSchema = z
 // Auth validation schemas
 export const signupSchema = z.object({
   email: emailSchema,
+  username: usernameSchema,
   password: passwordSchema,
   confirmPassword: z.string().min(1, 'Password confirmation is required'),
-  firstName: nameSchema,
-  lastName: nameSchema.optional(),
   gdprConsent: z.boolean().refine(val => val === true, 'GDPR consent is required'),
   marketingConsent: z.boolean().optional(),
   dataProcessingConsent: z.boolean().refine(val => val === true, 'Data processing consent is required'),

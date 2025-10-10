@@ -57,38 +57,50 @@ export class EmailService {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Verify Your Email - AnimeSenpai</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-          </style>
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🎌 Welcome to AnimeSenpai!</h1>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #06b6d4 0%, #ec4899 100%); padding: 40px 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="margin: 0; color: white; font-size: 32px; font-weight: bold;">🎌 AnimeSenpai</h1>
+              <p style="margin: 10px 0 0; color: rgba(255,255,255,0.9); font-size: 18px;">Welcome Aboard!</p>
             </div>
-            <div class="content">
-              <h2>Hi${name ? ` ${name}` : ''}!</h2>
-              <p>Thank you for signing up for AnimeSenpai! To complete your registration and start discovering amazing anime, please verify your email address.</p>
+            
+            <!-- Content -->
+            <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
+              <h2 style="color: white; font-size: 24px; margin: 0 0 20px;">Hi${name ? ` ${name}` : ''}! 👋</h2>
               
-              <div style="text-align: center;">
-                <a href="${verificationUrl}" class="button">Verify Email Address</a>
+              <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                Thank you for joining <strong style="color: #06b6d4;">AnimeSenpai</strong>! We're excited to help you discover amazing anime. To get started, please verify your email address.
+              </p>
+              
+              <!-- Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${verificationUrl}" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #ec4899 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.3);">
+                  ✨ Verify Email Address
+                </a>
               </div>
               
-              <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; background: #eee; padding: 10px; border-radius: 5px;">${verificationUrl}</p>
+              <!-- Link Backup -->
+              <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.1);">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0 0 8px;">Or copy and paste this link:</p>
+                <p style="color: #06b6d4; font-size: 12px; word-break: break-all; margin: 0;">${verificationUrl}</p>
+              </div>
               
-              <p><strong>This link will expire in 24 hours.</strong></p>
+              <!-- Info Box -->
+              <div style="background: rgba(6, 182, 212, 0.1); border-left: 4px solid #06b6d4; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;"><strong style="color: white;">⏰ Important:</strong> This verification link will expire in 24 hours.</p>
+              </div>
               
-              <p>If you didn't create an account with AnimeSenpai, you can safely ignore this email.</p>
+              <p style="color: #94a3b8; font-size: 14px; margin: 20px 0 0;">
+                If you didn't create an account with AnimeSenpai, you can safely ignore this email.
+              </p>
             </div>
-            <div class="footer">
-              <p>© 2024 AnimeSenpai. All rights reserved.</p>
-              <p>This email was sent to ${email}</p>
+            
+            <!-- Footer -->
+            <div style="text-align: center; padding: 30px 20px 20px; color: #64748b; font-size: 12px;">
+              <p style="margin: 0 0 10px;">© 2025 AnimeSenpai. All rights reserved.</p>
+              <p style="margin: 0; color: #475569;">This email was sent to ${email}</p>
             </div>
           </div>
         </body>
@@ -130,44 +142,55 @@ export class EmailService {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Reset Your Password - AnimeSenpai</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; background: #ff6b6b; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-            .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
-          </style>
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🔒 Password Reset Request</h1>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 40px 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="margin: 0; color: white; font-size: 32px; font-weight: bold;">🔒 Password Reset</h1>
+              <p style="margin: 10px 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Secure your account</p>
             </div>
-            <div class="content">
-              <h2>Hi${name ? ` ${name}` : ''}!</h2>
-              <p>We received a request to reset your password for your AnimeSenpai account.</p>
+            
+            <!-- Content -->
+            <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
+              <h2 style="color: white; font-size: 24px; margin: 0 0 20px;">Hi${name ? ` ${name}` : ''}! 👋</h2>
               
-              <div style="text-align: center;">
-                <a href="${resetUrl}" class="button">Reset Password</a>
+              <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                We received a request to reset your password for your <strong style="color: #06b6d4;">AnimeSenpai</strong> account. Click the button below to create a new password.
+              </p>
+              
+              <!-- Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.4);">
+                  🔑 Reset Your Password
+                </a>
               </div>
               
-              <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; background: #eee; padding: 10px; border-radius: 5px;">${resetUrl}</p>
+              <!-- Link Backup -->
+              <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.1);">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0 0 8px;">Or copy and paste this link:</p>
+                <p style="color: #06b6d4; font-size: 12px; word-break: break-all; margin: 0;">${resetUrl}</p>
+              </div>
               
-              <div class="warning">
-                <p><strong>⚠️ Security Notice:</strong></p>
-                <ul>
-                  <li>This link will expire in 1 hour</li>
-                  <li>If you didn't request this reset, please ignore this email</li>
-                  <li>Your password will remain unchanged until you click the link above</li>
+              <!-- Warning Box -->
+              <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #fca5a5; font-size: 14px; margin: 0 0 12px;"><strong>⚠️ Security Notice:</strong></p>
+                <ul style="color: #cbd5e1; font-size: 14px; margin: 0; padding-left: 20px;">
+                  <li style="margin-bottom: 8px;">This link will expire in <strong>1 hour</strong></li>
+                  <li style="margin-bottom: 8px;">If you didn't request this, please ignore this email</li>
+                  <li>Your current password remains active until you reset it</li>
                 </ul>
               </div>
+              
+              <p style="color: #94a3b8; font-size: 14px; margin: 20px 0 0;">
+                If you're having trouble, reply to this email and we'll help you out!
+              </p>
             </div>
-            <div class="footer">
-              <p>© 2024 AnimeSenpai. All rights reserved.</p>
-              <p>This email was sent to ${email}</p>
+            
+            <!-- Footer -->
+            <div style="text-align: center; padding: 30px 20px 20px; color: #64748b; font-size: 12px;">
+              <p style="margin: 0 0 10px;">© 2025 AnimeSenpai. All rights reserved.</p>
+              <p style="margin: 0; color: #475569;">This email was sent to ${email}</p>
             </div>
           </div>
         </body>
@@ -208,48 +231,62 @@ export class EmailService {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Welcome to AnimeSenpai!</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-            .feature { background: white; padding: 20px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #667eea; }
-          </style>
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🎉 Welcome to AnimeSenpai!</h1>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #06b6d4 0%, #ec4899 100%); padding: 40px 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="margin: 0; color: white; font-size: 36px; font-weight: bold;">🎉 Welcome!</h1>
+              <p style="margin: 10px 0 0; color: rgba(255,255,255,0.9); font-size: 18px;">Your anime journey starts now</p>
             </div>
-            <div class="content">
-              <h2>Hi${name ? ` ${name}` : ''}!</h2>
-              <p>Welcome to AnimeSenpai! Your email has been verified and your account is now active. You're ready to start your anime journey!</p>
+            
+            <!-- Content -->
+            <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
+              <h2 style="color: white; font-size: 28px; margin: 0 0 20px;">Hi${name ? ` ${name}` : ''}! 👋</h2>
               
-              <div style="text-align: center;">
-                <a href="${this.frontendUrl}/dashboard" class="button">Go to Dashboard</a>
-              </div>
+              <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+                Welcome to <strong style="background: linear-gradient(135deg, #06b6d4, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AnimeSenpai</strong>! Your account is now active and you're ready to dive into the world of anime.
+              </p>
               
-              <h3>What you can do on AnimeSenpai:</h3>
-              <div class="feature">
-                <h4>📚 Create Your Anime List</h4>
-                <p>Add anime to your watchlist, mark episodes as watched, and track your progress.</p>
-              </div>
-              <div class="feature">
-                <h4>⭐ Rate & Review</h4>
-                <p>Rate your favorite anime and share your thoughts with the community.</p>
-              </div>
-              <div class="feature">
-                <h4>🔍 Discover New Anime</h4>
-                <p>Find trending anime, browse by genre, and get personalized recommendations.</p>
+              <!-- Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${this.frontendUrl}/dashboard" style="display: inline-block; background: linear-gradient(135deg, #06b6d4 0%, #ec4899 100%); color: white; padding: 18px 48px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.4);">
+                  🚀 Go to Dashboard
+                </a>
               </div>
               
-              <p>If you have any questions, feel free to reach out to our support team.</p>
+              <!-- Features -->
+              <h3 style="color: white; font-size: 20px; margin: 30px 0 20px;">What you can do:</h3>
+              
+              <div style="background: rgba(6, 182, 212, 0.1); border-left: 4px solid #06b6d4; padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="color: #06b6d4; font-size: 16px; margin: 0 0 8px;">📺 Track Your Anime</h4>
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Create your personalized watchlist and never lose track of what you're watching.</p>
+              </div>
+              
+              <div style="background: rgba(236, 72, 153, 0.1); border-left: 4px solid #ec4899; padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="color: #ec4899; font-size: 16px; margin: 0 0 8px;">⭐ Get Recommendations</h4>
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Discover anime based on your taste with our ML-powered recommendation engine.</p>
+              </div>
+              
+              <div style="background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="color: #22c55e; font-size: 16px; margin: 0 0 8px;">👥 Connect with Fans</h4>
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Follow friends, see what they're watching, and share your favorites.</p>
+              </div>
+              
+              <div style="background: rgba(168, 85, 247, 0.1); border-left: 4px solid #a855f7; padding: 20px; border-radius: 8px;">
+                <h4 style="color: #a855f7; font-size: 16px; margin: 0 0 8px;">🎯 Rate & Review</h4>
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">Share your thoughts and help others discover great anime.</p>
+              </div>
+              
+              <p style="color: #94a3b8; font-size: 14px; margin: 30px 0 0; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                Need help? Reply to this email anytime – we're here to help! 💬
+              </p>
             </div>
-            <div class="footer">
-              <p>© 2024 AnimeSenpai. All rights reserved.</p>
-              <p>This email was sent to ${email}</p>
+            
+            <!-- Footer -->
+            <div style="text-align: center; padding: 30px 20px 20px; color: #64748b; font-size: 12px;">
+              <p style="margin: 0 0 10px;">© 2025 AnimeSenpai. All rights reserved.</p>
+              <p style="margin: 0; color: #475569;">This email was sent to ${email}</p>
             </div>
           </div>
         </body>
@@ -292,39 +329,63 @@ export class EmailService {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Security Alert - AnimeSenpai</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; background: #ff6b6b; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-            .alert { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
-          </style>
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🚨 Security Alert</h1>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0f172a;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); padding: 40px 30px; text-align: center; border-radius: 16px 16px 0 0;">
+              <h1 style="margin: 0; color: white; font-size: 32px; font-weight: bold;">🚨 Security Alert</h1>
+              <p style="margin: 10px 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Account activity detected</p>
             </div>
-            <div class="content">
-              <h2>Hi${name ? ` ${name}` : ''}!</h2>
-              <p>We detected a security event on your AnimeSenpai account:</p>
+            
+            <!-- Content -->
+            <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
+              <h2 style="color: white; font-size: 24px; margin: 0 0 20px;">Hi${name ? ` ${name}` : ''}! 👋</h2>
               
-              <div class="alert">
-                <p><strong>Event:</strong> ${eventType}</p>
-                <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                We detected a security event on your <strong style="color: #06b6d4;">AnimeSenpai</strong> account.
+              </p>
+              
+              <!-- Event Box -->
+              <div style="background: rgba(245, 158, 11, 0.1); border: 2px solid #f59e0b; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                <p style="color: #fbbf24; font-size: 16px; margin: 0 0 12px;"><strong>📋 Event Details:</strong></p>
+                <table style="width: 100%; color: #cbd5e1; font-size: 14px;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #94a3b8;">Event:</td>
+                    <td style="padding: 8px 0; color: white; font-weight: bold;">${eventType}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #94a3b8;">Time:</td>
+                    <td style="padding: 8px 0; color: white;">${new Date().toLocaleString()}</td>
+                  </tr>
+                </table>
               </div>
               
-              <p>If this was you, no action is needed. If you don't recognize this activity, please secure your account immediately.</p>
+              <!-- Action Box -->
+              <div style="background: rgba(6, 182, 212, 0.1); border-left: 4px solid #06b6d4; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">
+                  <strong style="color: white;">✅ Was this you?</strong> No action needed – your account is secure.
+                </p>
+              </div>
               
-              <div style="text-align: center;">
-                <a href="${this.frontendUrl}/auth/signin" class="button">Secure Account</a>
+              <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #cbd5e1; font-size: 14px; margin: 0;">
+                  <strong style="color: #fca5a5;">⚠️ Wasn't you?</strong> Secure your account immediately by changing your password.
+                </p>
+              </div>
+              
+              <!-- Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${this.frontendUrl}/user/settings?tab=security" style="display: inline-block; background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 14px 0 rgba(245, 158, 11, 0.4);">
+                  🔒 Secure Account
+                </a>
               </div>
             </div>
-            <div class="footer">
-              <p>© 2024 AnimeSenpai. All rights reserved.</p>
-              <p>This email was sent to ${email}</p>
+            
+            <!-- Footer -->
+            <div style="text-align: center; padding: 30px 20px 20px; color: #64748b; font-size: 12px;">
+              <p style="margin: 0 0 10px;">© 2025 AnimeSenpai. All rights reserved.</p>
+              <p style="margin: 0; color: #475569;">This email was sent to ${email}</p>
             </div>
           </div>
         </body>
@@ -333,7 +394,7 @@ export class EmailService {
 
     return this.sendEmail({
       to: email,
-      subject: 'Security Alert - AnimeSenpai',
+      subject: '🚨 Security Alert - AnimeSenpai',
       html,
     });
   }

@@ -904,7 +904,7 @@ export const userRouter = router({
           _sum: { progress: true }
         }),
         db.userAnimeList.count({
-          where: { userId: user.id, status: 'favorite' }
+          where: { userId: user.id, isFavorite: true }
         }),
         db.userAnimeList.count({
           where: { userId: user.id, status: 'completed' }

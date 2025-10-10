@@ -5,12 +5,31 @@ import { appRouter } from '../src/routers'
 // Vercel Serverless Function Handler
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Get allowed origins from environment
-  const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || ['*']
-  const origin = req.headers.origin || req.headers.referer || ''
-  const isAllowed = allowedOrigins.includes('*') || allowedOrigins.some(allowed => origin.includes(allowed))
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || []
+  const origin = req.headers.origin || ''
   
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : allowedOrigins[0])
+  // Log CORS configuration for debugging
+  console.log('🔧 CORS Debug:', {
+    requestOrigin: origin,
+    allowedOrigins: allowedOrigins,
+    corsEnvVar: process.env.CORS_ORIGINS
+  })
+  
+  // Check if origin is allowed
+  const isAllowed = allowedOrigins.length === 0 || 
+                    allowedOrigins.includes('*') || 
+                    allowedOrigins.some(allowed => origin === allowed || origin.includes(allowed.replace('https://', '')))
+  
+  // Set CORS headers - must use specific origin with credentials, not '*'
+  if (isAllowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  } else if (allowedOrigins.length > 0) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0])
+  } else {
+    // Fallback: if no CORS_ORIGINS set, allow the requesting origin
+    res.setHeader('Access-Control-Allow-Origin', origin || 'https://animesenpai.app')
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trpc-source')
   res.setHeader('Access-Control-Allow-Credentials', 'true')

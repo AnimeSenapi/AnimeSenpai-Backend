@@ -1,14 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '../src/routers'
-import { createContext } from '../src/lib/trpc'
 
 // Vercel Serverless Function Handler
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Get allowed origins from environment
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || ['*']
+  const origin = req.headers.origin || req.headers.referer || ''
+  const isAllowed = allowedOrigins.includes('*') || allowedOrigins.some(allowed => origin.includes(allowed))
+  
   // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*')
+  res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : allowedOrigins[0])
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-trpc-source')
   res.setHeader('Access-Control-Allow-Credentials', 'true')
+  res.setHeader('Access-Control-Max-Age', '86400')
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -17,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Health check
-  if (req.url === '/health') {
+  if (req.url === '/health' || req.url === '/') {
     res.status(200).json({
       status: 'ok',
       message: 'AnimeSenpai API Server is running',
@@ -28,31 +34,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // Convert Vercel Request to Fetch Request
+  const url = `https://${req.headers.host}${req.url}`
+  const method = req.method || 'GET'
+  
+  // Build headers
+  const headers = new Headers()
+  Object.entries(req.headers).forEach(([key, value]) => {
+    if (value) {
+      headers.set(key, Array.isArray(value) ? value.join(', ') : value)
+    }
+  })
+
+  // Build fetch request
+  const fetchReq = new Request(url, {
+    method,
+    headers,
+    body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
+  })
+
   try {
-    // Import tRPC caller
-    const caller = appRouter.createCaller(await createContext({ req: req as any, res: res as any }))
-    
-    // Parse tRPC request
-    const path = req.url?.replace('/api/trpc/', '') || ''
-    const [router, procedure] = path.split('.')
-    
-    if (!router || !procedure) {
-      res.status(400).json({ error: 'Invalid tRPC endpoint' })
-      return
-    }
+    // Use tRPC's fetch adapter
+    const response = await fetchRequestHandler({
+      endpoint: '/api/trpc',
+      req: fetchReq,
+      router: appRouter,
+      createContext: ({ req }) => ({
+        req: req as any,
+      }),
+    })
 
-    // Get the procedure from router
-    const routerObj = (caller as any)[router]
-    if (!routerObj || !routerObj[procedure]) {
-      res.status(404).json({ error: 'Procedure not found' })
-      return
-    }
-
-    // Execute procedure
-    const input = req.method === 'GET' ? req.query : req.body
-    const result = await routerObj[procedure](input)
+    // Copy response to Vercel response
+    const data = await response.text()
     
-    res.status(200).json({ result: { data: result } })
+    // Set response headers
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value)
+    })
+    
+    // Ensure CORS headers are set
+    res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : allowedOrigins[0])
+    
+    res.status(response.status).send(data)
   } catch (error: any) {
     console.error('tRPC error:', error)
     res.status(500).json({ 

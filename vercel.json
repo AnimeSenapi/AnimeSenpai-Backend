@@ -7,10 +7,13 @@
     {
       "source": "/health",
       "destination": "/api"
-    },
+    }
+  ],
+  "redirects": [
     {
-      "source": "/(.*)",
-      "destination": "/api"
+      "source": "/",
+      "destination": "https://animesenpai.app",
+      "permanent": true
     }
   ]
 }

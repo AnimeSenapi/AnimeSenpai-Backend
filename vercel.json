@@ -1,4 +1,17 @@
 {
-  "framework": null
+  "rewrites": [
+    {
+      "source": "/api/trpc/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/health",
+      "destination": "/api"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
 }
 

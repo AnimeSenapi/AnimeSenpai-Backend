@@ -10,7 +10,7 @@ export const userRouter = router({
   // Get user's anime list with full anime details
   getAnimeList: protectedProcedure
     .input(z.object({
-      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch']).optional(),
+      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']).optional(),
       page: z.number().min(1).default(1),
       limit: z.number().min(1).max(100).default(20),
       sortBy: z.enum(['updatedAt', 'createdAt', 'title', 'progress']).default('updatedAt'),
@@ -24,7 +24,10 @@ export const userRouter = router({
         userId: ctx.user.id
       }
 
-      if (status) {
+      // Handle favorite as a boolean field, not a status
+      if (status === 'favorite') {
+        where.isFavorite = true
+      } else if (status) {
         where.status = status
       }
 
@@ -40,6 +43,7 @@ export const userRouter = router({
             id: true,
             animeId: true,
             status: true,
+            isFavorite: true,
             progress: true,
             score: true,
             notes: true,
@@ -166,13 +170,14 @@ export const userRouter = router({
   addToList: protectedProcedure
     .input(z.object({
       animeId: z.string(),
-      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch']),
+      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']),
+      isFavorite: z.boolean().default(false),
       progress: z.number().min(0).default(0),
       score: z.number().min(1).max(10).optional(),
       notes: z.string().optional()
     }))
     .mutation(async ({ input, ctx }) => {
-      const { animeId, status, progress, score, notes } = input
+      const { animeId, status, isFavorite, progress, score, notes } = input
 
       // Check if anime exists (select only id for existence check)
       const anime = await db.anime.findUnique({
@@ -189,6 +194,10 @@ export const userRouter = router({
       const startedAt = (status === 'watching' || status === 'completed') ? now : null
       const completedAt = status === 'completed' ? now : null
 
+      // Handle favorite as a special case
+      const actualStatus = status === 'favorite' ? 'plan-to-watch' : status
+      const actualIsFavorite = status === 'favorite' ? true : isFavorite
+
       // Upsert anime list entry
       const animeList = await db.userAnimeList.upsert({
         where: {
@@ -198,16 +207,18 @@ export const userRouter = router({
           }
         },
         update: {
-          status,
+          status: actualStatus,
+          isFavorite: actualIsFavorite,
           progress,
           score,
           notes,
-          completedAt: status === 'completed' ? (completedAt || now) : null
+          completedAt: actualStatus === 'completed' ? (completedAt || now) : null
         },
         create: {
           userId: ctx.user.id,
           animeId,
-          status,
+          status: actualStatus,
+          isFavorite: actualIsFavorite,
           progress,
           score,
           notes,
@@ -215,6 +226,17 @@ export const userRouter = router({
           completedAt
         }
       })
+
+      // Create activity if favorited
+      if (actualIsFavorite) {
+        await createActivity(
+          ctx.user.id,
+          'favorited_anime',
+          animeId,
+          null,
+          null
+        )
+      }
 
       return animeList
     }),
@@ -241,17 +263,27 @@ export const userRouter = router({
   updateListEntry: protectedProcedure
     .input(z.object({
       animeId: z.string(),
-      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch']).optional(),
+      status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']).optional(),
+      isFavorite: z.boolean().optional(),
       progress: z.number().min(0).optional(),
       score: z.number().min(1).max(10).optional(),
       notes: z.string().optional()
     }))
     .mutation(async ({ input, ctx }) => {
-      const { animeId, status, progress, score, notes } = input
+      const { animeId, status, isFavorite, progress, score, notes } = input
 
       // Build update data
       const updateData: any = {}
-      if (status !== undefined) updateData.status = status
+      if (status !== undefined) {
+        // Handle favorite as a special case
+        if (status === 'favorite') {
+          updateData.isFavorite = true
+          // Don't change status if it's just marking as favorite
+        } else {
+          updateData.status = status
+        }
+      }
+      if (isFavorite !== undefined) updateData.isFavorite = isFavorite
       if (progress !== undefined) updateData.progress = progress
       if (score !== undefined) updateData.score = score
       if (notes !== undefined) updateData.notes = notes
@@ -323,6 +355,75 @@ export const userRouter = router({
       }
 
       return animeList
+    }),
+
+  // Toggle favorite status (independent of watch status)
+  toggleFavorite: protectedProcedure
+    .input(z.object({
+      animeId: z.string()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { animeId } = input
+
+      // Check if anime exists in user's list
+      const existing = await db.userAnimeList.findUnique({
+        where: {
+          userId_animeId: {
+            userId: ctx.user.id,
+            animeId
+          }
+        }
+      })
+
+      if (!existing) {
+        // If not in list, add it as favorite with plan-to-watch status
+        const animeList = await db.userAnimeList.create({
+          data: {
+            userId: ctx.user.id,
+            animeId,
+            status: 'plan-to-watch',
+            isFavorite: true
+          }
+        })
+
+        // Create activity
+        await createActivity(
+          ctx.user.id,
+          'favorited_anime',
+          animeId,
+          null,
+          null
+        )
+
+        return { ...animeList, isFavorite: true }
+      }
+
+      // Toggle favorite status
+      const newFavoriteStatus = !existing.isFavorite
+      const updated = await db.userAnimeList.update({
+        where: {
+          userId_animeId: {
+            userId: ctx.user.id,
+            animeId
+          }
+        },
+        data: {
+          isFavorite: newFavoriteStatus
+        }
+      })
+
+      // Create or remove activity
+      if (newFavoriteStatus) {
+        await createActivity(
+          ctx.user.id,
+          'favorited_anime',
+          animeId,
+          null,
+          null
+        )
+      }
+
+      return { ...updated, isFavorite: newFavoriteStatus }
     }),
 
   // Rate anime

@@ -3,6 +3,34 @@ import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { cache, cacheKeys, cacheTTL } from '../lib/cache'
 
+// Content filter to exclude adult content (Hentai, explicit material)
+// Export for use in other routers (recommendations, social, etc.)
+export const getContentFilter = () => ({
+  AND: [
+    {
+      NOT: {
+        rating: { contains: 'Hentai', mode: 'insensitive' }
+      }
+    },
+    {
+      NOT: {
+        rating: { startsWith: 'Rx', mode: 'insensitive' }
+      }
+    },
+    {
+      NOT: {
+        genres: {
+          some: {
+            genre: {
+              name: { in: ['Hentai', 'Erotica'], mode: 'insensitive' }
+            }
+          }
+        }
+      }
+    }
+  ]
+})
+
 export const animeRouter = router({
   // Get all anime with pagination and filters
   getAll: publicProcedure
@@ -32,7 +60,9 @@ export const animeRouter = router({
       
       const skip = (page - 1) * limit
 
-      const where: any = {}
+      const where: any = {
+        ...getContentFilter()
+      }
 
       if (search) {
         where.OR = [
@@ -203,8 +233,11 @@ export const animeRouter = router({
       slug: z.string()
     }).optional())
     .query(async ({ input = { slug: 'attack-on-titan' } }) => {
-      const anime = await db.anime.findUnique({
-        where: { slug: input.slug },
+      const anime = await db.anime.findFirst({
+        where: { 
+          slug: input.slug,
+          ...getContentFilter()
+        },
         select: {
           id: true,
           slug: true,
@@ -310,6 +343,9 @@ export const animeRouter = router({
         cacheKeys.trending(),
         async () => {
           const anime = await db.anime.findMany({
+        where: {
+          ...getContentFilter()
+        },
         take: limit,
         orderBy: [
           { viewCount: 'desc' },

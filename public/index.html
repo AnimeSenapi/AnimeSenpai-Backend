@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimeSenpai API</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    .container {
+      text-align: center;
+      max-width: 600px;
+      padding: 40px;
+    }
+    h1 {
+      font-size: 3rem;
+      margin: 0 0 20px;
+    }
+    p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      margin: 10px 0;
+    }
+    .status {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 10px 20px;
+      border-radius: 20px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    a {
+      color: white;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎌 AnimeSenpai API</h1>
+    <p>Backend API Server</p>
+    <div class="status">✅ Online</div>
+    <p>This is an API server. There's no web interface here.</p>
+    <p>API endpoint: <strong>/api/trpc</strong></p>
+    <p>Health check: <a href="/health">/health</a></p>
+    <p style="margin-top: 40px; opacity: 0.7;">
+      Visit <a href="https://animesenpai.app">animesenpai.app</a> to use the application.
+    </p>
+  </div>
+</body>
+</html>
+

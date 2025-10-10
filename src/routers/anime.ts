@@ -45,14 +45,17 @@ export const animeRouter = router({
         where.genres = {
           some: {
             genre: {
-              slug: genre
+              OR: [
+                { slug: { equals: genre.toLowerCase(), mode: 'insensitive' } },
+                { name: { equals: genre, mode: 'insensitive' } }
+              ]
             }
           }
         }
       }
 
       if (status) {
-        where.status = status
+        where.status = { equals: status, mode: 'insensitive' }
       }
 
       if (year) {
@@ -60,7 +63,7 @@ export const animeRouter = router({
       }
 
       if (type) {
-        where.type = type
+        where.type = { equals: type, mode: 'insensitive' }
       }
 
       const [anime, total] = await Promise.all([

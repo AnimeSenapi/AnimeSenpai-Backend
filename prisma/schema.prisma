@@ -355,7 +355,8 @@ model UserAnimeList {
   id          String    @id @default(cuid())
   userId      String
   animeId     String
-  status      String
+  status      String    // watching, completed, plan-to-watch, on-hold, dropped
+  isFavorite  Boolean   @default(false) // Can be favorite AND have a status
   score       Int?
   progress    Int       @default(0)
   notes       String?
@@ -366,6 +367,7 @@ model UserAnimeList {
 
   @@unique([userId, animeId])
   @@index([userId, status])
+  @@index([userId, isFavorite])
   @@index([animeId, userId])
   @@index([userId, updatedAt(sort: Desc)])
   @@index([status, updatedAt(sort: Desc)])

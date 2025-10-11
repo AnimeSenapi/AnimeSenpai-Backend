@@ -816,6 +816,7 @@ function clearSocialCaches(userId: string): void {
   cache.delete(`friend-recs:${userId}`)
   cache.delete(`follower-count:${userId}`)
   cache.delete(`following-count:${userId}`)
+  cache.delete(`social-counts:${userId}`) // FIX: Match the cache key used in getSocialCounts
 }
 
 /**

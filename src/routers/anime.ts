@@ -3,6 +3,34 @@ import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { cache, cacheKeys, cacheTTL } from '../lib/cache'
 
+// Content filter to exclude adult content (Hentai, explicit material)
+// Export for use in other routers (recommendations, social, etc.)
+export const getContentFilter = () => ({
+  AND: [
+    {
+      NOT: {
+        rating: { contains: 'Hentai', mode: 'insensitive' }
+      }
+    },
+    {
+      NOT: {
+        rating: { startsWith: 'Rx', mode: 'insensitive' }
+      }
+    },
+    {
+      NOT: {
+        genres: {
+          some: {
+            genre: {
+              name: { in: ['Hentai', 'Erotica'], mode: 'insensitive' }
+            }
+          }
+        }
+      }
+    }
+  ]
+})
+
 export const animeRouter = router({
   // Get all anime with pagination and filters
   getAll: publicProcedure
@@ -32,7 +60,9 @@ export const animeRouter = router({
       
       const skip = (page - 1) * limit
 
-      const where: any = {}
+      const where: any = {
+        ...getContentFilter()
+      }
 
       if (search) {
         where.OR = [
@@ -45,14 +75,17 @@ export const animeRouter = router({
         where.genres = {
           some: {
             genre: {
-              slug: genre
+              OR: [
+                { slug: { equals: genre.toLowerCase(), mode: 'insensitive' } },
+                { name: { equals: genre, mode: 'insensitive' } }
+              ]
             }
           }
         }
       }
 
       if (status) {
-        where.status = status
+        where.status = { equals: status, mode: 'insensitive' }
       }
 
       if (year) {
@@ -60,7 +93,7 @@ export const animeRouter = router({
       }
 
       if (type) {
-        where.type = type
+        where.type = { equals: type, mode: 'insensitive' }
       }
 
       const [anime, total] = await Promise.all([
@@ -200,26 +233,43 @@ export const animeRouter = router({
       slug: z.string()
     }).optional())
     .query(async ({ input = { slug: 'attack-on-titan' } }) => {
-      const anime = await db.anime.findUnique({
-        where: { slug: input.slug },
+      const anime = await db.anime.findFirst({
+        where: { 
+          slug: input.slug,
+          ...getContentFilter()
+        },
         select: {
           id: true,
           slug: true,
           title: true,
+          titleEnglish: true,
+          titleJapanese: true,
+          synopsis: true,
           description: true,
+          background: true,
           year: true,
           rating: true,
           status: true,
           type: true,
+          source: true,
           episodes: true,
           duration: true,
           season: true,
+          aired: true,
+          broadcast: true,
           coverImage: true,
           bannerImage: true,
+          trailer: true,
           trailerUrl: true,
           viewCount: true,
           ratingCount: true,
           averageRating: true,
+          producers: true,
+          licensors: true,
+          studios: true,
+          themes: true,
+          demographics: true,
+          malId: true,
           genres: {
             select: {
               genre: {
@@ -249,17 +299,31 @@ export const animeRouter = router({
         id: anime.id,
         slug: anime.slug,
         title: anime.title,
+        titleEnglish: anime.titleEnglish,
+        titleJapanese: anime.titleJapanese,
+        synopsis: anime.synopsis,
         description: anime.description,
+        background: anime.background,
         year: anime.year,
         rating: anime.rating,
         status: anime.status,
         type: anime.type,
+        source: anime.source,
         episodes: anime.episodes,
         duration: anime.duration,
         season: anime.season,
+        aired: anime.aired,
+        broadcast: anime.broadcast,
         coverImage: anime.coverImage,
         bannerImage: anime.bannerImage,
+        trailer: anime.trailer,
         trailerUrl: anime.trailerUrl,
+        producers: anime.producers,
+        licensors: anime.licensors,
+        studios: anime.studios,
+        themes: anime.themes,
+        demographics: anime.demographics,
+        malId: anime.malId,
         genres: anime.genres.map(g => g.genre),
         stats: {
           viewCount: anime.viewCount,
@@ -279,6 +343,9 @@ export const animeRouter = router({
         cacheKeys.trending(),
         async () => {
           const anime = await db.anime.findMany({
+        where: {
+          ...getContentFilter()
+        },
         take: limit,
         orderBy: [
           { viewCount: 'desc' },

@@ -2,19 +2,20 @@ import { z } from 'zod'
 import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { cache, cacheKeys, cacheTTL } from '../lib/cache'
+import { Prisma } from '@prisma/client'
 
 // Content filter to exclude adult content (Hentai, explicit material)
 // Export for use in other routers (recommendations, social, etc.)
-export const getContentFilter = () => ({
+export const getContentFilter = (): Prisma.AnimeWhereInput => ({
   AND: [
     {
       NOT: {
-        rating: { contains: 'Hentai', mode: 'insensitive' }
+        rating: { contains: 'Hentai', mode: Prisma.QueryMode.insensitive }
       }
     },
     {
       NOT: {
-        rating: { startsWith: 'Rx', mode: 'insensitive' }
+        rating: { startsWith: 'Rx', mode: Prisma.QueryMode.insensitive }
       }
     },
     {
@@ -22,7 +23,7 @@ export const getContentFilter = () => ({
         genres: {
           some: {
             genre: {
-              name: { in: ['Hentai', 'Erotica'], mode: 'insensitive' }
+              name: { in: ['Hentai', 'Erotica'], mode: Prisma.QueryMode.insensitive }
             }
           }
         }
@@ -324,7 +325,7 @@ export const animeRouter = router({
         themes: anime.themes,
         demographics: anime.demographics,
         malId: anime.malId,
-        genres: anime.genres.map(g => g.genre),
+        genres: anime.genres?.map((g: any) => g.genre) || [],
         stats: {
           viewCount: anime.viewCount,
           ratingCount: anime.ratingCount,
@@ -399,7 +400,7 @@ export const animeRouter = router({
             coverImage: item.coverImage,
             bannerImage: item.bannerImage,
             trailerUrl: item.trailerUrl,
-            genres: item.genres.map(g => g.genre),
+            genres: item.genres?.map((g: any) => g.genre) || [],
             stats: {
               viewCount: item.viewCount,
               ratingCount: item.ratingCount,

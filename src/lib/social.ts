@@ -371,7 +371,7 @@ export async function getMutualFollows(
  */
 export async function createActivity(
   userId: string,
-  activityType: 'rated_anime' | 'completed_anime' | 'added_to_list' | 'started_watching' | 'followed_user',
+  activityType: 'rated_anime' | 'completed_anime' | 'added_to_list' | 'started_watching' | 'followed_user' | 'favorited_anime',
   animeId: string | null,
   targetUserId: string | null,
   metadata: any

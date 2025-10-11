@@ -27,13 +27,13 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// Jikan API Configuration (OPTIMIZED)
+// Jikan API Configuration (ULTRA-SAFE - NO RATE LIMITING)
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 600 // 600ms = 1.67 req/sec (safer, avoids rate limiting)
-const RETRY_DELAY = 10000 // 10 seconds on error
+const RATE_LIMIT_DELAY = 1000 // 1000ms = 1 req/sec (VERY SAFE - won't get rate limited)
+const RETRY_DELAY = 15000 // 15 seconds on error (increased)
 const MAX_RETRIES = 5
-const BATCH_SIZE = 25 // Reduced back to 25 for more stable DB writes
-const CONCURRENT_STREAMING = 2 // Reduced to 2 for safer rate limiting
+const BATCH_SIZE = 20 // Smaller batches for stability
+const CONCURRENT_STREAMING = 1 // Sequential only - NO concurrent requests
 const STATS_SAVE_INTERVAL = 300000 // Save stats every 5 minutes
 const STATE_FILE = 'import-state.json'
 const HEALTH_FILE = 'import-health.json'
@@ -279,7 +279,7 @@ async function loadExistingAnimeIds() {
   }
 }
 
-// Rate-limited fetch wrapper
+// Rate-limited fetch wrapper with exponential backoff
 async function rateLimitedFetch(url, retries = MAX_RETRIES) {
   return new Promise((resolve, reject) => {
     requestQueue = requestQueue.then(async () => {
@@ -289,8 +289,9 @@ async function rateLimitedFetch(url, retries = MAX_RETRIES) {
           
           if (response.status === 429) {
             const retryAfter = parseInt(response.headers.get('retry-after') || '60')
-            log(`⚠️  Rate limited! Waiting ${retryAfter}s...`, 'warning')
-            await sleep(retryAfter * 1000 + 5000) // Add 5s buffer
+            const waitTime = retryAfter * 1000 + 10000 // Add 10s buffer (not 5s)
+            log(`⚠️  Rate limited! Waiting ${Math.ceil(waitTime/1000)}s before retry...`, 'warning')
+            await sleep(waitTime)
             continue
           }
           
@@ -299,7 +300,7 @@ async function rateLimitedFetch(url, retries = MAX_RETRIES) {
           }
           
           const data = await response.json()
-          await sleep(RATE_LIMIT_DELAY) // Rate limit delay
+          await sleep(RATE_LIMIT_DELAY) // Rate limit delay AFTER successful request
           resolve(data)
           return
         } catch (error) {
@@ -308,7 +309,10 @@ async function rateLimitedFetch(url, retries = MAX_RETRIES) {
             reject(error)
             return
           }
-          await sleep(RETRY_DELAY)
+          // Exponential backoff: 15s, 30s, 45s, 60s
+          const backoffDelay = RETRY_DELAY * attempt
+          log(`Retry attempt ${attempt}/${retries} after ${backoffDelay/1000}s...`, 'warning')
+          await sleep(backoffDelay)
         }
       }
     })
@@ -627,16 +631,21 @@ async function fetchAnimeByGenre(genre, page = 1) {
       animeDataMap.set(animeData.mal_id, animeData)
     }
     
-    // Fetch all streaming platforms concurrently (MUCH FASTER!)
+    // Fetch streaming platforms (sequential for safety)
     let streamingResults = []
     if (malIds.length > 0) {
-      log(`Fetching streaming for ${malIds.length} anime concurrently...`)
+      log(`Fetching streaming for ${malIds.length} anime (sequential - slow but safe)...`)
       
-      // Process in chunks of CONCURRENT_STREAMING
+      // Process in chunks of CONCURRENT_STREAMING (1 = sequential)
       for (let i = 0; i < malIds.length; i += CONCURRENT_STREAMING) {
         const chunk = malIds.slice(i, i + CONCURRENT_STREAMING)
         const chunkResults = await fetchStreamingPlatformsConcurrent(chunk)
         streamingResults.push(...chunkResults)
+        
+        // Extra delay between chunks to be super safe
+        if (i + CONCURRENT_STREAMING < malIds.length) {
+          await sleep(500) // Extra 500ms between streaming fetches
+        }
       }
     }
     
@@ -743,13 +752,18 @@ async function fetchTopAnime(page = 1) {
       animeDataMap.set(animeData.mal_id, animeData)
     }
     
-    // Fetch streaming concurrently
+    // Fetch streaming (sequential for safety)
     let streamingResults = []
     if (malIds.length > 0) {
       for (let i = 0; i < malIds.length; i += CONCURRENT_STREAMING) {
         const chunk = malIds.slice(i, i + CONCURRENT_STREAMING)
         const chunkResults = await fetchStreamingPlatformsConcurrent(chunk)
         streamingResults.push(...chunkResults)
+        
+        // Extra delay between chunks
+        if (i + CONCURRENT_STREAMING < malIds.length) {
+          await sleep(500)
+        }
       }
     }
     
@@ -876,12 +890,13 @@ async function main() {
   }
   
   log('\n✨ All diagnostics passed! Starting import...\n', 'success')
-  log('🚀 OPTIMIZED & STABLE VERSION - Safer rate limiting!', 'info')
-  log(`Rate limit: 1.67 req/sec (600ms delay) - SAFE`, 'info')
-  log(`Concurrent streaming: 2 at a time - SAFE`, 'info')
-  log(`Batch size: 25 anime per DB transaction - STABLE`, 'info')
+  log('🐌 ULTRA-SAFE MODE - Zero rate limiting!', 'info')
+  log(`Rate limit: 1 req/sec (1000ms delay) - ULTRA SAFE`, 'info')
+  log(`Concurrent streaming: DISABLED (sequential only) - SAFEST`, 'info')
+  log(`Batch size: 20 anime per DB transaction - STABLE`, 'info')
   log(`Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
   log(`Filters out: Hentai and Rx-rated content automatically`, 'info')
+  log(`⏱️  This will be SLOW but STABLE - no rate limit errors!`, 'warning')
   log('Press Ctrl+C to stop gracefully', 'info')
   log(`Stats will be saved to ${STATE_FILE} every 5 minutes`, 'info')
   

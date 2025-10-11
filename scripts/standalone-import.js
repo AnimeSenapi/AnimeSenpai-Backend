@@ -134,6 +134,7 @@ let state = {
   stats: {
     totalFetched: 0,
     totalSkipped: 0,
+    totalFiltered: 0, // Adult content filtered out
     totalSaved: 0,
     totalErrors: 0,
     totalPlatforms: 0,
@@ -247,6 +248,7 @@ function printStats(alsoSaveToFile = true) {
   console.log(`Current Genre:    ${state.stats.currentGenre || 'None'}`)
   console.log(`Genres Completed: ${state.stats.genresCompleted}/${GENRES.length}`)
   console.log(`Total Fetched:    ${state.stats.totalFetched}`)
+  console.log(`Total Filtered:   ${state.stats.totalFiltered} (adult content)`)
   console.log(`Total Skipped:    ${state.stats.totalSkipped} (already in DB)`)
   console.log(`Total Saved:      ${state.stats.totalSaved}`)
   console.log(`Pending Save:     ${state.pendingAnime.length}`)
@@ -341,6 +343,26 @@ async function fetchStreamingPlatformsConcurrent(malIds) {
   return results.map(result => 
     result.status === 'fulfilled' ? result.value : { malId: null, platforms: [] }
   ).filter(r => r.malId !== null)
+}
+
+// Check if anime is adult content (hentai or Rx-rated)
+function isAdultContent(animeData) {
+  // Check rating for adult content
+  const rating = animeData.rating?.toLowerCase() || ''
+  if (rating.includes('hentai') || rating.includes('rx')) {
+    return true
+  }
+  
+  // Check genres for adult content
+  const genres = animeData.genres || []
+  for (const genre of genres) {
+    const genreName = genre.name?.toLowerCase() || ''
+    if (genreName === 'hentai' || genreName === 'erotica') {
+      return true
+    }
+  }
+  
+  return false
 }
 
 // Process and format anime data with COMPLETE fields
@@ -561,6 +583,12 @@ async function fetchAnimeByGenre(genre, page = 1) {
     for (const animeData of data.data) {
       const animeId = animeData.mal_id.toString()
       
+      // Filter out adult content (hentai, Rx-rated)
+      if (isAdultContent(animeData)) {
+        state.stats.totalFiltered++
+        continue
+      }
+      
       if (state.existingAnimeIds.has(animeId)) {
         state.stats.totalSkipped++
         continue
@@ -670,6 +698,12 @@ async function fetchTopAnime(page = 1) {
     
     for (const animeData of data.data) {
       const animeId = animeData.mal_id.toString()
+      
+      // Filter out adult content (hentai, Rx-rated)
+      if (isAdultContent(animeData)) {
+        state.stats.totalFiltered++
+        continue
+      }
       
       if (state.existingAnimeIds.has(animeId)) {
         state.stats.totalSkipped++

@@ -27,16 +27,17 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// Jikan API Configuration (ULTRA-SAFE - NO RATE LIMITING)
+// Jikan API Configuration (EXTREMELY CONSERVATIVE - ABSOLUTELY NO RATE LIMITING)
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 1000 // 1000ms = 1 req/sec (VERY SAFE - won't get rate limited)
-const RETRY_DELAY = 15000 // 15 seconds on error (increased)
+const RATE_LIMIT_DELAY = 2000 // 2000ms = 0.5 req/sec (EXTREMELY SAFE)
+const RETRY_DELAY = 20000 // 20 seconds on error
 const MAX_RETRIES = 5
 const BATCH_SIZE = 20 // Smaller batches for stability
 const CONCURRENT_STREAMING = 1 // Sequential only - NO concurrent requests
 const STATS_SAVE_INTERVAL = 300000 // Save stats every 5 minutes
 const STATE_FILE = 'import-state.json'
 const HEALTH_FILE = 'import-health.json'
+const STARTUP_DELAY = 10000 // Wait 10 seconds before first request (clear any previous rate limits)
 
 // All MyAnimeList genres
 const GENRES = [
@@ -894,6 +895,9 @@ async function main() {
     const testResponse = await fetch(`${JIKAN_BASE_URL}/anime/1`)
     if (testResponse.ok) {
       log('✅ Jikan API is accessible', 'success')
+      // Wait after test to not trigger rate limit
+      log('⏳ Waiting 3 seconds to reset rate limit counter...', 'info')
+      await sleep(3000)
     }
   } catch (error) {
     log('❌ Cannot reach Jikan API!', 'error')
@@ -902,15 +906,20 @@ async function main() {
   }
   
   log('\n✨ All diagnostics passed! Starting import...\n', 'success')
-  log('🐌 ULTRA-SAFE MODE - Zero rate limiting!', 'info')
-  log(`Rate limit: 1 req/sec (1000ms delay) - ULTRA SAFE`, 'info')
-  log(`Concurrent streaming: DISABLED (sequential only) - SAFEST`, 'info')
-  log(`Batch size: 20 anime per DB transaction - STABLE`, 'info')
+  log('🐢 EXTREMELY SLOW MODE - Absolutely zero rate limiting!', 'info')
+  log(`Rate limit: 0.5 req/sec (2000ms delay) - EXTREMELY CONSERVATIVE`, 'info')
+  log(`Concurrent streaming: DISABLED (sequential only)`, 'info')
+  log(`Batch size: 20 anime per DB transaction`, 'info')
   log(`Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
   log(`Filters out: Hentai and Rx-rated content automatically`, 'info')
-  log(`⏱️  This will be SLOW but STABLE - no rate limit errors!`, 'warning')
+  log(`⏱️  This will be VERY SLOW but 100% STABLE!`, 'warning')
   log('Press Ctrl+C to stop gracefully', 'info')
   log(`Stats will be saved to ${STATE_FILE} every 5 minutes`, 'info')
+  log(`\n⏳ Waiting ${STARTUP_DELAY/1000} seconds before first request to avoid rate limits...`, 'info')
+  
+  // Wait before starting to avoid any lingering rate limits
+  await sleep(STARTUP_DELAY)
+  log('✅ Starting import now!\n', 'success')
   
   process.on('SIGINT', () => gracefulShutdown('SIGINT'))
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))

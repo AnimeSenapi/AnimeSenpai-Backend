@@ -249,12 +249,28 @@ export const adminRouter = router({
       // Only admins can view stats
       requireAdmin(ctx.user.role)
 
-      const [totalUsers, totalTesters, totalAdmins, totalAnime, totalFlags] = await Promise.all([
+      const [
+        totalUsers, 
+        totalTesters, 
+        totalAdmins, 
+        totalAnime, 
+        totalFlags,
+        recentUsers,
+        totalUserAnimeListEntries
+      ] = await Promise.all([
         db.user.count(),
         db.user.count({ where: { role: UserRole.TESTER } }),
         db.user.count({ where: { role: UserRole.ADMIN } }),
         db.anime.count(),
         db.featureFlag.count(),
+        db.user.count({
+          where: {
+            createdAt: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+            }
+          }
+        }),
+        db.userAnimeList.count(),
       ])
 
       return {
@@ -263,14 +279,181 @@ export const adminRouter = router({
           regular: totalUsers - totalTesters - totalAdmins,
           testers: totalTesters,
           admins: totalAdmins,
+          recentSignups: recentUsers,
         },
         content: {
           anime: totalAnime,
+          listEntries: totalUserAnimeListEntries,
         },
         features: {
           flags: totalFlags,
         }
       }
+    }),
+
+  // Get user details by ID
+  getUserDetails: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+    }))
+    .query(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const user = await db.user.findUnique({
+        where: { id: input.userId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          username: true,
+          role: true,
+          emailVerified: true,
+          createdAt: true,
+          lastLoginAt: true,
+          avatar: true,
+          _count: {
+            select: {
+              userAnimeList: true,
+            }
+          }
+        }
+      })
+
+      if (!user) {
+        throw new Error('User not found')
+      }
+
+      return user
+    }),
+
+  // Update user role
+  updateUserRole: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      role: z.enum(['user', 'moderator', 'admin']),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Prevent demoting yourself
+      if (input.userId === ctx.user.id) {
+        throw new Error('Cannot change your own role')
+      }
+
+      const user = await db.user.update({
+        where: { id: input.userId },
+        data: { role: input.role }
+      })
+
+      // Log security event
+      await logSecurityEvent(
+        ctx.user.id,
+        'user_role_changed',
+        { targetUserId: input.userId, newRole: input.role, changedBy: ctx.user.email },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { success: true, user }
+    }),
+
+  // Ban/Suspend user (soft delete)
+  banUser: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Prevent banning yourself
+      if (input.userId === ctx.user.id) {
+        throw new Error('Cannot ban yourself')
+      }
+
+      // For now, we'll set a field or handle it via role
+      // You might want to add a 'banned' or 'suspended' field to your schema
+      const user = await db.user.update({
+        where: { id: input.userId },
+        data: { 
+          // Add banned field if you have it in schema
+          // For now, we can log it
+          role: 'user' // Demote to user as a temporary measure
+        }
+      })
+
+      // Log security event
+      await logSecurityEvent(
+        ctx.user.id,
+        'user_banned',
+        { targetUserId: input.userId, reason: input.reason, bannedBy: ctx.user.email },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { success: true }
+    }),
+
+  // Delete user account
+  deleteUser: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Prevent deleting yourself
+      if (input.userId === ctx.user.id) {
+        throw new Error('Cannot delete your own account')
+      }
+
+      // Delete user and all related data
+      await db.user.delete({
+        where: { id: input.userId }
+      })
+
+      // Log security event
+      await logSecurityEvent(
+        ctx.user.id,
+        'user_deleted',
+        { targetUserId: input.userId, deletedBy: ctx.user.email },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { success: true }
+    }),
+
+  // Search users
+  searchUsers: protectedProcedure
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().min(1).max(50).default(20),
+    }))
+    .query(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const users = await db.user.findMany({
+        where: {
+          OR: [
+            { email: { contains: input.query, mode: 'insensitive' } },
+            { name: { contains: input.query, mode: 'insensitive' } },
+            { username: { contains: input.query, mode: 'insensitive' } },
+          ]
+        },
+        take: input.limit,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          username: true,
+          role: true,
+          createdAt: true,
+          lastLoginAt: true,
+        }
+      })
+
+      return users
     }),
 })
 

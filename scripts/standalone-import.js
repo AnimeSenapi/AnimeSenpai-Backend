@@ -27,9 +27,9 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// Jikan API Configuration (EXTREMELY CONSERVATIVE - ABSOLUTELY NO RATE LIMITING)
+// Jikan API Configuration (BALANCED MODE - Fast & Stable)
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 2000 // 2000ms = 0.5 req/sec (EXTREMELY SAFE)
+const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (BALANCED - fast but safe)
 const RETRY_DELAY = 20000 // 20 seconds on error
 const MAX_RETRIES = 5
 const BATCH_SIZE = 20 // Smaller batches for stability
@@ -906,13 +906,14 @@ async function main() {
   }
   
   log('\n✨ All diagnostics passed! Starting import...\n', 'success')
-  log('🐢 EXTREMELY SLOW MODE - Absolutely zero rate limiting!', 'info')
-  log(`Rate limit: 0.5 req/sec (2000ms delay) - EXTREMELY CONSERVATIVE`, 'info')
+  log('⚖️  BALANCED MODE - Fast & Stable (Recommended)', 'info')
+  log(`Rate limit: 0.83 req/sec (1200ms delay) - CONSERVATIVE`, 'info')
   log(`Concurrent streaming: DISABLED (sequential only)`, 'info')
   log(`Batch size: 20 anime per DB transaction`, 'info')
   log(`Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
   log(`Filters out: Hentai and Rx-rated content automatically`, 'info')
-  log(`⏱️  This will be VERY SLOW but 100% STABLE!`, 'warning')
+  log(`📊 Expected: ~1,300 anime/hour, 10k anime in 5-6 hours`, 'info')
+  log(`⚡ Faster than ultra-safe, still very stable!`, 'success')
   log('Press Ctrl+C to stop gracefully', 'info')
   log(`Stats will be saved to ${STATE_FILE} every 5 minutes`, 'info')
   log(`\n⏳ Waiting ${STARTUP_DELAY/1000} seconds before first request to avoid rate limits...`, 'info')

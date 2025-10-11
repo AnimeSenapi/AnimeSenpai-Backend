@@ -11,6 +11,7 @@ import {
   clearFeatureFlagCache,
 } from '../lib/roles'
 import { logSecurityEvent } from '../lib/auth'
+import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security'
 
 export const adminRouter = router({
   // Get all users with their roles
@@ -334,27 +335,36 @@ export const adminRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
 
       // Prevent demoting yourself
       if (input.userId === ctx.user.id) {
         throw new Error('Cannot change your own role')
       }
 
-      const user = await db.user.update({
-        where: { id: input.userId },
-        data: { role: input.role }
-      })
-
-      // Log security event
-      await logSecurityEvent(
+      return await secureAdminOperation(
         ctx.user.id,
-        'user_role_changed',
-        { targetUserId: input.userId, newRole: input.role, changedBy: ctx.user.email },
-        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
-        ctx.req?.headers.get('user-agent') || undefined
-      )
+        'update_role',
+        async () => {
+          const user = await db.user.update({
+            where: { id: input.userId },
+            data: { role: input.role }
+          })
 
-      return { success: true, user }
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'user_role_changed',
+            { targetUserId: input.userId, newRole: input.role, changedBy: ctx.user.email },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true, user }
+        },
+        { userId: input.userId, newRole: input.role },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
     }),
 
   // Ban/Suspend user (soft delete)
@@ -401,27 +411,36 @@ export const adminRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
 
       // Prevent deleting yourself
       if (input.userId === ctx.user.id) {
         throw new Error('Cannot delete your own account')
       }
 
-      // Delete user and all related data
-      await db.user.delete({
-        where: { id: input.userId }
-      })
-
-      // Log security event
-      await logSecurityEvent(
+      return await secureAdminOperation(
         ctx.user.id,
-        'user_deleted',
-        { targetUserId: input.userId, deletedBy: ctx.user.email },
-        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
-        ctx.req?.headers.get('user-agent') || undefined
-      )
+        'delete_user',
+        async () => {
+          // Delete user and all related data
+          await db.user.delete({
+            where: { id: input.userId }
+          })
 
-      return { success: true }
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'user_deleted',
+            { targetUserId: input.userId, deletedBy: ctx.user.email },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true }
+        },
+        { userId: input.userId },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
     }),
 
   // Search users

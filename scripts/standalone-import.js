@@ -602,7 +602,7 @@ async function fetchAnimeByGenre(genre, page = 1) {
   const url = `${JIKAN_BASE_URL}/anime?genres=${genre.id}&order_by=popularity&sort=asc&page=${page}&limit=25`
   
   try {
-    log(`Fetching ${genre.name} page ${page}...`)
+    log(`📥 Fetching ${genre.name} page ${page} (basic anime list)...`)
     const data = await rateLimitedFetch(url)
     
     if (!data.data || data.data.length === 0) {
@@ -634,13 +634,18 @@ async function fetchAnimeByGenre(genre, page = 1) {
     // Fetch streaming platforms (sequential for safety)
     let streamingResults = []
     if (malIds.length > 0) {
-      log(`Fetching streaming for ${malIds.length} anime (sequential - slow but safe)...`)
+      log(`📡 Fetching streaming data for ${malIds.length} new anime (one at a time - ultra safe)...`)
       
       // Process in chunks of CONCURRENT_STREAMING (1 = sequential)
       for (let i = 0; i < malIds.length; i += CONCURRENT_STREAMING) {
         const chunk = malIds.slice(i, i + CONCURRENT_STREAMING)
         const chunkResults = await fetchStreamingPlatformsConcurrent(chunk)
         streamingResults.push(...chunkResults)
+        
+        // Progress indicator
+        if ((i + 1) % 5 === 0) {
+          log(`   Progress: ${i + 1}/${malIds.length} streaming data fetched...`)
+        }
         
         // Extra delay between chunks to be super safe
         if (i + CONCURRENT_STREAMING < malIds.length) {
@@ -671,7 +676,7 @@ async function fetchAnimeByGenre(genre, page = 1) {
       }
     }
     
-    log(`Genre: ${genre.name} (Page ${page}) - Fetched: ${data.data.length}, New: ${newAnime}, Skipped: ${data.data.length - newAnime}`)
+    log(`✅ ${genre.name} Page ${page}: Found ${data.data.length} anime, ${newAnime} new (${state.stats.totalFiltered > 0 ? 'filtered adult content, ' : ''}skipped ${data.data.length - newAnime})`)
     return data.pagination?.has_next_page
   } catch (error) {
     log(`Error fetching genre ${genre.name} page ${page}: ${error.message}`, 'error')
@@ -755,10 +760,17 @@ async function fetchTopAnime(page = 1) {
     // Fetch streaming (sequential for safety)
     let streamingResults = []
     if (malIds.length > 0) {
+      log(`📡 Fetching streaming data for ${malIds.length} new anime (one at a time)...`)
+      
       for (let i = 0; i < malIds.length; i += CONCURRENT_STREAMING) {
         const chunk = malIds.slice(i, i + CONCURRENT_STREAMING)
         const chunkResults = await fetchStreamingPlatformsConcurrent(chunk)
         streamingResults.push(...chunkResults)
+        
+        // Progress indicator
+        if ((i + 1) % 5 === 0) {
+          log(`   Progress: ${i + 1}/${malIds.length} streaming data fetched...`)
+        }
         
         // Extra delay between chunks
         if (i + CONCURRENT_STREAMING < malIds.length) {

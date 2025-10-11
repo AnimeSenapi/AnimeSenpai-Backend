@@ -15,7 +15,6 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
-    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

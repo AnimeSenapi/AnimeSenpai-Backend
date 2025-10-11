@@ -56,14 +56,29 @@ const server = serve({
         contentType: request.headers.get('content-type'),
       })
       
-      // Handle CORS
+      // Handle CORS with specific origin (required for credentials: 'include')
+      const origin = request.headers.get('origin') || ''
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:3001', 
+        'http://localhost:3002',
+        'http://localhost:3004',
+        'http://localhost:3005',
+        'http://localhost:3006',
+        'https://animesenpai.app',
+        'https://www.animesenpai.app'
+      ]
+      
+      const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+      
       if (request.method === 'OPTIONS') {
         return new Response(null, {
           status: 200,
           headers: {
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
           },
         })
@@ -87,7 +102,8 @@ const server = serve({
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
           },
         })
@@ -122,7 +138,8 @@ const server = serve({
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
           },
         })
@@ -196,9 +213,10 @@ const server = serve({
       }
 
       // Add security and CORS headers to response
-      finalResponse.headers.set('Access-Control-Allow-Origin', '*')
+      finalResponse.headers.set('Access-Control-Allow-Origin', corsOrigin)
       finalResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
       finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+      finalResponse.headers.set('Access-Control-Allow-Credentials', 'true')
       finalResponse.headers.set('X-Request-ID', requestId)
       finalResponse.headers.set('X-Content-Type-Options', 'nosniff')
       finalResponse.headers.set('X-Frame-Options', 'DENY')
@@ -295,7 +313,8 @@ const server = serve({
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': corsOrigin,
+          'Access-Control-Allow-Credentials': 'true',
           'X-Request-ID': requestId,
         },
       })

@@ -36,7 +36,7 @@ export const animeRouter = router({
   getAll: publicProcedure
     .input(z.object({
       page: z.number().min(1).default(1),
-      limit: z.number().min(1).max(100).default(20),
+      limit: z.number().min(1).max(10000).default(20), // Increased max for client-side filtering
       search: z.string().optional(),
       genre: z.string().optional(),
       status: z.string().optional(),

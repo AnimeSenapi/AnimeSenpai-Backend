@@ -32,12 +32,10 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^3.0.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.10.5",
-    "@types/uuid": "^11.0.0",
     "@vercel/node": "^3.0.0",
     "typescript": "^5.3.3"
   },

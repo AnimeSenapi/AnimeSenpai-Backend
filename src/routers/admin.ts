@@ -312,11 +312,6 @@ export const adminRouter = router({
           createdAt: true,
           lastLoginAt: true,
           avatar: true,
-          _count: {
-            select: {
-              userAnimeList: true,
-            }
-          }
         }
       })
 

@@ -29,11 +29,11 @@ const prisma = new PrismaClient()
 
 // Jikan API Configuration (OPTIMIZED)
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 400 // 400ms = 2.5 req/sec (safe under 3 req/sec limit)
+const RATE_LIMIT_DELAY = 600 // 600ms = 1.67 req/sec (safer, avoids rate limiting)
 const RETRY_DELAY = 10000 // 10 seconds on error
 const MAX_RETRIES = 5
-const BATCH_SIZE = 50 // Increased from 25 to 50 for faster DB writes
-const CONCURRENT_STREAMING = 3 // Fetch 3 streaming endpoints in parallel
+const BATCH_SIZE = 25 // Reduced back to 25 for more stable DB writes
+const CONCURRENT_STREAMING = 2 // Reduced to 2 for safer rate limiting
 const STATS_SAVE_INTERVAL = 300000 // Save stats every 5 minutes
 const STATE_FILE = 'import-state.json'
 const HEALTH_FILE = 'import-health.json'
@@ -376,28 +376,33 @@ function processAnimeData(animeData, streamingPlatforms = []) {
     title: animeData.title,
     titleEnglish: animeData.title_english,
     titleJapanese: animeData.title_japanese,
+    titleSynonyms: animeData.title_synonyms || [],
     synopsis: animeData.synopsis,
-    background: animeData.background, // NEW: Full background text
+    background: animeData.background,
     coverImage: animeData.images?.jpg?.large_image_url || animeData.images?.jpg?.image_url,
     bannerImage: null,
-    trailer: animeData.trailer?.embed_url, // NEW: Embed URL
+    trailer: animeData.trailer?.embed_url,
     trailerUrl: animeData.trailer?.url,
     year: animeData.year || (animeData.aired?.from ? new Date(animeData.aired.from).getFullYear() : null),
     season: animeData.season,
-    aired: animeData.aired?.string, // NEW: Full aired string
-    broadcast: animeData.broadcast?.string, // NEW: Broadcast info
-    type: animeData.type,
-    status: animeData.status?.toLowerCase(),
+    aired: animeData.aired?.string,
+    broadcast: animeData.broadcast?.string,
+    type: animeData.type || 'TV',
+    status: animeData.status?.toLowerCase() || 'unknown',
+    airing: animeData.airing || false,
     episodes: animeData.episodes,
     duration: animeData.duration,
     rating: animeData.rating,
     averageRating: animeData.score || 0,
+    scoredBy: animeData.scored_by || 0,
+    rank: animeData.rank,
     popularity: animeData.popularity || 0,
+    members: animeData.members || 0,
     favorites: animeData.favorites || 0,
     source: animeData.source,
-    studios: animeData.studios?.map(s => s.name).join(', ') || null, // NEW: All studios
-    producers: animeData.producers?.map(p => p.name) || [], // NEW: All producers
-    licensors: animeData.licensors?.map(l => l.name) || [], // NEW: All licensors
+    studios: animeData.studios?.map(s => s.name) || [], // Array of strings
+    producers: animeData.producers?.map(p => p.name) || [], // Array of strings
+    licensors: animeData.licensors?.map(l => l.name) || [], // Array of strings
     genres: animeData.genres?.map(g => ({ id: g.mal_id.toString(), name: g.name })) || [],
     themes: animeData.themes?.map(t => t.name) || [],
     demographics: animeData.demographics?.map(d => d.name) || [],
@@ -405,7 +410,7 @@ function processAnimeData(animeData, streamingPlatforms = []) {
   }
 }
 
-// Save batch to database (OPTIMIZED)
+// Save batch to database (OPTIMIZED with better error handling)
 async function saveBatchToDatabase() {
   if (state.pendingAnime.length === 0) return
   
@@ -415,10 +420,13 @@ async function saveBatchToDatabase() {
   log(`Saving batch of ${batch.length} anime to database...`)
   
   try {
-    // Use transactions for faster batch inserts
-    await prisma.$transaction(async (tx) => {
-      for (const anime of batch) {
-        try {
+    // Process one at a time with individual error handling (more stable)
+    let savedCount = 0
+    let errorCount = 0
+    
+    for (const anime of batch) {
+      try {
+        await prisma.$transaction(async (tx) => {
           // Upsert anime
           await tx.anime.upsert({
             where: { id: anime.id },
@@ -428,6 +436,7 @@ async function saveBatchToDatabase() {
               title: anime.title,
               titleEnglish: anime.titleEnglish,
               titleJapanese: anime.titleJapanese,
+              titleSynonyms: anime.titleSynonyms,
               synopsis: anime.synopsis,
               background: anime.background,
               coverImage: anime.coverImage,
@@ -440,11 +449,15 @@ async function saveBatchToDatabase() {
               broadcast: anime.broadcast,
               type: anime.type,
               status: anime.status,
+              airing: anime.airing,
               episodes: anime.episodes,
               duration: anime.duration,
               rating: anime.rating,
               averageRating: anime.averageRating,
+              scoredBy: anime.scoredBy,
+              rank: anime.rank,
               popularity: anime.popularity,
+              members: anime.members,
               favorites: anime.favorites,
               source: anime.source,
               studios: anime.studios,
@@ -458,6 +471,7 @@ async function saveBatchToDatabase() {
               title: anime.title,
               titleEnglish: anime.titleEnglish,
               titleJapanese: anime.titleJapanese,
+              titleSynonyms: anime.titleSynonyms,
               synopsis: anime.synopsis,
               background: anime.background,
               coverImage: anime.coverImage,
@@ -469,11 +483,15 @@ async function saveBatchToDatabase() {
               broadcast: anime.broadcast,
               type: anime.type,
               status: anime.status,
+              airing: anime.airing,
               episodes: anime.episodes,
               duration: anime.duration,
               rating: anime.rating,
               averageRating: anime.averageRating,
+              scoredBy: anime.scoredBy,
+              rank: anime.rank,
               popularity: anime.popularity,
+              members: anime.members,
               favorites: anime.favorites,
               source: anime.source,
               studios: anime.studios,
@@ -546,20 +564,31 @@ async function saveBatchToDatabase() {
               }
             })
           }
-          
-          state.stats.totalSaved++
-          state.existingAnimeIds.add(anime.id)
-        } catch (error) {
-          log(`Error saving anime ${anime.id}: ${error.message}`, 'error')
-          state.stats.totalErrors++
+        })
+        
+        savedCount++
+        state.stats.totalSaved++
+        state.existingAnimeIds.add(anime.id)
+      } catch (error) {
+        errorCount++
+        state.stats.totalErrors++
+        log(`Error saving anime ${anime.id} (${anime.title}): ${error.message}`, 'error')
+        
+        // On critical errors, add back to pending for retry
+        if (error.message.includes('connection') || error.message.includes('timeout')) {
+          state.pendingAnime.push(anime)
         }
       }
-    })
+    }
     
-    log(`✅ Saved ${batch.length} anime to database`, 'success')
+    log(`✅ Saved ${savedCount}/${batch.length} anime to database (${errorCount} errors)`, savedCount > 0 ? 'success' : 'error')
+    
+    // Small delay after batch to prevent database overload
+    await sleep(200)
   } catch (error) {
-    log(`Batch save error: ${error.message}`, 'error')
+    log(`Critical batch save error: ${error.message}`, 'error')
     state.stats.totalErrors++
+    // Add all failed anime back to pending
     state.pendingAnime.unshift(...batch)
   }
 }
@@ -814,14 +843,24 @@ async function main() {
   }
   log('✅ DATABASE_URL found', 'success')
   
-  try {
-    await prisma.$connect()
-    const animeCount = await prisma.anime.count()
-    log(`✅ Database connected (Current anime count: ${animeCount})`, 'success')
-  } catch (error) {
-    log('❌ Database connection failed!', 'error')
-    log(`   Error: ${error.message}`, 'error')
-    process.exit(1)
+  // Try to connect with retries
+  let connected = false
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await prisma.$connect()
+      const animeCount = await prisma.anime.count()
+      log(`✅ Database connected (Current anime count: ${animeCount})`, 'success')
+      connected = true
+      break
+    } catch (error) {
+      log(`⚠️  Database connection attempt ${attempt}/3 failed`, 'warning')
+      if (attempt === 3) {
+        log('❌ Database connection failed after 3 attempts!', 'error')
+        log(`   Error: ${error.message}`, 'error')
+        process.exit(1)
+      }
+      await sleep(5000) // Wait 5 seconds before retry
+    }
   }
   
   try {
@@ -837,8 +876,12 @@ async function main() {
   }
   
   log('\n✨ All diagnostics passed! Starting import...\n', 'success')
-  log('🚀 OPTIMIZED VERSION - 3x faster with concurrent fetching!', 'info')
+  log('🚀 OPTIMIZED & STABLE VERSION - Safer rate limiting!', 'info')
+  log(`Rate limit: 1.67 req/sec (600ms delay) - SAFE`, 'info')
+  log(`Concurrent streaming: 2 at a time - SAFE`, 'info')
+  log(`Batch size: 25 anime per DB transaction - STABLE`, 'info')
   log(`Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
+  log(`Filters out: Hentai and Rx-rated content automatically`, 'info')
   log('Press Ctrl+C to stop gracefully', 'info')
   log(`Stats will be saved to ${STATE_FILE} every 5 minutes`, 'info')
   

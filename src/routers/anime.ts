@@ -67,8 +67,8 @@ export const animeRouter = router({
 
       if (search) {
         where.OR = [
-          { title: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
+          { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { description: { contains: search, mode: Prisma.QueryMode.insensitive } }
         ]
       }
 
@@ -77,8 +77,8 @@ export const animeRouter = router({
           some: {
             genre: {
               OR: [
-                { slug: { equals: genre.toLowerCase(), mode: 'insensitive' } },
-                { name: { equals: genre, mode: 'insensitive' } }
+                { slug: { equals: genre.toLowerCase(), mode: Prisma.QueryMode.insensitive } },
+                { name: { equals: genre, mode: Prisma.QueryMode.insensitive } }
               ]
             }
           }
@@ -86,7 +86,7 @@ export const animeRouter = router({
       }
 
       if (status) {
-        where.status = { equals: status, mode: 'insensitive' }
+        where.status = { equals: status, mode: Prisma.QueryMode.insensitive }
       }
 
       if (year) {
@@ -94,7 +94,7 @@ export const animeRouter = router({
       }
 
       if (type) {
-        where.type = { equals: type, mode: 'insensitive' }
+        where.type = { equals: type, mode: Prisma.QueryMode.insensitive }
       }
 
       const [anime, total] = await Promise.all([
@@ -154,7 +154,7 @@ export const animeRouter = router({
           coverImage: item.coverImage,
           bannerImage: item.bannerImage,
           trailerUrl: item.trailerUrl,
-          genres: item.genres.map(g => g.genre),
+          genres: item.genres?.map(g => g.genre) || [],
           stats: {
             viewCount: item.viewCount,
             ratingCount: item.ratingCount,

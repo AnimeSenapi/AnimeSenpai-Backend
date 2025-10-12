@@ -558,27 +558,23 @@ export const animeRouter = router({
 
       const allAnime = await db.anime.findMany({
         where,
-        take: 500, // Limit to prevent response size issues
+        take: 1000, // Fetch more to get complete series, but limit fields
         orderBy: { averageRating: 'desc' },
         select: {
           id: true,
           slug: true,
           title: true,
           titleEnglish: true,
-          titleJapanese: true,
           year: true,
-          type: true,
           episodes: true,
           coverImage: true,
           averageRating: true,
-          status: true,
           genres: {
             select: {
               genre: {
                 select: {
                   id: true,
                   name: true,
-                  slug: true,
                 }
               }
             }

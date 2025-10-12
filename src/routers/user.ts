@@ -426,6 +426,24 @@ export const userRouter = router({
       return { ...updated, isFavorite: newFavoriteStatus }
     }),
 
+  // Get favorited anime IDs
+  getFavoritedAnimeIds: protectedProcedure
+    .query(async ({ ctx }) => {
+      const favorites = await db.userAnimeList.findMany({
+        where: {
+          userId: ctx.user.id,
+          isFavorite: true
+        },
+        select: {
+          animeId: true
+        }
+      })
+
+      return {
+        animeIds: favorites.map(f => f.animeId)
+      }
+    }),
+
   // Rate anime
   rateAnime: protectedProcedure
     .input(z.object({

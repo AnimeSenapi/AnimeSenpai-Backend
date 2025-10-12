@@ -3,6 +3,7 @@ import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { cache, cacheKeys, cacheTTL } from '../lib/cache'
 import { Prisma } from '@prisma/client'
+import { createSeriesEntries } from '../lib/series-grouping'
 
 // Content filter to exclude adult content (Hentai, explicit material)
 // Export for use in other routers (recommendations, social, etc.)
@@ -344,6 +345,87 @@ export const animeRouter = router({
       }
     }),
 
+  // Get all seasons/related anime for a series
+  getSeasons: publicProcedure
+    .input(z.object({
+      animeId: z.string().optional(),
+      slug: z.string().optional()
+    }))
+    .query(async ({ input }) => {
+      if (!input.animeId && !input.slug) {
+        throw new Error('Either animeId or slug is required')
+      }
+
+      // Get the anime first
+      const anime = await db.anime.findFirst({
+        where: input.animeId ? { id: input.animeId } : { slug: input.slug },
+        select: {
+          id: true,
+          title: true,
+          titleEnglish: true
+        }
+      })
+
+      if (!anime) {
+        return { seasons: [] }
+      }
+
+      // Extract series name
+      const { extractSeriesInfo } = await import('../lib/series-grouping')
+      const { seriesName } = extractSeriesInfo(anime.title, anime.titleEnglish)
+
+      // Find all anime that belong to this series
+      const relatedAnime = await db.anime.findMany({
+        where: {
+          OR: [
+            { title: { contains: seriesName, mode: Prisma.QueryMode.insensitive } },
+            { titleEnglish: { contains: seriesName, mode: Prisma.QueryMode.insensitive } }
+          ],
+          ...getContentFilter()
+        },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          titleEnglish: true,
+          year: true,
+          type: true,
+          episodes: true,
+          coverImage: true,
+          averageRating: true,
+          status: true
+        },
+        orderBy: [
+          { year: 'asc' },
+          { title: 'asc' }
+        ]
+      })
+
+      // Format as seasons
+      const seasons = relatedAnime.map((s, index) => {
+        const info = extractSeriesInfo(s.title, s.titleEnglish)
+        return {
+          seasonNumber: info.seasonNumber,
+          seasonName: info.seasonName,
+          animeId: s.id,
+          slug: s.slug,
+          title: s.title,
+          titleEnglish: s.titleEnglish,
+          year: s.year,
+          type: s.type,
+          episodes: s.episodes,
+          coverImage: s.coverImage,
+          averageRating: s.averageRating,
+          status: s.status
+        }
+      })
+
+      return { 
+        seriesName,
+        seasons 
+      }
+    }),
+
   // Get trending anime (optimized with viewCount + averageRating)
   getTrending: publicProcedure
     .query(async () => {
@@ -426,6 +508,118 @@ export const animeRouter = router({
         },
         cacheTTL.medium // 5 minutes
       )
+    }),
+
+  // Get all anime grouped by series (Crunchyroll-style)
+  getAllSeries: publicProcedure
+    .input(z.object({
+      page: z.number().min(1).default(1),
+      limit: z.number().min(1).max(100).default(20),
+      search: z.string().optional(),
+      genre: z.string().optional(),
+      sortBy: z.enum(['rating', 'year', 'title']).default('rating'),
+      sortOrder: z.enum(['asc', 'desc']).default('desc')
+    }).optional())
+    .query(async ({ input = {} }) => {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        genre,
+        sortBy = 'rating',
+        sortOrder = 'desc'
+      } = input
+      
+      // First, get all matching anime (not grouped yet)
+      const where: any = {
+        ...getContentFilter()
+      }
+
+      if (search) {
+        where.OR = [
+          { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { titleEnglish: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { description: { contains: search, mode: Prisma.QueryMode.insensitive } }
+        ]
+      }
+
+      if (genre) {
+        where.genres = {
+          some: {
+            genre: {
+              OR: [
+                { slug: { equals: genre.toLowerCase(), mode: Prisma.QueryMode.insensitive } },
+                { name: { equals: genre, mode: Prisma.QueryMode.insensitive } }
+              ]
+            }
+          }
+        }
+      }
+
+      const allAnime = await db.anime.findMany({
+        where,
+        orderBy: { averageRating: 'desc' },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          titleEnglish: true,
+          titleJapanese: true,
+          titleSynonyms: true,
+          year: true,
+          type: true,
+          episodes: true,
+          coverImage: true,
+          averageRating: true,
+          status: true,
+          genres: {
+            select: {
+              genre: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  color: true,
+                }
+              }
+            }
+          }
+        }
+      })
+
+      // Group into series
+      const series = createSeriesEntries(allAnime.map(item => ({
+        ...item,
+        rating: item.averageRating,
+        genres: item.genres?.map(g => g.genre) || []
+      })))
+
+      // Sort series
+      const sortedSeries = series.sort((a, b) => {
+        if (sortBy === 'rating') {
+          return sortOrder === 'desc' ? (b.rating || 0) - (a.rating || 0) : (a.rating || 0) - (b.rating || 0)
+        } else if (sortBy === 'year') {
+          return sortOrder === 'desc' ? (b.year || 0) - (a.year || 0) : (a.year || 0) - (b.year || 0)
+        } else {
+          return sortOrder === 'desc' 
+            ? (b.displayTitle || b.title).localeCompare(a.displayTitle || a.title)
+            : (a.displayTitle || a.title).localeCompare(b.displayTitle || b.title)
+        }
+      })
+
+      // Paginate
+      const skip = (page - 1) * limit
+      const paginatedSeries = sortedSeries.slice(skip, skip + limit)
+
+      return {
+        series: paginatedSeries,
+        pagination: {
+          page,
+          limit,
+          total: sortedSeries.length,
+          pages: Math.ceil(sortedSeries.length / limit)
+        }
+      }
     }),
 
   // Get genres (select only needed fields) - cached for 15 minutes

@@ -8,6 +8,7 @@ import { onboardingRouter } from './onboarding'
 import { socialRouter } from './social'
 import { moderationRouter } from './moderation'
 import { gdprRouter } from './gdpr'
+import { studioRouter } from './studio'
 
 export const appRouter = router({
   auth: authRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   social: socialRouter,
   moderation: moderationRouter,
   gdpr: gdprRouter,
+  studio: studioRouter,
 })
 
 export type AppRouter = typeof appRouter

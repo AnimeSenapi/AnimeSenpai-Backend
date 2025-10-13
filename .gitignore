@@ -24,7 +24,6 @@ tsconfig.tsbuildinfo
 *.db-journal
 *.db-shm
 *.db-wal
-prisma/migrations/
 !prisma/schema.prisma
 !prisma/seed.ts
 

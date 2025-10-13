@@ -92,42 +92,51 @@ async function main() {
     console.log('   Run this script again if you import new anime.\n')
   }
   
-  // Get all anime
-  console.log('📥 Fetching anime from database...\n')
-  const allAnime = await prisma.anime.findMany({
-    select: {
-      id: true,
-      title: true,
-      synopsis: true,
-      description: true
-    },
-    orderBy: {
-      createdAt: 'desc' // Process newest first
-    }
-  })
-  
-  stats.totalAnime = allAnime.length
+  // Get total count first
+  console.log('📥 Counting anime in database...\n')
+  stats.totalAnime = await prisma.anime.count()
   
   console.log(`Found ${stats.totalAnime} anime to process\n`)
   console.log('⚙️  Processing in batches...\n')
   
-  // Process in batches to show progress
+  // Process in batches to avoid memory issues
   const BATCH_SIZE = 50
+  const totalBatches = Math.ceil(stats.totalAnime / BATCH_SIZE)
+  let processedCount = 0
   
-  for (let i = 0; i < allAnime.length; i += BATCH_SIZE) {
-    const batch = allAnime.slice(i, Math.min(i + BATCH_SIZE, allAnime.length))
-    const batchNumber = Math.floor(i / BATCH_SIZE) + 1
-    const totalBatches = Math.ceil(allAnime.length / BATCH_SIZE)
+  for (let batchNumber = 1; batchNumber <= totalBatches; batchNumber++) {
+    console.log(`📦 Batch ${batchNumber}/${totalBatches}`)
     
-    console.log(`📦 Batch ${batchNumber}/${totalBatches} (${batch.length} anime)`)
+    // Fetch only this batch
+    const batch = await prisma.anime.findMany({
+      select: {
+        id: true,
+        title: true,
+        synopsis: true,
+        description: true
+      },
+      orderBy: {
+        createdAt: 'desc' // Process newest first
+      },
+      skip: (batchNumber - 1) * BATCH_SIZE,
+      take: BATCH_SIZE
+    })
+    
+    console.log(`   Processing ${batch.length} anime...`)
     
     // Process batch
     for (const anime of batch) {
       await generateEmbeddingForAnime(anime.id, anime.title)
       stats.processed++
+      processedCount++
     }
     
     displayProgress()
+    
+    // Small delay to prevent overwhelming the database
+    if (batchNumber < totalBatches) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
   }
   
   stats.endTime = Date.now()

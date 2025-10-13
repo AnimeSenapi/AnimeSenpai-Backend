@@ -528,7 +528,7 @@ export const socialRouter = router({
         })
         
         // Extract the friend (not the current user)
-        const friends = friendships.map(f => 
+        const friends = friendships.map((f: any) => 
           f.user1Id === userId ? f.user2 : f.user1
         )
         
@@ -1010,7 +1010,7 @@ export const socialRouter = router({
         
         if (!current) return { success: true }
         
-        const updated = current.hiddenAnimeIds.filter(id => id !== input.animeId)
+        const updated = current.hiddenAnimeIds.filter((id: string) => id !== input.animeId)
         
         await db.userPrivacySettings.update({
           where: { userId: ctx.user.id },

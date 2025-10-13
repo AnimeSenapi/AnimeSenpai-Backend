@@ -38,23 +38,17 @@ async function findAvailablePort(startPort: number): Promise<number> {
   throw new Error('No available ports found')
 }
 
-const availablePort = await findAvailablePort(port)
+// Start server
+;(async () => {
+  const availablePort = await findAvailablePort(port)
 
-const server = serve({
-  port: availablePort,
-  async fetch(request) {
-    const startTime = Date.now()
-    const requestId = request.headers.get('x-request-id') || generateRequestId()
-    const url = new URL(request.url)
-    const logContext = extractLogContext(request)
-    
-    try {
-      // Log incoming request
-      logger.request(request.method, request.url, logContext, {
-        userAgent: request.headers.get('user-agent'),
-        contentLength: request.headers.get('content-length'),
-        contentType: request.headers.get('content-type'),
-      })
+  const server = serve({
+    port: availablePort,
+    async fetch(request) {
+      const startTime = Date.now()
+      const requestId = request.headers.get('x-request-id') || generateRequestId()
+      const url = new URL(request.url)
+      const logContext = extractLogContext(request)
       
       // Handle CORS with specific origin (required for credentials: 'include')
       const origin = request.headers.get('origin') || ''
@@ -70,6 +64,14 @@ const server = serve({
       ]
       
       const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+      
+      try {
+        // Log incoming request
+        logger.request(request.method, request.url, logContext, {
+          userAgent: request.headers.get('user-agent'),
+          contentLength: request.headers.get('content-length'),
+          contentType: request.headers.get('content-type'),
+        })
       
       if (request.method === 'OPTIONS') {
         return new Response(null, {
@@ -319,9 +321,10 @@ const server = serve({
         },
       })
     }
-  },
-})
+    },
+  })
 
-console.log(`🚀 AnimeSenpai API Server running on port ${availablePort}`)
-console.log(`📡 tRPC endpoint: http://localhost:${availablePort}/api/trpc`)
-console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
+  console.log(`🚀 AnimeSenpai API Server running on port ${availablePort}`)
+  console.log(`📡 tRPC endpoint: http://localhost:${availablePort}/api/trpc`)
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
+})()

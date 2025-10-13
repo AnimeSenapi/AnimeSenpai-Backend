@@ -178,7 +178,7 @@ export function validateWithSchema<T>(schema: any, input: unknown, field?: strin
   try {
     return validateInput(schema, input, { field })
   } catch (error) {
-    throw appErrorToTRPCError(error as Error)
+    throw appErrorToTRPCError(handleError(error))
   }
 }
 

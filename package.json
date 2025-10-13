@@ -1,20 +1,7 @@
 {
   "name": "animesenpai-backend",
   "version": "1.0.0",
-  "description": "AnimeSenpai Microservice Backend API",
   "main": "src/index.ts",
-  "scripts": {
-    "dev": "bun run --hot src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "start": "bun run dist/index.js",
-    "postinstall": "prisma generate",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:seed": "bun run prisma/seed.ts",
-    "type-check": "tsc --noEmit"
-  },
   "dependencies": {
     "@prisma/client": "^5.7.1",
     "@trpc/client": "^10.45.0",
@@ -28,6 +15,7 @@
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
+    "esbuild": "^0.25.10",
     "express-rate-limit": "^8.1.0",
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
@@ -35,13 +23,32 @@
     "prisma": "^5.7.1",
     "resend": "^6.1.2",
     "typescript": "^5.3.3",
+    "undici": "^7.16.0",
     "uuid": "^11.0.0",
     "zod": "^3.22.4"
   },
-  "devDependencies": {
-    "@vercel/node": "^3.0.0"
-  },
+  "description": "AnimeSenpai Microservice Backend API",
   "engines": {
     "bun": ">=1.0.0"
+  },
+  "resolutions": {
+    "esbuild": "^0.25.10",
+    "undici": "^7.16.0",
+    "path-to-regexp": "^6.3.0"
+  },
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "bun run prisma/seed.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@vercel/node": "4.0.0"
   }
 }

@@ -12,6 +12,7 @@
 import { z } from 'zod'
 import { router, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
+import { Prisma } from '@prisma/client'
 import { requireAdmin } from '../lib/roles'
 import { checkAdminRateLimit, secureAdminOperation } from '../lib/admin-security'
 import { TRPCError } from '@trpc/server'
@@ -47,8 +48,8 @@ export const moderationRouter = router({
 
       if (search) {
         where.OR = [
-          { title: { contains: search, mode: 'insensitive' as any } },
-          { content: { contains: search, mode: 'insensitive' as any } }
+          { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { content: { contains: search, mode: Prisma.QueryMode.insensitive } }
         ]
       }
 

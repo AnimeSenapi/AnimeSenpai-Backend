@@ -22,8 +22,8 @@ const t = initTRPC.context<Context>().create({
       ...shape,
       data: {
         ...shape.data,
-        code: (error.cause as any)?.code || 'UNKNOWN_ERROR',
-        field: (error.cause as any)?.field,
+        code: (error.cause as { code?: string })?.code || 'UNKNOWN_ERROR',
+        field: (error.cause as { field?: string })?.field,
         timestamp: new Date().toISOString(),
         requestId: logContext.requestId,
         path,
@@ -178,7 +178,7 @@ export function validateWithSchema<T>(schema: any, input: unknown, field?: strin
   try {
     return validateInput(schema, input, { field })
   } catch (error) {
-    throw appErrorToTRPCError(error as any)
+    throw appErrorToTRPCError(error as Error)
   }
 }
 

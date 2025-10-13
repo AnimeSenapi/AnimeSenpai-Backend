@@ -582,9 +582,9 @@ export const adminRouter = router({
 
       // Settings stored as JSON in a single row with key 'system'
       // We'll use a simple key-value approach in the database
-      const settings = await db.$queryRaw`
+      const settings = await db.$queryRaw<Array<{ key: string; value: string }>>`
         SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
-      ` as any[]
+      `
 
       if (settings.length === 0) {
         // Return default settings
@@ -674,11 +674,11 @@ export const adminRouter = router({
           `
 
           // Merge with existing settings
-          const existing = await db.$queryRaw`
+          const existing = await db.$queryRaw<Array<{ key: string; value: string }>>`
             SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
-          ` as any[]
+          `
 
-          let currentSettings: any = {}
+          let currentSettings: Record<string, any> = {}
           if (existing.length > 0) {
             currentSettings = JSON.parse(existing[0].value)
           }

@@ -47,14 +47,28 @@ const rateLimitMiddleware = t.middleware(async ({ next, ctx, path }) => {
   const ipAddress = logContext.ipAddress || 'unknown'
   
   try {
-    // Check rate limit (implement your rate limiting logic here)
-    // For now, we'll just log the request
-    logger.api(`Rate limit check for ${path}`, logContext, { ipAddress })
+    // Import rate limiter
+    const { checkRateLimit } = await import('./rate-limiter')
+    
+    // Use IP address as identifier for unauthenticated requests
+    const identifier = ctx.user?.id || ipAddress
+    
+    // Determine rate limit type based on authentication
+    const rateLimitType = ctx.user ? 'authenticated' : 'public'
+    
+    // Check rate limit
+    checkRateLimit(identifier, rateLimitType, path)
+    
+    logger.api(`Rate limit check passed for ${path}`, logContext, { 
+      ipAddress,
+      identifier,
+      type: rateLimitType
+    })
     
     return next({ ctx })
   } catch (error) {
     logger.error(`Rate limit exceeded for ${path}`, error as Error, logContext, { ipAddress })
-    throw appErrorToTRPCError(createError.rateLimitExceeded(100, '15 minutes'))
+    throw error // Re-throw the TRPCError from checkRateLimit
   }
 })
 

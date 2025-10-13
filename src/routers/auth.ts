@@ -24,6 +24,7 @@ import {
 import { createError, handleError } from '../lib/errors'
 import { logger, extractLogContext, logAuth, logError } from '../lib/logger'
 import { schemas } from '../lib/validation'
+import { checkRateLimit } from '../lib/rate-limiter'
 
 export const authRouter = router({
   // Sign up
@@ -35,6 +36,10 @@ export const authRouter = router({
       try {
         // Direct input validation
         const { email, username, password, gdprConsent, marketingConsent, dataProcessingConsent } = input
+
+        // Rate limit: 5 signup attempts per 15 minutes per IP
+        const ipAddress = logContext.ipAddress || 'unknown'
+        checkRateLimit(ipAddress, 'auth', 'signup')
 
         logger.auth('Signup attempt started', logContext, { email, username })
 
@@ -136,6 +141,11 @@ export const authRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const { email, password } = input
+      const logContext = extractLogContext(ctx.req)
+      const ipAddress = logContext.ipAddress || 'unknown'
+
+      // Rate limit: 5 signin attempts per 15 minutes per IP
+      checkRateLimit(ipAddress, 'auth', 'signin')
 
       // Find user
       const user = await db.user.findUnique({
@@ -418,6 +428,11 @@ export const authRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const { email } = input
+      const logContext = extractLogContext(ctx.req)
+      const ipAddress = logContext.ipAddress || 'unknown'
+
+      // Rate limit: 3 password reset attempts per hour per IP
+      checkRateLimit(ipAddress, 'passwordReset', 'forgot-password')
 
       const user = await db.user.findUnique({
         where: { email }
@@ -515,6 +530,9 @@ export const authRouter = router({
   // Resend email verification
   resendVerification: protectedProcedure
     .mutation(async ({ ctx }) => {
+      // Rate limit: 5 email verifications per hour per user
+      checkRateLimit(ctx.user.id, 'email', 'resend-verification')
+
       if (ctx.user.emailVerified) {
         throw new TRPCError({
           code: 'BAD_REQUEST',

@@ -6,6 +6,7 @@ import { adminRouter } from './admin'
 import { recommendationsRouter } from './recommendations'
 import { onboardingRouter } from './onboarding'
 import { socialRouter } from './social'
+import { moderationRouter } from './moderation'
 
 export const appRouter = router({
   auth: authRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   recommendations: recommendationsRouter,
   onboarding: onboardingRouter,
   social: socialRouter,
+  moderation: moderationRouter,
 })
 
 export type AppRouter = typeof appRouter

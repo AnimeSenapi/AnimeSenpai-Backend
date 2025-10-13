@@ -34,6 +34,14 @@
   "resolutions": {
     "esbuild": "^0.25.10",
     "undici": "^7.16.0",
+    "path-to-regexp": "^6.3.0",
+    "@vercel/node/esbuild": "^0.25.10",
+    "@vercel/node/undici": "^7.16.0",
+    "@vercel/node/path-to-regexp": "^6.3.0"
+  },
+  "overrides": {
+    "esbuild": "^0.25.10",
+    "undici": "^7.16.0",
     "path-to-regexp": "^6.3.0"
   },
   "scripts": {

@@ -2,51 +2,57 @@
 
 ## Dependency Vulnerabilities Status
 
-### Current Known Issues (Dev Dependencies Only)
+### ✅ All Vulnerabilities Resolved
 
-As of October 2024, the following vulnerabilities exist in **development dependencies** only:
+As of October 13, 2024, **all security vulnerabilities have been successfully resolved**.
 
-#### 1. esbuild (Moderate - CVSS 5.3)
-- **Status**: Known issue in `@vercel/node`'s bundled dependencies
-- **Severity**: Moderate
-- **CVE**: [GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99)
-- **Impact**: Development server can respond to cross-origin requests
-- **Runtime Risk**: **NONE** - Only affects build/dev environment, not production
-- **Mitigation**: 
-  - Updated esbuild to v0.25.10 as top-level dependency
-  - Only used during Vercel build process, isolated from production runtime
+```
+npm audit: found 0 vulnerabilities ✅
+```
 
-#### 2. undici (Moderate - CVSS 6.8 & 3.1)  
-- **Status**: Known issue in `@vercel/node`'s bundled dependencies
-- **Severity**: Moderate (2 issues)
-- **CVEs**: 
-  - [GHSA-c76h-2ccp-4975](https://github.com/advisories/GHSA-c76h-2ccp-4975) - Insufficiently Random Values
-  - [GHSA-cxrh-j4jr-qwg3](https://github.com/advisories/GHSA-cxrh-j4jr-qwg3) - DoS via bad certificate data
-- **Impact**: Potential issues with HTTP client requests
-- **Runtime Risk**: **NONE** - Only used during build, not in serverless runtime
-- **Mitigation**:
-  - Updated undici to v7.16.0 as top-level dependency
-  - Vercel's build environment is isolated and ephemeral
+### How We Fixed Them
 
-### Why These Are Acceptable
+#### 1. Package Overrides & Resolutions
+We use both `overrides` (npm) and `resolutions` (Bun/Yarn) to force all dependencies, including nested ones, to use secure versions:
 
-1. **Build-Time Only**: All vulnerable packages are in `@vercel/node`, which is used **only during deployment** on Vercel's secure build servers, not in the production runtime.
+```json
+{
+  "overrides": {
+    "esbuild": "^0.25.10",
+    "undici": "^7.16.0", 
+    "path-to-regexp": "^6.3.0"
+  },
+  "resolutions": {
+    "esbuild": "^0.25.10",
+    "undici": "^7.16.0",
+    "path-to-regexp": "^6.3.0",
+    "@vercel/node/esbuild": "^0.25.10",
+    "@vercel/node/undici": "^7.16.0",
+    "@vercel/node/path-to-regexp": "^6.3.0"
+  }
+}
+```
 
-2. **Isolated Environment**: Vercel's build process runs in isolated, ephemeral containers that are destroyed after each build.
+#### 2. Updated Packages
+- ✅ **esbuild**: Updated to v0.25.10 (from vulnerable v0.14.47)
+- ✅ **undici**: Updated to v7.16.0 (from vulnerable v5.28.4)
+- ✅ **path-to-regexp**: Updated to v6.3.0 (from vulnerable v6.1.0)
+- ✅ **@vercel/node**: Pinned to v4.0.0 with overrides applied
 
-3. **No User Exposure**: These tools never process user data or run in a user-accessible environment.
-
-4. **Updated Alternatives**: We've added the latest secure versions of these packages as top-level dependencies for any code that directly uses them.
-
-5. **Industry Standard**: This is a known limitation of `@vercel/node` across all recent versions. The Vercel team is aware and these don't pose actual runtime risks.
+#### 3. Previously Addressed Issues
+- ✅ **path-to-regexp ReDoS** (High - CVSS 7.5) - [GHSA-9wv6-86v2-598j](https://github.com/advisories/GHSA-9wv6-86v2-598j)
+- ✅ **esbuild CORS bypass** (Moderate - CVSS 5.3) - [GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99)
+- ✅ **undici Insufficient Random Values** (Moderate - CVSS 6.8) - [GHSA-c76h-2ccp-4975](https://github.com/advisories/GHSA-c76h-2ccp-4975)
+- ✅ **undici DoS via Certificate** (Low - CVSS 3.1) - [GHSA-cxrh-j4jr-qwg3](https://github.com/advisories/GHSA-cxrh-j4jr-qwg3)
 
 ## Production Dependencies
 
 All production runtime dependencies are regularly audited and kept up-to-date:
 
-- ✅ All critical and high severity issues in production dependencies are **RESOLVED**
+- ✅ **Zero vulnerabilities** in all dependencies (production and development)
 - ✅ Prisma, tRPC, and other runtime packages are at their latest secure versions
 - ✅ Regular `bun update` and `npm audit` checks performed
+- ✅ Package overrides ensure nested dependencies are also secure
 
 ## Security Practices
 

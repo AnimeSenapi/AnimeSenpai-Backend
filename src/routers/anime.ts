@@ -69,6 +69,8 @@ export const animeRouter = router({
       if (search) {
         where.OR = [
           { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { titleEnglish: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { titleJapanese: { contains: search, mode: Prisma.QueryMode.insensitive } },
           { description: { contains: search, mode: Prisma.QueryMode.insensitive } }
         ]
       }
@@ -98,6 +100,13 @@ export const animeRouter = router({
         where.type = { equals: type, mode: Prisma.QueryMode.insensitive }
       }
 
+      // Use cache for common queries
+      const cacheKey = `anime:getAll:${JSON.stringify(input)}`
+      const cached = cache.get(cacheKey)
+      if (cached) {
+        return cached
+      }
+
       const [anime, total] = await Promise.all([
         db.anime.findMany({
           where,
@@ -111,7 +120,6 @@ export const animeRouter = router({
             titleEnglish: true,
             titleJapanese: true,
             titleSynonyms: true,
-            description: true,
             year: true,
             rating: true,
             status: true,
@@ -129,20 +137,19 @@ export const animeRouter = router({
               select: {
                 genre: {
                   select: {
-                    id: true,
                     name: true,
                     slug: true,
-                    color: true,
                   }
                 }
-              }
+              },
+              take: 5 // Limit genres to top 5 for performance
             }
           }
         }),
         db.anime.count({ where })
       ])
 
-      return {
+      const result = {
         anime: anime.map(item => ({
           id: item.id,
           slug: item.slug,
@@ -150,7 +157,6 @@ export const animeRouter = router({
           titleEnglish: item.titleEnglish,
           titleJapanese: item.titleJapanese,
           titleSynonyms: item.titleSynonyms,
-          description: item.description,
           year: item.year,
           rating: item.rating,
           status: item.status,
@@ -175,6 +181,11 @@ export const animeRouter = router({
           pages: Math.ceil(total / limit)
         }
       }
+
+      // Cache for 5 minutes
+      cache.set(cacheKey, result, cacheTTL.medium)
+      
+      return result
     }),
 
   // Search anime (dedicated endpoint with better performance)
@@ -189,8 +200,10 @@ export const animeRouter = router({
       const anime = await db.anime.findMany({
         where: {
           OR: [
-            { title: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } }
+            { title: { contains: query, mode: Prisma.QueryMode.insensitive } },
+            { titleEnglish: { contains: query, mode: Prisma.QueryMode.insensitive } },
+            { titleJapanese: { contains: query, mode: Prisma.QueryMode.insensitive } },
+            { description: { contains: query, mode: Prisma.QueryMode.insensitive } }
           ]
         },
         take: limit,
@@ -367,19 +380,23 @@ export const animeRouter = router({
       })
 
       if (!anime) {
-        return { seasons: [] }
+        return { seasons: [], seriesName: '' }
       }
 
       // Extract series name
       const { extractSeriesInfo } = await import('../lib/series-grouping')
       const { seriesName } = extractSeriesInfo(anime.title, anime.titleEnglish)
 
-      // Find all anime that belong to this series
-      const relatedAnime = await db.anime.findMany({
+      // Create search patterns for better matching
+      // Remove common words that might cause false positives
+      const cleanSeriesName = seriesName.replace(/\b(The|A|An)\b/gi, '').trim()
+      
+      // Find anime with similar titles (first pass - broad search)
+      const candidateAnime = await db.anime.findMany({
         where: {
           OR: [
-            { title: { contains: seriesName, mode: Prisma.QueryMode.insensitive } },
-            { titleEnglish: { contains: seriesName, mode: Prisma.QueryMode.insensitive } }
+            { title: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } },
+            { titleEnglish: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } }
           ],
           ...getContentFilter()
         },
@@ -395,14 +412,34 @@ export const animeRouter = router({
           averageRating: true,
           status: true
         },
-        orderBy: [
-          { year: 'asc' },
-          { title: 'asc' }
-        ]
+        take: 50 // Limit to prevent performance issues
+      })
+      
+      // Filter to only exact series matches (second pass - strict filter)
+      const relatedAnime = candidateAnime.filter(a => {
+        const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
+        // Must have exact same series name (case-insensitive)
+        const aSeriesClean = aInfo.seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
+        const targetSeriesClean = seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
+        return aSeriesClean === targetSeriesClean
+      })
+      
+      // Sort by year and season number
+      const sortedSeasons = relatedAnime.sort((a, b) => {
+        const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
+        const bInfo = extractSeriesInfo(b.title, b.titleEnglish)
+        
+        // First by year
+        if (a.year && b.year && a.year !== b.year) {
+          return a.year - b.year
+        }
+        
+        // Then by season number
+        return aInfo.seasonNumber - bInfo.seasonNumber
       })
 
       // Format as seasons
-      const seasons = relatedAnime.map((s, index) => {
+      const seasons = sortedSeasons.map(s => {
         const info = extractSeriesInfo(s.title, s.titleEnglish)
         return {
           seasonNumber: info.seasonNumber,

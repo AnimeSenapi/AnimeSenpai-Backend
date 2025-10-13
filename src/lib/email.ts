@@ -38,7 +38,6 @@ export class EmailService {
         text: template.text,
       });
 
-      console.log('Email sent successfully:', result);
       return true;
     } catch (error) {
       console.error('Failed to send email:', error);

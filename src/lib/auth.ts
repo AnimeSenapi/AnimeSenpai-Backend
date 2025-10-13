@@ -12,11 +12,11 @@ import { db } from './db'
 import { emailService } from './email'
 
 // JWT Configuration
-// Access tokens are short-lived (15min), refresh tokens last longer (7 days)
+// Access tokens are short-lived (1 hour), refresh tokens last longer (30 days)
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret-key'
-const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '15m'
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+const JWT_ACCESS_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN || '1h'
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d'
 // 12 rounds of bcrypt = secure but still fast enough
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12')
 
@@ -77,7 +77,7 @@ export async function createSession(
   userId: string, 
   sessionInfo: SessionInfo = {}
 ): Promise<TokenPair> {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
   // Get user email for token payload
   const user = await db.user.findUnique({ where: { id: userId } })

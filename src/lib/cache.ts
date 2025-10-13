@@ -90,9 +90,7 @@ class SimpleCache {
     
     keysToDelete.forEach(key => this.cache.delete(key))
     
-    if (keysToDelete.length > 0) {
-      console.log(`🧹 Cache cleanup: removed ${keysToDelete.length} expired entries`)
-    }
+    // Cache cleanup completed
   }
 
   /**

@@ -288,11 +288,14 @@ model Anime {
   @@index([averageRating(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([title])
+  @@index([titleEnglish])
   @@index([malId])
   @@index([anilistId])
   @@index([rank])
   @@index([popularity])
   @@index([airing])
+  @@index([status, averageRating(sort: Desc)])
+  @@index([type, averageRating(sort: Desc)])
   @@map("anime")
   @@schema("content")
 }
@@ -460,4 +463,24 @@ model AnimeEmbedding {
   @@index([animeId])
   @@map("anime_embeddings")
   @@schema("content")
+}
+
+model SystemSettings {
+  id                        String   @id @default(cuid())
+  siteName                  String   @default("AnimeSenpai")
+  siteDescription           String   @default("Track, discover, and explore your favorite anime")
+  maintenanceMode           Boolean  @default(false)
+  maintenanceMessage        String?
+  registrationEnabled       Boolean  @default(true)
+  emailVerificationRequired Boolean  @default(true)
+  maxUploadSize             Int      @default(5242880) // 5MB in bytes
+  rateLimit                 Int      @default(100) // requests per minute
+  sessionTimeout            Int      @default(86400) // 24 hours in seconds
+  enableRecommendations     Boolean  @default(true)
+  enableSocialFeatures      Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  
+  @@map("system_settings")
+  @@schema("auth")
 }

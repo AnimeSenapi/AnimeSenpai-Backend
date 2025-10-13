@@ -469,5 +469,250 @@ export const adminRouter = router({
 
       return users
     }),
+
+  // Delete anime
+  updateAnime: protectedProcedure
+    .input(z.object({
+      animeId: z.string(),
+      title: z.string().optional(),
+      titleEnglish: z.string().optional(),
+      titleJapanese: z.string().optional(),
+      synopsis: z.string().optional(),
+      year: z.number().optional(),
+      episodes: z.number().optional(),
+      status: z.string().optional(),
+      type: z.string().optional(),
+      rating: z.string().optional(),
+      coverImage: z.string().optional(),
+      bannerImage: z.string().optional(),
+      trailer: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'update_anime',
+        async () => {
+          const { animeId, ...updateData } = input
+
+          // Get current anime for logging
+          const currentAnime = await db.anime.findUnique({
+            where: { id: animeId },
+            select: { title: true, id: true }
+          })
+
+          if (!currentAnime) {
+            throw new Error('Anime not found')
+          }
+
+          // Update anime
+          const updated = await db.anime.update({
+            where: { id: animeId },
+            data: updateData,
+          })
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'anime_updated',
+            {
+              animeId,
+              animeTitle: currentAnime.title,
+              updatedFields: Object.keys(updateData),
+            }
+          )
+
+          return {
+            success: true,
+            anime: updated,
+          }
+        }
+      )
+    }),
+
+  deleteAnime: protectedProcedure
+    .input(z.object({
+      animeId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'delete_anime',
+        async () => {
+          // Get anime details for logging
+          const anime = await db.anime.findUnique({
+            where: { id: input.animeId },
+            select: { title: true, id: true }
+          })
+
+          if (!anime) {
+            throw new Error('Anime not found')
+          }
+
+          // Delete anime (cascade will handle related data)
+          await db.anime.delete({
+            where: { id: input.animeId }
+          })
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'anime_deleted',
+            { animeId: input.animeId, animeTitle: anime.title, deletedBy: ctx.user.email },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true, title: anime.title }
+        },
+        { animeId: input.animeId },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
+
+  // Get system settings
+  getSettings: protectedProcedure
+    .query(async ({ ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Settings stored as JSON in a single row with key 'system'
+      // We'll use a simple key-value approach in the database
+      const settings = await db.$queryRaw`
+        SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
+      ` as any[]
+
+      if (settings.length === 0) {
+        // Return default settings
+        return {
+          general: {
+            siteName: 'AnimeSenpai',
+            siteDescription: 'Track, discover, and explore your favorite anime',
+            maintenanceMode: false,
+            allowRegistration: true,
+            requireEmailVerification: true,
+          },
+          features: {
+            enableRecommendations: true,
+            enableSocialFeatures: true,
+            enableAchievements: true,
+            enableComments: true,
+          },
+          security: {
+            sessionTimeout: 30,
+            maxLoginAttempts: 5,
+            requireStrongPasswords: true,
+            enableTwoFactor: false,
+          },
+          notifications: {
+            emailNotifications: true,
+            newUserAlert: true,
+            errorReporting: true,
+          },
+          analytics: {
+            googleAnalyticsId: '',
+            enableTracking: false,
+          }
+        }
+      }
+
+      return JSON.parse(settings[0].value)
+    }),
+
+  // Save system settings
+  saveSettings: protectedProcedure
+    .input(z.object({
+      general: z.object({
+        siteName: z.string(),
+        siteDescription: z.string(),
+        maintenanceMode: z.boolean(),
+        allowRegistration: z.boolean(),
+        requireEmailVerification: z.boolean(),
+      }).optional(),
+      features: z.object({
+        enableRecommendations: z.boolean(),
+        enableSocialFeatures: z.boolean(),
+        enableAchievements: z.boolean(),
+        enableComments: z.boolean(),
+      }).optional(),
+      security: z.object({
+        sessionTimeout: z.number(),
+        maxLoginAttempts: z.number(),
+        requireStrongPasswords: z.boolean(),
+        enableTwoFactor: z.boolean(),
+      }).optional(),
+      notifications: z.object({
+        emailNotifications: z.boolean(),
+        newUserAlert: z.boolean(),
+        errorReporting: z.boolean(),
+      }).optional(),
+      analytics: z.object({
+        googleAnalyticsId: z.string(),
+        enableTracking: z.boolean(),
+      }).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'update_settings',
+        async () => {
+          // Create SystemSettings table if it doesn't exist
+          await db.$executeRaw`
+            CREATE TABLE IF NOT EXISTS "SystemSettings" (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL,
+              "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              "updatedBy" TEXT NOT NULL
+            )
+          `
+
+          // Merge with existing settings
+          const existing = await db.$queryRaw`
+            SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
+          ` as any[]
+
+          let currentSettings: any = {}
+          if (existing.length > 0) {
+            currentSettings = JSON.parse(existing[0].value)
+          }
+
+          // Merge new settings
+          const updatedSettings = {
+            ...currentSettings,
+            ...input
+          }
+
+          // Upsert settings
+          await db.$executeRaw`
+            INSERT INTO "SystemSettings" (key, value, "updatedBy", "updatedAt")
+            VALUES ('system', ${JSON.stringify(updatedSettings)}::text, ${ctx.user.email}, CURRENT_TIMESTAMP)
+            ON CONFLICT (key) DO UPDATE SET
+              value = ${JSON.stringify(updatedSettings)}::text,
+              "updatedBy" = ${ctx.user.email},
+              "updatedAt" = CURRENT_TIMESTAMP
+          `
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'settings_updated',
+            { updatedBy: ctx.user.email, sections: Object.keys(input) },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true, settings: updatedSettings }
+        },
+        { sections: Object.keys(input) },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
 })
 

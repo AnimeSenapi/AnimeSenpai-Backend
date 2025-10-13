@@ -24,32 +24,107 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
 } {
   const workingTitle = titleEnglish || title
   
-  // Patterns to detect seasons
+  // Special handling for common patterns before season detection
+  
+  // Pattern 1: "X of Y" (e.g., "Rascal Does Not Dream of...")
+  const ofPattern = /^(.+\s+of)\s+.+$/i
+  const ofMatch = workingTitle.match(ofPattern)
+  if (ofMatch) {
+    const baseSeriesName = ofMatch[1].trim()
+    const subtitle = workingTitle.replace(ofMatch[1], '').trim()
+    return {
+      seriesName: baseSeriesName,
+      seasonNumber: 1, // Will be sorted by year
+      seasonName: subtitle || 'Season 1',
+      isSequel: false
+    }
+  }
+  
+  // Pattern 2: "X in Y" (e.g., "Alya Sometimes Hides Her Feelings in Russian")
+  const inPattern = /^(.+\s+in)\s+.+$/i
+  const inMatch = workingTitle.match(inPattern)
+  if (inMatch) {
+    const baseSeriesName = inMatch[1].trim()
+    const subtitle = workingTitle.replace(inMatch[1], '').trim()
+    return {
+      seriesName: baseSeriesName,
+      seasonNumber: 1,
+      seasonName: subtitle || 'Season 1',
+      isSequel: false
+    }
+  }
+  
+  // Pattern 3: Very long titles with subtitles (likely different entries in same franchise)
+  // E.g., "TONIKAWA: Over the Moon for You" vs "TONIKAWA: Fly Me to the Moon"
+  const colonPattern = /^([^:]+):\s*.+$/
+  const colonMatch = workingTitle.match(colonPattern)
+  if (colonMatch) {
+    const baseTitle = colonMatch[1].trim()
+    // Only use this if the base title is short enough (likely a series name)
+    if (baseTitle.length <= 40 && !baseTitle.match(/Season|Part|Final|Arc/i)) {
+      const subtitle = workingTitle.replace(colonMatch[1] + ':', '').trim()
+      return {
+        seriesName: baseTitle,
+        seasonNumber: 1,
+        seasonName: subtitle || 'Season 1',
+        isSequel: false
+      }
+    }
+  }
+  
+  // Comprehensive patterns to detect seasons - order matters!
   const patterns = [
-    { regex: /Season (\d+)/i, type: 'season' },
-    { regex: /(\d+)(?:st|nd|rd|th) Season/i, type: 'season' },
-    { regex: /Part (\d+)/i, type: 'part' },
-    { regex: /(\d+)(?:st|nd|rd|th) Part/i, type: 'part' },
-    { regex: /: II$/i, number: 2, type: 'roman' },
-    { regex: /: III$/i, number: 3, type: 'roman' },
-    { regex: /: IV$/i, number: 4, type: 'roman' },
-    { regex: /: V$/i, number: 5, type: 'roman' },
-    { regex: /2$/i, number: 2, type: 'number' }, // e.g., "Title 2"
-    { regex: /3$/i, number: 3, type: 'number' },
+    // Final/Last seasons
+    { regex: /:\s*Final Season\s*(?:Part\s*(\d+))?/i, number: (m: RegExpMatchArray) => m[1] ? parseInt(m[1]) + 3 : 4, name: (m: RegExpMatchArray) => m[1] ? `Final Season Part ${m[1]}` : 'Final Season' },
+    { regex: /:\s*Last Season/i, number: 5, name: 'Last Season' },
+    { regex: /:\s*The Final/i, number: 5, name: 'The Final' },
+    
+    // Season patterns
+    { regex: /:\s*Season\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Season/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    { regex: /\sS(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    
+    // Part patterns
+    { regex: /:\s*Part\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Part ${m[1]}` },
+    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Part/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Part ${m[1]}` },
+    
+    // Cour patterns
+    { regex: /:\s*Cour\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Cour ${m[1]}` },
+    { regex: /:\s*2nd\s*Cour/i, number: 2, name: '2nd Cour' },
+    
+    // Arc patterns
+    { regex: /:\s*([\w\s]+)\s*Arc$/i, number: 2, name: (m: RegExpMatchArray) => `${m[1]} Arc` },
+    
+    // Roman numerals (must be at the end or before subtitle)
+    { regex: /\s+II(?:\s|:|$)/i, number: 2, name: 'Season 2' },
+    { regex: /\s+III(?:\s|:|$)/i, number: 3, name: 'Season 3' },
+    { regex: /\s+IV(?:\s|:|$)/i, number: 4, name: 'Season 4' },
+    { regex: /\s+V(?:\s|:|$)/i, number: 5, name: 'Season 5' },
+    { regex: /:\s*II$/i, number: 2, name: 'Season 2' },
+    { regex: /:\s*III$/i, number: 3, name: 'Season 3' },
+    { regex: /:\s*IV$/i, number: 4, name: 'Season 4' },
+    { regex: /:\s*V$/i, number: 5, name: 'Season 5' },
+    
+    // Numbers at the end (with caution - must have separator)
+    { regex: /:\s*(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    { regex: /\s+(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    
+    // Sequel indicators
+    { regex: /:\s*2nd\s*/i, number: 2, name: '2nd Season' },
+    { regex: /:\s*3rd\s*/i, number: 3, name: '3rd Season' },
+    { regex: /:\s*4th\s*/i, number: 4, name: '4th Season' },
   ]
   
   for (const pattern of patterns) {
     const match = workingTitle.match(pattern.regex)
     if (match) {
-      const seasonNumber = pattern.number || parseInt(match[1])
+      const seasonNumber = typeof pattern.number === 'function' ? pattern.number(match) : pattern.number
       let seriesName = workingTitle.replace(pattern.regex, '').trim()
       
-      // Clean up series name
-      seriesName = seriesName.replace(/[:\-–—]\s*$/, '').trim()
+      // Clean up series name - remove trailing punctuation
+      seriesName = seriesName.replace(/[:\-–—,;]\s*$/, '').trim()
       
-      const seasonName = pattern.type === 'season' ? `Season ${seasonNumber}` :
-                        pattern.type === 'part' ? `Part ${seasonNumber}` :
-                        `Season ${seasonNumber}`
+      const seasonName = typeof pattern.name === 'function' ? pattern.name(match) : pattern.name
       
       return {
         seriesName,

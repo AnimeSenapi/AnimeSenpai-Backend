@@ -29,58 +29,7 @@ bun scripts/check-db-status.ts
 
 ---
 
-### 2. **Overnight Import** 🌙 **[NEW - RECOMMENDED]**
-Continuously fetch anime data overnight or for extended periods.
-
-```bash
-node scripts/overnight-import.js
-```
-
-**Features:**
-- ✅ **Runs indefinitely** until stopped (Ctrl+C)
-- ✅ **Fetches top 1000 anime per genre** (68 genres)
-- ✅ **Skips existing anime** automatically
-- ✅ **Graceful shutdown** - saves progress on exit
-- ✅ **Auto-retry** on errors (up to 3 attempts)
-- ✅ **Real-time stats** every 10 pages
-- ✅ **Batch saving** (50 anime at a time)
-- ✅ **Continuous mode** after genres complete
-
-**Recommended for:**
-- Running overnight on a server
-- Importing large amounts of data
-- Long-running background imports
-- Initial database population
-
-**Usage:**
-```bash
-# Simple run
-bun scripts/overnight-import.js
-
-# Run in background (screen - recommended)
-screen -S anime-import
-bun scripts/overnight-import.js
-# Press Ctrl+A then D to detach
-# Reattach: screen -r anime-import
-
-# Run in background (nohup)
-nohup bun scripts/overnight-import.js > import.log 2>&1 &
-echo $! > import.pid
-
-# Stop gracefully
-kill -SIGINT $(cat import.pid)
-```
-
-**Expected results:**
-- After 12 hours: ~50,000-70,000 anime
-- After 24 hours: ~80,000-100,000 anime
-- Database size: ~1-2GB
-
-📖 **See:** `OVERNIGHT-IMPORT-GUIDE.md` for complete documentation
-
----
-
-### 3. **Import Anime Data** 🎌
+### 2. **Import Anime Data** 🎌
 Import anime from Jikan API (MyAnimeList) - one-time batch import.
 
 ```bash
@@ -118,7 +67,7 @@ Run `check-db-status.ts` in another terminal to monitor progress.
 
 ---
 
-### 4. **Create Test Accounts** 🧪
+### 3. **Create Test Accounts** 🧪
 Generate test users with different activity levels.
 
 ```bash

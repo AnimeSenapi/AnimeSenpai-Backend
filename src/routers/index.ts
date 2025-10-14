@@ -9,6 +9,10 @@ import { socialRouter } from './social'
 import { moderationRouter } from './moderation'
 import { gdprRouter } from './gdpr'
 import { studioRouter } from './studio'
+import { activityRouter } from './activity'
+import { reviewInteractionsRouter } from './review-interactions'
+import { notificationsRouter } from './notifications'
+import { privacyRouter } from './privacy'
 
 export const appRouter = router({
   auth: authRouter,
@@ -21,6 +25,10 @@ export const appRouter = router({
   moderation: moderationRouter,
   gdpr: gdprRouter,
   studio: studioRouter,
+  activity: activityRouter,
+  reviewInteractions: reviewInteractionsRouter,
+  notifications: notificationsRouter,
+  privacy: privacyRouter,
 })
 
 export type AppRouter = typeof appRouter

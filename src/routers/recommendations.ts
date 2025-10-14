@@ -485,6 +485,145 @@ export const recommendationsRouter = router({
         processed: result.processed,
         errors: result.errors
       }
+    }),
+
+  /**
+   * Get "Friends who liked this also watched" recommendations
+   * Phase 2 Social Feature
+   */
+  getFriendsAlsoWatched: protectedProcedure
+    .input(z.object({
+      animeId: z.string(),
+      limit: z.number().min(1).max(20).default(10)
+    }))
+    .query(async ({ ctx, input }) => {
+      try {
+        // Get user's friends
+        const friendships = await db.friendship.findMany({
+          where: {
+            OR: [
+              { user1Id: ctx.user.id, status: 'accepted' },
+              { user2Id: ctx.user.id, status: 'accepted' }
+            ]
+          },
+          select: {
+            user1Id: true,
+            user2Id: true
+          }
+        })
+        
+        const friendIds = friendships.map(f => 
+          f.user1Id === ctx.user.id ? f.user2Id : f.user1Id
+        )
+        
+        if (friendIds.length === 0) {
+          return { recommendations: [] }
+        }
+        
+        // Find friends who liked/rated this anime highly
+        const friendsWhoLiked = await db.userAnimeList.findMany({
+          where: {
+            animeId: input.animeId,
+            userId: { in: friendIds },
+            score: { gte: 7 } // 7+ rating means they liked it
+          },
+          select: {
+            userId: true
+          }
+        })
+        
+        const friendsWhoLikedIds = friendsWhoLiked.map(f => f.userId)
+        
+        if (friendsWhoLikedIds.length === 0) {
+          return { recommendations: [] }
+        }
+        
+        // Get what those friends also watched and liked
+        const otherAnime = await db.userAnimeList.findMany({
+          where: {
+            userId: { in: friendsWhoLikedIds },
+            animeId: { not: input.animeId }, // Exclude current anime
+            score: { gte: 7 }, // They also liked these
+          },
+          select: {
+            animeId: true,
+            score: true,
+            userId: true
+          }
+        })
+        
+        // Count how many friends liked each anime
+        const animeCounts = otherAnime.reduce((acc, item) => {
+          if (!acc[item.animeId]) {
+            acc[item.animeId] = {
+              count: 0,
+              totalScore: 0,
+              friendIds: []
+            }
+          }
+          acc[item.animeId].count++
+          acc[item.animeId].totalScore += item.score || 0
+          acc[item.animeId].friendIds.push(item.userId)
+          return acc
+        }, {} as Record<string, { count: number; totalScore: number; friendIds: string[] }>)
+        
+        // Sort by number of friends who liked it, then by average score
+        const sortedAnimeIds = Object.entries(animeCounts)
+          .sort((a, b) => {
+            if (b[1].count !== a[1].count) {
+              return b[1].count - a[1].count
+            }
+            return (b[1].totalScore / b[1].count) - (a[1].totalScore / a[1].count)
+          })
+          .slice(0, input.limit)
+          .map(([animeId]) => animeId)
+        
+        // Fetch anime details
+        const recommendations = await db.anime.findMany({
+          where: {
+            id: { in: sortedAnimeIds }
+          },
+          include: {
+            genres: {
+              include: {
+                genre: true
+              }
+            }
+          }
+        })
+        
+        // Sort recommendations to match the sorted order
+        const sortedRecommendations = sortedAnimeIds
+          .map(id => recommendations.find(a => a.id === id))
+          .filter(Boolean)
+          .map(anime => ({
+            anime: {
+              id: anime!.id,
+              slug: anime!.slug,
+              title: anime!.title,
+              titleEnglish: anime!.titleEnglish,
+              titleJapanese: anime!.titleJapanese,
+              titleSynonyms: anime!.titleSynonyms,
+              coverImage: anime!.coverImage,
+              year: anime!.year,
+              averageRating: anime!.averageRating,
+              genres: anime!.genres.map(g => ({
+                id: g.genre.id,
+                name: g.genre.name
+              }))
+            },
+            reason: `${animeCounts[anime!.id].count} friend${animeCounts[anime!.id].count > 1 ? 's' : ''} who liked this also watched`,
+            score: animeCounts[anime!.id].totalScore / animeCounts[anime!.id].count,
+            friendCount: animeCounts[anime!.id].count
+          }))
+        
+        return {
+          recommendations: sortedRecommendations
+        }
+        
+      } catch (error) {
+        throw error
+      }
     })
 })
 

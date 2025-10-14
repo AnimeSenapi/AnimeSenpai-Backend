@@ -48,7 +48,14 @@ model User {
   securityEvents           SecurityEvent[]
   preferences              UserPreferences?
   sessions                 UserSession[]
+  reviewLikes              ReviewLike[]
+  reviewComments           ReviewComment[]
+  taggedInReviews          ReviewTag[]              @relation("TaggedInReviews")
+  taggedUsers              ReviewTag[]              @relation("TaggedUsers")
+  pushSubscriptions        PushSubscription[]
   reviews                  UserAnimeReview[]
+  activities               ActivityFeed[]           @relation("UserActivities")
+  targetActivities         ActivityFeed[]           @relation("TargetUserActivities")
 
   @@index([email])
   @@index([username])
@@ -229,12 +236,17 @@ model SharedList {
 model ActivityFeed {
   id          String   @id @default(cuid())
   userId      String
-  activityType String  // 'rated_anime', 'completed_anime', 'added_to_list', 'started_watching', 'followed_user'
+  activityType String  // 'rated_anime', 'completed_anime', 'added_to_list', 'started_watching', 'followed_user', 'reviewed_anime'
   animeId     String?
   targetUserId String? // For follow activities
   metadata    String?  // JSON for additional data (rating score, etc.)
   isPublic    Boolean  @default(true)
   createdAt   DateTime @default(now())
+  
+  // Relations
+  user       User   @relation("UserActivities", fields: [userId], references: [id], onDelete: Cascade)
+  anime      Anime? @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  targetUser User?  @relation("TargetUserActivities", fields: [targetUserId], references: [id], onDelete: Cascade)
   
   @@index([userId, createdAt(sort: Desc)])
   @@index([activityType, createdAt(sort: Desc)])
@@ -358,6 +370,7 @@ model Anime {
   genres        AnimeGenre[]
   streamingPlatforms AnimeStreamingPlatform[]
   reviews       UserAnimeReview[]
+  activities    ActivityFeed[]
 
   @@index([slug])
   @@index([status, type])
@@ -488,8 +501,11 @@ model UserAnimeReview {
   updatedAt DateTime @updatedAt
 
   // Relations
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  anime Anime @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime         Anime           @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  reviewLikes   ReviewLike[]
+  comments      ReviewComment[]
+  tags          ReviewTag[]
 
   @@unique([userId, animeId])
   @@index([userId, createdAt(sort: Desc)])
@@ -545,6 +561,79 @@ model AnimeEmbedding {
   @@index([animeId])
   @@map("anime_embeddings")
   @@schema("content")
+}
+
+// Phase 2 Social Features - Review Interactions
+model ReviewLike {
+  id        String   @id @default(cuid())
+  userId    String
+  reviewId  String
+  createdAt DateTime @default(now())
+  
+  // Relations
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review UserAnimeReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, reviewId])
+  @@index([reviewId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("review_likes")
+  @@schema("user_data")
+}
+
+model ReviewComment {
+  id        String   @id @default(cuid())
+  userId    String
+  reviewId  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review UserAnimeReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  
+  @@index([reviewId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("review_comments")
+  @@schema("user_data")
+}
+
+model ReviewTag {
+  id         String   @id @default(cuid())
+  reviewId   String
+  userId     String   // User who was tagged
+  taggedBy   String   // User who did the tagging
+  createdAt  DateTime @default(now())
+  
+  // Relations
+  review       UserAnimeReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  taggedUser   User            @relation("TaggedInReviews", fields: [userId], references: [id], onDelete: Cascade)
+  tagger       User            @relation("TaggedUsers", fields: [taggedBy], references: [id], onDelete: Cascade)
+  
+  @@unique([reviewId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([reviewId])
+  @@map("review_tags")
+  @@schema("user_data")
+}
+
+// Push Notification Subscriptions (for browser notifications)
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  keys       String   // JSON: { p256dh, auth }
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastUsed   DateTime @default(now())
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@map("push_subscriptions")
+  @@schema("user_data")
 }
 
 model SystemSettings {

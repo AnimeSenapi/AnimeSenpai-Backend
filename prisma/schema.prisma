@@ -56,6 +56,14 @@ model User {
   reviews                  UserAnimeReview[]
   activities               ActivityFeed[]           @relation("UserActivities")
   targetActivities         ActivityFeed[]           @relation("TargetUserActivities")
+  sentMessages             Message[]                @relation("SentMessages")
+  receivedMessages         Message[]                @relation("ReceivedMessages")
+  achievements             UserAchievement[]
+  blockedUsers             BlockedUser[]            @relation("BlockedUsers")
+  blockedByUsers           BlockedUser[]            @relation("BlockedByUsers")
+  reportsSubmitted         UserReport[]             @relation("ReportsSubmitted")
+  reportsReceived          UserReport[]             @relation("ReportsReceived")
+  reportsReviewed          UserReport[]             @relation("ReportsReviewed")
 
   @@index([email])
   @@index([username])
@@ -187,6 +195,7 @@ model Friendship {
   id          String   @id @default(cuid())
   user1Id     String
   user2Id     String
+  status      String   @default("accepted") // For Phase 2/3 compatibility (always accepted)
   createdAt   DateTime @default(now())
   user1       User     @relation("User1Friendships", fields: [user1Id], references: [id], onDelete: Cascade)
   user2       User     @relation("User2Friendships", fields: [user2Id], references: [id], onDelete: Cascade)
@@ -199,33 +208,40 @@ model Friendship {
 }
 
 model UserPrivacySettings {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  profileVisibility String   @default("public") // public, friends, private
-  listVisibility    String   @default("public") // public, friends, private
-  activityVisibility String  @default("public") // public, friends, private
-  friendsVisibility String   @default("public") // public, friends, private
-  reviewsVisibility String   @default("public") // public, friends, private
-  hiddenAnimeIds    String[] @default([]) // Specific anime to hide (guilty pleasures)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  profileVisibility   String   @default("public") // public, friends, private
+  listVisibility      String   @default("public") // public, friends, private
+  activityVisibility  String   @default("public") // public, friends, private
+  friendsVisibility   String   @default("public") // public, friends, private
+  reviewsVisibility   String   @default("public") // public, friends, private
+  hiddenAnimeIds      String[] @default([]) // Specific anime to hide (guilty pleasures)
+  showAnimeList       Boolean  @default(true) // Phase 2: Boolean toggles
+  showReviews         Boolean  @default(true)
+  showActivity        Boolean  @default(true)
+  showFriends         Boolean  @default(true)
+  allowMessages       Boolean  @default(true) // Phase 3: Messaging
+  allowFriendRequests Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_privacy_settings")
   @@schema("user_data")
 }
 
 model SharedList {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  ownerId     String
-  memberIds   String[] // Array of user IDs who can edit
-  animeIds    String[] // Array of anime IDs in the list
-  isPublic    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  ownerId       String
+  memberIds     String[] @default([]) // Legacy field
+  collaborators String[] @default([]) // Phase 3: Array of user IDs who can edit
+  animeIds      String[] @default([]) // Array of anime IDs in the list
+  isPublic      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([isPublic, createdAt(sort: Desc)])
@@ -371,6 +387,7 @@ model Anime {
   streamingPlatforms AnimeStreamingPlatform[]
   reviews       UserAnimeReview[]
   activities    ActivityFeed[]
+  messages      Message[]
 
   @@index([slug])
   @@index([status, type])
@@ -633,6 +650,111 @@ model PushSubscription {
   
   @@index([userId])
   @@map("push_subscriptions")
+  @@schema("user_data")
+}
+
+// Phase 3 Social Features - Messaging
+model Message {
+  id           String   @id @default(cuid())
+  senderId     String
+  receiverId   String
+  content      String   // Message text
+  animeId      String?  // Optional: Anime recommendation
+  isRead       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  sender   User  @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User  @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  anime    Anime? @relation(fields: [animeId], references: [id], onDelete: SetNull)
+  
+  @@index([senderId, receiverId, createdAt(sort: Desc)])
+  @@index([receiverId, isRead])
+  @@index([createdAt(sort: Desc)])
+  @@map("messages")
+  @@schema("user_data")
+}
+
+// Phase 3 Social Features - Achievements
+model Achievement {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g., 'first_anime', 'watched_100', 'rated_50'
+  name        String   // Display name
+  description String
+  icon        String   // Icon/emoji
+  category    String   // 'watching', 'rating', 'social', 'discovery'
+  tier        String   // 'bronze', 'silver', 'gold', 'platinum'
+  requirement Int      // Number needed to unlock (e.g., 100 for 'watched_100')
+  points      Int      @default(10)
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  userAchievements UserAchievement[]
+  
+  @@index([category])
+  @@index([tier])
+  @@map("achievements")
+  @@schema("user_data")
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  progress      Int      @default(0) // Current progress towards achievement
+  
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, achievementId])
+  @@index([userId, unlockedAt(sort: Desc)])
+  @@index([achievementId])
+  @@map("user_achievements")
+  @@schema("user_data")
+}
+
+// Phase 3 Social Features - Safety
+model BlockedUser {
+  id         String   @id @default(cuid())
+  userId     String   // User who blocked
+  blockedId  String   // User who was blocked
+  reason     String?
+  createdAt  DateTime @default(now())
+  
+  // Relations
+  user    User @relation("BlockedUsers", fields: [userId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedByUsers", fields: [blockedId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, blockedId])
+  @@index([userId])
+  @@index([blockedId])
+  @@map("blocked_users")
+  @@schema("user_data")
+}
+
+model UserReport {
+  id           String   @id @default(cuid())
+  reporterId   String   // User who reported
+  reportedId   String   // User who was reported
+  reason       String   // 'spam', 'harassment', 'inappropriate_content', 'other'
+  description  String?
+  status       String   @default("pending") // 'pending', 'reviewed', 'actioned', 'dismissed'
+  reviewedBy   String?  // Admin who reviewed
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  reporter User  @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User  @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ReportsReviewed", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  
+  @@index([reportedId, status])
+  @@index([reporterId])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("user_reports")
   @@schema("user_data")
 }
 

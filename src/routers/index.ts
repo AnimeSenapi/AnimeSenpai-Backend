@@ -13,6 +13,11 @@ import { activityRouter } from './activity'
 import { reviewInteractionsRouter } from './review-interactions'
 import { notificationsRouter } from './notifications'
 import { privacyRouter } from './privacy'
+import { messagingRouter } from './messaging'
+import { achievementsRouter } from './achievements'
+import { leaderboardsRouter } from './leaderboards'
+import { safetyRouter } from './safety'
+import { listToolsRouter } from './list-tools'
 
 export const appRouter = router({
   auth: authRouter,
@@ -29,6 +34,11 @@ export const appRouter = router({
   reviewInteractions: reviewInteractionsRouter,
   notifications: notificationsRouter,
   privacy: privacyRouter,
+  messaging: messagingRouter,
+  achievements: achievementsRouter,
+  leaderboards: leaderboardsRouter,
+  safety: safetyRouter,
+  listTools: listToolsRouter,
 })
 
 export type AppRouter = typeof appRouter

@@ -25,6 +25,7 @@
     "typescript": "^5.3.3",
     "undici": "^7.16.0",
     "uuid": "^11.0.0",
+    "validator": "^13.15.15",
     "zod": "^3.22.4"
   },
   "description": "AnimeSenpai Microservice Backend API",

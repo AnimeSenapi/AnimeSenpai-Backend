@@ -567,6 +567,14 @@ export const animeRouter = router({
         sortOrder = 'desc'
       } = input
       
+      // Cache key for common requests (no search/genre filter)
+      const cacheKey = !search && !genre ? `series:${sortBy}:${sortOrder}:${page}:${limit}` : null
+      
+      if (cacheKey) {
+        const cached = cache.get(cacheKey)
+        if (cached) return cached
+      }
+      
       // First, get all matching anime (not grouped yet)
       const where: any = {
         ...getContentFilter()
@@ -595,7 +603,7 @@ export const animeRouter = router({
 
       const allAnime = await db.anime.findMany({
         where,
-        take: 1000, // Fetch more to get complete series, but limit fields
+        take: 500, // Reduced from 1000 for better performance
         orderBy: { averageRating: 'desc' },
         select: {
           id: true,
@@ -643,7 +651,7 @@ export const animeRouter = router({
       const skip = (page - 1) * limit
       const paginatedSeries = sortedSeries.slice(skip, skip + limit)
 
-      return {
+      const result = {
         series: paginatedSeries,
         pagination: {
           page,
@@ -652,6 +660,13 @@ export const animeRouter = router({
           pages: Math.ceil(sortedSeries.length / limit)
         }
       }
+      
+      // Cache common requests for 5 minutes
+      if (cacheKey) {
+        cache.set(cacheKey, result, cacheTTL.medium)
+      }
+      
+      return result
     }),
 
   // Get genres (select only needed fields) - cached for 15 minutes

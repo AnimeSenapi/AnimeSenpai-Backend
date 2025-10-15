@@ -1028,6 +1028,166 @@ export const socialRouter = router({
         })
       }
     }),
+
+  /**
+   * Get friend recommendations based on shared anime interests and mutual friends
+   */
+  getFriendRecommendations: protectedProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(50).optional().default(12),
+    }))
+    .query(async ({ input, ctx }) => {
+      const logContext = extractLogContext(ctx.req, ctx.user.id)
+      
+      try {
+        // Get users I'm already following/friends with
+        const existingConnections = await db.$queryRaw<{ userId: string }[]>`
+          SELECT DISTINCT "user2Id" as "userId" FROM "auth"."friendships" 
+          WHERE "user1Id" = ${ctx.user.id}
+          UNION
+          SELECT DISTINCT "user1Id" as "userId" FROM "auth"."friendships" 
+          WHERE "user2Id" = ${ctx.user.id}
+        `
+        
+        const connectedUserIds = existingConnections.map(c => c.userId)
+        connectedUserIds.push(ctx.user.id) // Don't recommend self
+        
+        // Get my anime list to find users with similar tastes
+        const myAnime = await db.userAnimeList.findMany({
+          where: { 
+            userId: ctx.user.id,
+            status: { in: ['watching', 'completed'] }
+          },
+          select: { animeId: true },
+          take: 50
+        })
+        
+        const myAnimeIds = myAnime.map((a: { animeId: string }) => a.animeId)
+        
+        if (myAnimeIds.length === 0) {
+          // No anime in list yet, return random active users
+          const randomUsers = await db.user.findMany({
+            where: {
+              id: { notIn: connectedUserIds },
+              emailVerified: true,
+            },
+            select: {
+              id: true,
+              username: true,
+              avatar: true,
+            },
+            take: input.limit,
+            orderBy: {
+              createdAt: 'desc'
+            }
+          })
+          
+          // Get anime count for each user
+          const usersWithCount = await Promise.all(
+            randomUsers.map(async (u) => {
+              const count = await db.userAnimeList.count({
+                where: { userId: u.id }
+              })
+              
+              return {
+                userId: u.id,
+                username: u.username,
+                avatar: u.avatar,
+                sharedAnimeCount: 0,
+                mutualFriendsCount: 0,
+                totalAnimeCount: count,
+                reason: 'New user'
+              }
+            })
+          )
+          
+          return { recommendations: usersWithCount }
+        }
+        
+        // Find users with shared anime
+        const usersWithSharedAnime = await db.$queryRaw<{
+          userId: string
+          username: string
+          avatar: string | null
+          sharedCount: number
+        }[]>`
+          SELECT 
+            u.id as "userId",
+            u.username,
+            u.avatar,
+            COUNT(DISTINCT al."animeId")::int as "sharedCount"
+          FROM "auth"."users" u
+          INNER JOIN "user_data"."user_anime_lists" al ON al."userId" = u.id
+          WHERE al."animeId" = ANY(${myAnimeIds})
+            AND u.id != ALL(${connectedUserIds})
+            AND u.email_verified = true
+            AND al.status IN ('watching', 'completed')
+          GROUP BY u.id, u.username, u.avatar
+          HAVING COUNT(DISTINCT al."animeId") >= 3
+          ORDER BY "sharedCount" DESC
+          LIMIT ${input.limit}
+        `
+        
+        // Get mutual friends count for each recommendation
+        const recommendations = await Promise.all(
+          usersWithSharedAnime.map(async (user) => {
+            // Count mutual friends
+            const mutualFriends = await db.$queryRaw<{ count: number }[]>`
+              SELECT COUNT(*)::int as count FROM (
+                SELECT DISTINCT 
+                  CASE 
+                    WHEN f1."user1Id" = ${ctx.user.id} THEN f1."user2Id"
+                    ELSE f1."user1Id"
+                  END as friend_id
+                FROM "auth"."friendships" f1
+                WHERE (f1."user1Id" = ${ctx.user.id} OR f1."user2Id" = ${ctx.user.id})
+                  AND EXISTS (
+                    SELECT 1 FROM "auth"."friendships" f2
+                    WHERE (
+                      (f2."user1Id" = ${user.userId} AND f2."user2Id" = friend_id) OR
+                      (f2."user2Id" = ${user.userId} AND f2."user1Id" = friend_id)
+                    )
+                  )
+              ) mutual
+            `
+            
+            const mutualCount = mutualFriends[0]?.count || 0
+            
+            // Get total anime count
+            const animeCount = await db.userAnimeList.count({
+              where: { userId: user.userId }
+            })
+            
+            return {
+              userId: user.userId,
+              username: user.username,
+              avatar: user.avatar,
+              sharedAnimeCount: user.sharedCount,
+              mutualFriendsCount: mutualCount,
+              totalAnimeCount: animeCount,
+              reason: mutualCount > 0 
+                ? `${mutualCount} mutual friend${mutualCount > 1 ? 's' : ''} · ${user.sharedCount} shared anime`
+                : `${user.sharedCount} anime in common`
+            }
+          })
+        )
+        
+        logger.info(`Retrieved ${recommendations.length} friend recommendations`, {
+          ...logContext,
+          count: recommendations.length
+        })
+        
+        return { recommendations }
+      } catch (error) {
+        logger.error('Failed to get friend recommendations', {
+          ...logContext,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        })
+        
+        // Return empty list on error (not critical)
+        return { recommendations: [] }
+      }
+    }),
 })
 
 // Helper function to check if user can view profile

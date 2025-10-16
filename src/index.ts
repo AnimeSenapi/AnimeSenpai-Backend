@@ -161,18 +161,25 @@ async function findAvailablePort(startPort: number): Promise<number> {
         onError: ({ path, error, input, ctx }) => {
           const errorLogContext = extractLogContext(request, ctx?.user?.id)
           
-          // Log all errors with proper context
-          logger.error(`tRPC Error in ${path}`, error, errorLogContext, {
-            path,
-            input: typeof input === 'object' ? input : { value: input },
-            errorCode: error.code,
-            errorMessage: error.message,
-            stack: error.stack,
-          })
+          // Skip logging expected auth failures (missing tokens) - these are normal
+          const isExpectedAuthFailure = 
+            error.code === 'UNAUTHORIZED' && 
+            error.message.includes('No authentication token provided')
           
-          // In development, also log to console for immediate visibility
-          if (process.env.NODE_ENV === 'development' && path && path.includes('.')) {
-            console.error(`❌ tRPC failed on ${path}: ${error.message}`)
+          if (!isExpectedAuthFailure) {
+            // Log all other errors with proper context
+            logger.error(`tRPC Error in ${path}`, error, errorLogContext, {
+              path,
+              input: typeof input === 'object' ? input : { value: input },
+              errorCode: error.code,
+              errorMessage: error.message,
+              stack: error.stack,
+            })
+            
+            // In development, also log to console for immediate visibility
+            if (process.env.NODE_ENV === 'development' && path && path.includes('.')) {
+              console.error(`❌ tRPC failed on ${path}: ${error.message}`)
+            }
           }
         },
       })

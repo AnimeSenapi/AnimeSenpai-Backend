@@ -81,7 +81,7 @@ const isAuthed = t.middleware(async ({ next, ctx, path }) => {
     const token = authHeader?.replace('Bearer ', '')
     
     if (!token) {
-      logger.auth('Authentication failed: No authentication token provided', logContext)
+      // Don't log as error - this is expected when users aren't signed in
       throw createError.unauthorized('No authentication token provided')
     }
 
@@ -136,7 +136,10 @@ const isAuthed = t.middleware(async ({ next, ctx, path }) => {
       }
     })
   } catch (error) {
-    logger.error(`Authentication failed for ${path}`, error as Error, logContext)
+    // Only log unexpected auth errors, not missing tokens (which are expected for public pages)
+    if (error instanceof Error && !error.message.includes('No authentication token provided')) {
+      logger.error(`Authentication failed for ${path}`, error as Error, logContext)
+    }
     throw appErrorToTRPCError(handleError(error, logContext))
   }
 })

@@ -63,7 +63,9 @@ async function findAvailablePort(startPort: number): Promise<number> {
         'https://www.animesenpai.app'
       ]
       
-      const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+      // Allow Vercel preview deployments (*.vercel.app)
+      const isVercelPreview = origin.endsWith('.vercel.app')
+      const corsOrigin = allowedOrigins.includes(origin) || isVercelPreview ? origin : allowedOrigins[0]
       
       try {
         // Log incoming request

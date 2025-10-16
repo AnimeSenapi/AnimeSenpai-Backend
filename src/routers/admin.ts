@@ -10,8 +10,9 @@ import {
   setFeatureFlag,
   clearFeatureFlagCache,
 } from '../lib/roles'
-import { logSecurityEvent } from '../lib/auth'
+import { logSecurityEvent, sendPasswordReset } from '../lib/auth'
 import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security'
+import { emailService } from '../lib/email'
 
 export const adminRouter = router({
   // Get all users with their roles
@@ -711,6 +712,309 @@ export const adminRouter = router({
           return { success: true, settings: updatedSettings }
         },
         { sections: Object.keys(input) },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
+
+  // Admin-initiated password reset email
+  sendPasswordResetEmail: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'admin_send_password_reset',
+        async () => {
+          const user = await db.user.findUnique({
+            where: { id: input.userId },
+            select: { id: true, email: true, name: true }
+          })
+
+          if (!user) {
+            throw new Error('User not found')
+          }
+
+          // Send password reset email
+          const sent = await sendPasswordReset(user.email)
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'admin_password_reset_sent',
+            { targetUserId: input.userId, targetEmail: user.email, sentBy: ctx.user.email },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: sent }
+        },
+        { userId: input.userId },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
+
+  // Toggle email verification status
+  toggleEmailVerification: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      verified: z.boolean(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'toggle_email_verification',
+        async () => {
+          const user = await db.user.update({
+            where: { id: input.userId },
+            data: { emailVerified: input.verified },
+            select: { id: true, email: true, emailVerified: true }
+          })
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'email_verification_toggled',
+            { 
+              targetUserId: input.userId, 
+              targetEmail: user.email, 
+              verified: input.verified,
+              changedBy: ctx.user.email 
+            },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true, user }
+        },
+        { userId: input.userId, verified: input.verified },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
+
+  // Update user details
+  updateUserDetails: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      name: z.string().optional(),
+      username: z.string().optional(),
+      email: z.string().email().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'update_user_details',
+        async () => {
+          const { userId, ...updateData } = input
+
+          // Remove undefined values
+          const cleanUpdateData = Object.fromEntries(
+            Object.entries(updateData).filter(([_, v]) => v !== undefined)
+          )
+
+          // Check if email is being changed and if it's already in use
+          if (cleanUpdateData.email) {
+            const existingUser = await db.user.findUnique({
+              where: { email: cleanUpdateData.email }
+            })
+
+            if (existingUser && existingUser.id !== userId) {
+              throw new Error('Email already in use by another user')
+            }
+
+            // If email is changed, mark as unverified
+            cleanUpdateData.emailVerified = false
+          }
+
+          // Check if username is being changed and if it's already in use
+          if (cleanUpdateData.username) {
+            const existingUser = await db.user.findUnique({
+              where: { username: cleanUpdateData.username }
+            })
+
+            if (existingUser && existingUser.id !== userId) {
+              throw new Error('Username already in use by another user')
+            }
+          }
+
+          const user = await db.user.update({
+            where: { id: userId },
+            data: cleanUpdateData,
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              username: true,
+              emailVerified: true,
+              role: true,
+              createdAt: true,
+              lastLoginAt: true,
+            }
+          })
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'user_details_updated',
+            { 
+              targetUserId: userId, 
+              updatedFields: Object.keys(cleanUpdateData),
+              changedBy: ctx.user.email 
+            },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: true, user }
+        },
+        { userId: input.userId, fields: Object.keys(input) },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      )
+    }),
+
+  // Get user activity/stats
+  getUserActivity: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+    }))
+    .query(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const [user, animeListCount, reviewsCount, friendsCount, followersCount, securityLogs] = await Promise.all([
+        db.user.findUnique({
+          where: { id: input.userId },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            username: true,
+            createdAt: true,
+            lastLoginAt: true,
+          }
+        }),
+        db.userAnimeList.count({ where: { userId: input.userId } }),
+        db.review.count({ where: { userId: input.userId } }),
+        db.friend.count({ 
+          where: {
+            OR: [
+              { userId: input.userId, status: 'accepted' },
+              { friendId: input.userId, status: 'accepted' }
+            ]
+          }
+        }),
+        db.follow.count({ where: { followingId: input.userId } }),
+        db.securityLog.findMany({
+          where: { userId: input.userId },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            eventType: true,
+            createdAt: true,
+            ipAddress: true,
+            userAgent: true,
+          }
+        })
+      ])
+
+      if (!user) {
+        throw new Error('User not found')
+      }
+
+      return {
+        user,
+        stats: {
+          animeList: animeListCount,
+          reviews: reviewsCount,
+          friends: friendsCount,
+          followers: followersCount,
+        },
+        recentActivity: securityLogs
+      }
+    }),
+
+  // Send custom email to user
+  sendCustomEmail: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      subject: z.string().min(1).max(200),
+      message: z.string().min(1).max(5000),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      checkAdminRateLimit(ctx.user.id)
+
+      return await secureAdminOperation(
+        ctx.user.id,
+        'send_custom_email',
+        async () => {
+          const user = await db.user.findUnique({
+            where: { id: input.userId },
+            select: { id: true, email: true, name: true }
+          })
+
+          if (!user) {
+            throw new Error('User not found')
+          }
+
+          // Send custom email
+          const html = `
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="utf-8">
+                <title>${input.subject}</title>
+              </head>
+              <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+                  <div style="background: linear-gradient(135deg, #06b6d4 0%, #ec4899 100%); padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+                    <h1 style="margin: 0; color: white; font-size: 28px;">🎌 AnimeSenpai</h1>
+                  </div>
+                  <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
+                    <h2 style="color: white; margin: 0 0 20px;">Hi${user.name ? ` ${user.name}` : ''}! 👋</h2>
+                    <div style="color: #cbd5e1; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">${input.message}</div>
+                  </div>
+                  <div style="text-align: center; padding: 20px; color: #64748b; font-size: 12px;">
+                    <p style="margin: 0;">© 2025 AnimeSenpai. All rights reserved.</p>
+                  </div>
+                </div>
+              </body>
+            </html>
+          `
+
+          const sent = await emailService['sendEmail']({
+            to: user.email,
+            subject: input.subject,
+            html,
+            text: input.message,
+          })
+
+          // Log security event
+          await logSecurityEvent(
+            ctx.user.id,
+            'custom_email_sent',
+            { 
+              targetUserId: input.userId, 
+              targetEmail: user.email,
+              subject: input.subject,
+              sentBy: ctx.user.email 
+            },
+            ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+            ctx.req?.headers.get('user-agent') || undefined
+          )
+
+          return { success: sent }
+        },
+        { userId: input.userId, subject: input.subject },
         ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
       )
     }),

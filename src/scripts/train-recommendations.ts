@@ -178,6 +178,20 @@ async function trainRecommendationSystem(): Promise<TrainingStats> {
 }
 
 /**
+ * Common stop words to filter out
+ */
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+  'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+  'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those',
+  'i', 'you', 'he', 'she', 'it', 'we', 'they', 'them', 'their', 'what',
+  'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every',
+  'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor',
+  'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just'
+])
+
+/**
  * Tokenize text for TF-IDF (same as ml-embeddings.ts)
  */
 function tokenizeText(text: string): string[] {

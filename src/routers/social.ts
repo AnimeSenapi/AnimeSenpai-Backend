@@ -1179,10 +1179,7 @@ export const socialRouter = router({
         
         return { recommendations }
       } catch (error) {
-        logger.error('Failed to get friend recommendations', {
-          ...logContext,
-          errorMessage: error instanceof Error ? error.message : 'Unknown error'
-        })
+        logger.error('Failed to get friend recommendations', error as Error, logContext)
         
         // Return empty list on error (not critical)
         return { recommendations: [] }

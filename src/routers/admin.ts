@@ -44,6 +44,7 @@ export const adminRouter = router({
             id: true,
             email: true,
             name: true,
+            username: true,
             role: true,
             emailVerified: true,
             createdAt: true,

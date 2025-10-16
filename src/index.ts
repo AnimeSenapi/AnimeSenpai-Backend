@@ -147,6 +147,19 @@ async function findAvailablePort(startPort: number): Promise<number> {
         })
       }
 
+      // Silently handle common browser requests for static files (not API endpoints)
+      const staticFileExtensions = ['.ico', '.png', '.jpg', '.svg', '.css', '.js', '.map']
+      const isStaticFile = staticFileExtensions.some(ext => url.pathname.endsWith(ext))
+      if (isStaticFile) {
+        return new Response('Not found', {
+          status: 404,
+          headers: {
+            'Access-Control-Allow-Origin': corsOrigin,
+            'X-Request-ID': requestId,
+          },
+        })
+      }
+
       // Create context with request ID
       const context: Context = {
         req: request

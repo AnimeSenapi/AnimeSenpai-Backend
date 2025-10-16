@@ -397,6 +397,11 @@ export class EmailService {
       html,
     });
   }
+
+  // Send custom email (for admin use)
+  async sendCustomAdminEmail(template: EmailTemplate): Promise<boolean> {
+    return this.sendEmail(template);
+  }
 }
 
 export const emailService = EmailService.getInstance();

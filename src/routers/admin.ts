@@ -966,13 +966,27 @@ export const adminRouter = router({
             throw new Error('User not found')
           }
 
+          // Sanitize inputs to prevent XSS
+          const sanitizeHtml = (text: string) => {
+            return text
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;')
+          }
+
+          const sanitizedSubject = sanitizeHtml(input.subject)
+          const sanitizedMessage = sanitizeHtml(input.message)
+          const sanitizedName = user.name ? sanitizeHtml(user.name) : ''
+
           // Send custom email
           const html = `
             <!DOCTYPE html>
             <html>
               <head>
                 <meta charset="utf-8">
-                <title>${input.subject}</title>
+                <title>${sanitizedSubject}</title>
               </head>
               <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a;">
                 <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
@@ -980,8 +994,8 @@ export const adminRouter = router({
                     <h1 style="margin: 0; color: white; font-size: 28px;">🎌 AnimeSenpai</h1>
                   </div>
                   <div style="background: #1e293b; padding: 40px 30px; border-radius: 0 0 16px 16px;">
-                    <h2 style="color: white; margin: 0 0 20px;">Hi${user.name ? ` ${user.name}` : ''}! 👋</h2>
-                    <div style="color: #cbd5e1; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">${input.message}</div>
+                    <h2 style="color: white; margin: 0 0 20px;">Hi${sanitizedName ? ` ${sanitizedName}` : ''}! 👋</h2>
+                    <div style="color: #cbd5e1; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">${sanitizedMessage}</div>
                   </div>
                   <div style="text-align: center; padding: 20px; color: #64748b; font-size: 12px;">
                     <p style="margin: 0;">© 2025 AnimeSenpai. All rights reserved.</p>
@@ -991,7 +1005,7 @@ export const adminRouter = router({
             </html>
           `
 
-          const sent = await emailService['sendEmail']({
+          const sent = await emailService.sendCustomAdminEmail({
             to: user.email,
             subject: input.subject,
             html,

@@ -274,19 +274,22 @@ async function findAvailablePort(startPort: number): Promise<number> {
         })
       }
 
-      // Log response
-      logger.response(
-        request.method,
-        request.url,
-        response.status,
-        duration,
-        logContext,
-        {
-          contentLength: finalResponse.headers.get('content-length'),
-          contentType: finalResponse.headers.get('content-type'),
-          compressed: finalResponse.headers.has('Content-Encoding'),
-        }
-      )
+      // Log response (skip 401 for notification endpoints - expected when not signed in)
+      const isExpectedAuthFailure = response.status === 401 && url.pathname.includes('notifications')
+      if (!isExpectedAuthFailure) {
+        logger.response(
+          request.method,
+          request.url,
+          response.status,
+          duration,
+          logContext,
+          {
+            contentLength: finalResponse.headers.get('content-length'),
+            contentType: finalResponse.headers.get('content-type'),
+            compressed: finalResponse.headers.has('Content-Encoding'),
+          }
+        )
+      }
 
       return finalResponse
     } catch (error) {

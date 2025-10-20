@@ -65,6 +65,26 @@ export const authRouter = router({
           }
         }
 
+        // Check if uppercase version of this lowercase username exists
+        // Only block if uppercase exists (e.g., "JohnDoe" exists, block "johndoe")
+        const uppercaseUsername = username.split('').map((char, idx) => 
+          char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
+        ).join('')
+        
+        if (uppercaseUsername !== username) {
+          const uppercaseUser = await db.user.findFirst({
+            where: { username: uppercaseUsername },
+            select: { id: true, username: true }
+          })
+
+          if (uppercaseUser) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Username "${uppercaseUser.username}" already exists. Please choose a different username.`
+            })
+          }
+        }
+
         // Hash password and create user
         const hashedPassword = await hashPassword(password)
         
@@ -264,7 +284,7 @@ export const authRouter = router({
   // Update profile
   updateProfile: protectedProcedure
     .input(z.object({
-      username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens').optional(),
+      username: z.string().min(2).max(50).regex(/^[a-z0-9_-]+$/, 'Username must be lowercase and can only contain letters, numbers, underscores, and hyphens').toLowerCase().trim().optional(),
       name: z.string().min(2).optional(),
       bio: z.string().max(200).optional(),
       avatar: z.string().url().optional()
@@ -282,6 +302,25 @@ export const authRouter = router({
             code: 'BAD_REQUEST',
             message: 'Username is already taken. Please choose a different username.'
           })
+        }
+
+        // Check if uppercase version of this lowercase username exists
+        const uppercaseUsername = input.username.split('').map((char) => 
+          char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
+        ).join('')
+        
+        if (uppercaseUsername !== input.username) {
+          const uppercaseUser = await db.user.findFirst({
+            where: { username: uppercaseUsername },
+            select: { id: true, username: true }
+          })
+
+          if (uppercaseUser) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Username "${uppercaseUser.username}" already exists. Please choose a different username.`
+            })
+          }
         }
       }
 

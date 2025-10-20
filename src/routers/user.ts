@@ -838,11 +838,11 @@ export const userRouter = router({
   // Get user by username (public endpoint for viewing profiles)
   getUserByUsername: publicProcedure
     .input(z.object({
-      username: z.string().min(2).max(50)
+      username: z.string().min(2).max(50).toLowerCase().trim()
     }))
     .query(async ({ input }) => {
-      // Normalize username (trim, lowercase for case-insensitive search)
-      const normalizedUsername = input.username.trim()
+      // Normalize username (already lowercase and trimmed)
+      const normalizedUsername = input.username
       
       // Try exact match first
       let user = await db.user.findUnique({
@@ -960,7 +960,7 @@ export const userRouter = router({
   // Check username availability (public endpoint)
   checkUsernameAvailability: publicProcedure
     .input(z.object({
-      username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
+      username: z.string().min(2).max(50).regex(/^[a-z0-9_-]+$/, 'Username must be lowercase and can only contain letters, numbers, underscores, and hyphens').toLowerCase().trim()
     }))
     .query(async ({ input }) => {
       const existingUser = await db.user.findUnique({
@@ -968,8 +968,36 @@ export const userRouter = router({
         select: { id: true }
       })
 
+      if (existingUser) {
+        return {
+          available: false,
+          username: input.username,
+          reason: 'Username is already taken'
+        }
+      }
+
+      // Check if uppercase version exists
+      const uppercaseUsername = input.username.split('').map((char) => 
+        char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
+      ).join('')
+      
+      if (uppercaseUsername !== input.username) {
+        const uppercaseUser = await db.user.findFirst({
+          where: { username: uppercaseUsername },
+          select: { id: true, username: true }
+        })
+
+        if (uppercaseUser) {
+          return {
+            available: false,
+            username: input.username,
+            reason: `Username "${uppercaseUser.username}" already exists`
+          }
+        }
+      }
+
       return {
-        available: !existingUser,
+        available: true,
         username: input.username
       }
     }),
@@ -977,7 +1005,7 @@ export const userRouter = router({
   // Get user's public anime list (for viewing other users' profiles)
   getUserAnimeList: publicProcedure
     .input(z.object({
-      username: z.string().min(2).max(50),
+      username: z.string().min(2).max(50).toLowerCase().trim(),
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch']).optional(),
       limit: z.number().min(1).max(100).default(20)
     }))

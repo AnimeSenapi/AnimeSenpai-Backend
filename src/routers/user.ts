@@ -977,6 +977,7 @@ export const userRouter = router({
       }
 
       // Check if uppercase version exists
+      // Block if uppercase exists (e.g., "JohnDoe" exists, block "johndoe")
       const uppercaseUsername = input.username.split('').map((char) => 
         char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
       ).join('')

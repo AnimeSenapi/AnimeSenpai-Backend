@@ -66,8 +66,9 @@ export const authRouter = router({
         }
 
         // Check if uppercase version of this lowercase username exists
-        // Only block if uppercase exists (e.g., "JohnDoe" exists, block "johndoe")
-        const uppercaseUsername = username.split('').map((char, idx) => 
+        // Block if uppercase exists (e.g., "JohnDoe" exists, block "johndoe")
+        // This prevents conflicts with existing uppercase usernames
+        const uppercaseUsername = username.split('').map((char) => 
           char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
         ).join('')
         
@@ -305,6 +306,7 @@ export const authRouter = router({
         }
 
         // Check if uppercase version of this lowercase username exists
+        // Block if uppercase exists (e.g., "JohnDoe" exists, block "johndoe")
         const uppercaseUsername = input.username.split('').map((char) => 
           char >= 'a' && char <= 'z' ? String.fromCharCode(char.charCodeAt(0) - 32) : char
         ).join('')

@@ -20,7 +20,13 @@
       "@/*": ["./src/*"]
     },
     "outDir": "./dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": true
   },
   "include": ["src/**/*", "src/types/**/*.d.ts", "api/**/*", "prisma/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -692,13 +692,14 @@ export const socialRouter = router({
    */
   getUserProfile: publicProcedure
     .input(z.object({
-      username: z.string(),
+      username: z.string().toLowerCase().trim(),
     }))
     .query(async ({ input, ctx }) => {
       const logContext = extractLogContext(ctx.req)
       
       try {
-        const user = await db.user.findUnique({
+        // Try exact match first
+        let user = await db.user.findUnique({
           where: { username: input.username },
           select: {
             id: true,
@@ -710,6 +711,30 @@ export const socialRouter = router({
             role: true,
           }
         })
+        
+        // If not found, try case-insensitive search for existing uppercase usernames
+        if (!user) {
+          const users = await db.user.findMany({
+            where: {
+              username: {
+                mode: 'insensitive',
+                equals: input.username
+              }
+            },
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              avatar: true,
+              bio: true,
+              createdAt: true,
+              role: true,
+            },
+            take: 1
+          })
+          
+          user = users[0] || null
+        }
         
         if (!user) {
           throw new TRPCError({

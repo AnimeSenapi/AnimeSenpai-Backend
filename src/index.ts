@@ -4,6 +4,8 @@ import { appRouter } from './routers'
 import { Context } from './lib/trpc'
 import { logger, extractLogContext, generateRequestId } from './lib/logger'
 import { createError, handleError } from './lib/errors'
+import { errorRateMiddleware } from './lib/monitoring'
+import { queryMonitoringMiddleware } from './lib/query-monitor'
 import { gzip } from 'zlib'
 import { promisify } from 'util'
 
@@ -40,6 +42,10 @@ async function findAvailablePort(startPort: number): Promise<number> {
 
 // Start server
 ;(async () => {
+  // Initialize background jobs
+  const { initializeBackgroundJobs } = await import('./lib/background-jobs')
+  initializeBackgroundJobs()
+  
   const availablePort = await findAvailablePort(port)
 
   const server = serve({
@@ -115,17 +121,38 @@ async function findAvailablePort(startPort: number): Promise<number> {
 
       // Metrics endpoint
       if (url.pathname === '/metrics') {
+        const { queryStats } = await import('./lib/db')
+        const { getRateLimitStats } = await import('./lib/rate-limit')
+        const { jobQueue } = await import('./lib/background-jobs')
+        
         const avgResponseTime = performanceMetrics.requests > 0 
           ? (performanceMetrics.totalResponseTime / performanceMetrics.requests).toFixed(2)
           : 0
         
+        const avgQueryTime = queryStats.totalQueries > 0
+          ? (queryStats.totalDuration / queryStats.totalQueries).toFixed(2)
+          : 0
+        
         const metricsResponse = {
-          requests: performanceMetrics.requests,
-          errors: performanceMetrics.errors,
-          avgResponseTime: `${avgResponseTime}ms`,
-          uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          slowQueries: performanceMetrics.slowQueries.slice(-10), // Last 10 slow queries
+          server: {
+            requests: performanceMetrics.requests,
+            errors: performanceMetrics.errors,
+            avgResponseTime: `${avgResponseTime}ms`,
+            uptime: process.uptime(),
+            memory: process.memoryUsage(),
+          },
+          database: {
+            totalQueries: queryStats.totalQueries,
+            slowQueries: queryStats.slowQueries,
+            avgQueryTime: `${avgQueryTime}ms`,
+            slowestQuery: {
+              duration: `${queryStats.slowestQuery.duration}ms`,
+              query: queryStats.slowestQuery.query.substring(0, 100),
+            },
+          },
+          rateLimit: getRateLimitStats(),
+          backgroundJobs: jobQueue.getStats(),
+          slowRequests: performanceMetrics.slowQueries.slice(-10), // Last 10 slow requests
           topEndpoints: Array.from(performanceMetrics.endpoints.entries())
             .map(([path, stats]) => ({
               path,
@@ -167,12 +194,15 @@ async function findAvailablePort(startPort: number): Promise<number> {
         req: request
       }
 
-      // Handle tRPC requests
+      // Handle tRPC requests (with batching support)
       const response = await fetchRequestHandler({
         endpoint: '/api/trpc',
         req: request,
         router: appRouter,
         createContext: () => context,
+        batching: {
+          enabled: true, // Enable request batching
+        },
         onError: ({ path, error, input, ctx }) => {
           const errorLogContext = extractLogContext(request, ctx?.user?.id)
           
@@ -236,15 +266,45 @@ async function findAvailablePort(startPort: number): Promise<number> {
         }
       }
 
-      // Add security and CORS headers to response
+      // Add comprehensive security headers
       finalResponse.headers.set('Access-Control-Allow-Origin', corsOrigin)
       finalResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
       finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
       finalResponse.headers.set('Access-Control-Allow-Credentials', 'true')
       finalResponse.headers.set('X-Request-ID', requestId)
+      
+      // Security Headers (OWASP recommendations)
       finalResponse.headers.set('X-Content-Type-Options', 'nosniff')
       finalResponse.headers.set('X-Frame-Options', 'DENY')
       finalResponse.headers.set('X-XSS-Protection', '1; mode=block')
+      
+      // Strict Transport Security (HSTS) - Force HTTPS
+      finalResponse.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
+      
+      // Content Security Policy (CSP)
+      finalResponse.headers.set('Content-Security-Policy', 
+        "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: https:; " +
+        "font-src 'self' data:; " +
+        "connect-src 'self' http://localhost:* https:; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'"
+      )
+      
+      // Permissions Policy (formerly Feature Policy)
+      finalResponse.headers.set('Permissions-Policy', 
+        'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()'
+      )
+      
+      // Referrer Policy
+      finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+      
+      // Remove sensitive headers
+      finalResponse.headers.delete('X-Powered-By')
+      finalResponse.headers.delete('Server')
 
       // Track performance metrics
       const duration = Date.now() - startTime

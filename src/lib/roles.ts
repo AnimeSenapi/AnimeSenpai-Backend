@@ -247,53 +247,104 @@ export async function setFeatureFlag(
  * Helper to promote user to tester
  */
 export async function promoteToTester(userId: string) {
+  // Get tester role
+  const testerRole = await db.role.findFirst({
+    where: { name: UserRole.TESTER }
+  })
+
+  if (!testerRole) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Tester role not found'
+    })
+  }
+
   const user = await db.user.update({
     where: { id: userId },
-    data: { role: UserRole.TESTER },
+    data: { primaryRoleId: testerRole.id },
     select: {
       id: true,
       email: true,
       name: true,
-      role: true,
+      primaryRole: true,
     }
   })
 
-  return user
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.primaryRole?.name || 'user',
+  }
 }
 
 /**
  * Helper to demote tester to regular user
  */
 export async function demoteToUser(userId: string) {
+  // Get user role
+  const userRole = await db.role.findFirst({
+    where: { name: UserRole.USER }
+  })
+
+  if (!userRole) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'User role not found'
+    })
+  }
+
   const user = await db.user.update({
     where: { id: userId },
-    data: { role: UserRole.USER },
+    data: { primaryRoleId: userRole.id },
     select: {
       id: true,
       email: true,
       name: true,
-      role: true,
+      primaryRole: true,
     }
   })
 
-  return user
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.primaryRole?.name || 'user',
+  }
 }
 
 /**
  * Helper to promote user to admin
  */
 export async function promoteToAdmin(userId: string) {
+  // Get admin role
+  const adminRole = await db.role.findFirst({
+    where: { name: UserRole.ADMIN }
+  })
+
+  if (!adminRole) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Admin role not found'
+    })
+  }
+
   const user = await db.user.update({
     where: { id: userId },
-    data: { role: UserRole.ADMIN },
+    data: { primaryRoleId: adminRole.id },
     select: {
       id: true,
       email: true,
       name: true,
-      role: true,
+      primaryRole: true,
     }
   })
 
-  return user
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.primaryRole?.name || 'user',
+  }
 }
 

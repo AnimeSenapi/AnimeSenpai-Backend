@@ -41,10 +41,20 @@ export const animeRouter = router({
       limit: z.number().min(1).max(100).default(20), // Reduced max to prevent API size limit errors
       search: z.string().optional(),
       genre: z.string().optional(),
+      genres: z.array(z.string()).optional(), // Multiple genres
+      studio: z.string().optional(),
+      studios: z.array(z.string()).optional(), // Multiple studios
+      season: z.string().optional(),
+      seasons: z.array(z.string()).optional(), // Multiple seasons
       status: z.string().optional(),
+      statuses: z.array(z.string()).optional(), // Multiple statuses
       year: z.number().optional(),
+      years: z.array(z.number()).optional(), // Multiple years
       type: z.string().optional(),
-      sortBy: z.enum(['title', 'year', 'averageRating', 'viewCount', 'createdAt']).default('averageRating'),
+      types: z.array(z.string()).optional(), // Multiple types
+      minRating: z.number().min(0).max(10).optional(),
+      maxRating: z.number().min(0).max(10).optional(),
+      sortBy: z.enum(['title', 'year', 'averageRating', 'viewCount', 'createdAt', 'episodes', 'popularity']).default('averageRating'),
       sortOrder: z.enum(['asc', 'desc']).default('desc')
     }).optional())
     .query(async ({ input = {} }) => {
@@ -53,9 +63,19 @@ export const animeRouter = router({
         limit = 20,
         search,
         genre,
+        genres,
+        studio,
+        studios,
+        season,
+        seasons,
         status,
+        statuses,
         year,
+        years,
         type,
+        types,
+        minRating,
+        maxRating,
         sortBy = 'averageRating',
         sortOrder = 'desc'
       } = input
@@ -75,29 +95,86 @@ export const animeRouter = router({
         ]
       }
 
-      if (genre) {
-        where.genres = {
-          some: {
-            genre: {
-              OR: [
-                { slug: { equals: genre.toLowerCase(), mode: Prisma.QueryMode.insensitive } },
-                { name: { equals: genre, mode: Prisma.QueryMode.insensitive } }
-              ]
+      // Genre filter (single or multiple)
+      if (genre || (genres && genres.length > 0)) {
+        const genreList = genres && genres.length > 0 ? genres : genre ? [genre] : []
+        if (genreList.length > 0) {
+          where.genres = {
+            some: {
+              genre: {
+                OR: genreList.flatMap(g => [
+                  { slug: { equals: g.toLowerCase(), mode: Prisma.QueryMode.insensitive } },
+                  { name: { equals: g, mode: Prisma.QueryMode.insensitive } }
+                ])
+              }
             }
           }
         }
       }
 
-      if (status) {
-        where.status = { equals: status, mode: Prisma.QueryMode.insensitive }
+      // Studio filter (single or multiple)
+      if (studio || (studios && studios.length > 0)) {
+        const studioList = studios && studios.length > 0 ? studios : studio ? [studio] : []
+        if (studioList.length > 0) {
+          where.studio = {
+            in: studioList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
       }
 
-      if (year) {
-        where.year = year
+      // Season filter (single or multiple)
+      if (season || (seasons && seasons.length > 0)) {
+        const seasonList = seasons && seasons.length > 0 ? seasons : season ? [season] : []
+        if (seasonList.length > 0) {
+          where.season = {
+            in: seasonList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
       }
 
-      if (type) {
-        where.type = { equals: type, mode: Prisma.QueryMode.insensitive }
+      // Status filter (single or multiple)
+      if (status || (statuses && statuses.length > 0)) {
+        const statusList = statuses && statuses.length > 0 ? statuses : status ? [status] : []
+        if (statusList.length > 0) {
+          where.status = {
+            in: statusList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
+      }
+
+      // Year filter (single or multiple)
+      if (year || (years && years.length > 0)) {
+        const yearList = years && years.length > 0 ? years : year ? [year] : []
+        if (yearList.length > 0) {
+          where.year = {
+            in: yearList
+          }
+        }
+      }
+
+      // Type filter (single or multiple)
+      if (type || (types && types.length > 0)) {
+        const typeList = types && types.length > 0 ? types : type ? [type] : []
+        if (typeList.length > 0) {
+          where.type = {
+            in: typeList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
+      }
+
+      // Rating range filter
+      if (minRating !== undefined || maxRating !== undefined) {
+        where.averageRating = {}
+        if (minRating !== undefined) {
+          where.averageRating.gte = minRating
+        }
+        if (maxRating !== undefined) {
+          where.averageRating.lte = maxRating
+        }
       }
 
       // Use cache for common queries

@@ -1,5 +1,6 @@
 import { router } from '../lib/trpc'
 import { authRouter } from './auth'
+import { twoFactorRouter } from './two-factor'
 import { animeRouter } from './anime'
 import { userRouter } from './user'
 import { adminRouter } from './admin'
@@ -18,9 +19,14 @@ import { achievementsRouter } from './achievements'
 import { leaderboardsRouter } from './leaderboards'
 import { safetyRouter } from './safety'
 import { listToolsRouter } from './list-tools'
+import { roleManagementRouter } from './role-management'
+import { systemSettingsRouter } from './system-settings'
+import { monitoringRouter } from './monitoring'
+import { analyticsRouter } from './analytics'
 
 export const appRouter = router({
   auth: authRouter,
+  twoFactor: twoFactorRouter,
   anime: animeRouter,
   user: userRouter,
   admin: adminRouter,
@@ -39,6 +45,10 @@ export const appRouter = router({
   leaderboards: leaderboardsRouter,
   safety: safetyRouter,
   listTools: listToolsRouter,
+  roleManagement: roleManagementRouter,
+  systemSettings: systemSettingsRouter,
+  monitoring: monitoringRouter,
+  analytics: analyticsRouter,
 })
 
 export type AppRouter = typeof appRouter

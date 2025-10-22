@@ -1,6 +1,5 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -16,7 +15,9 @@ model User {
   name                     String?
   avatar                   String?
   bio                      String?
-  role                     String           @default("user") // user, tester, admin
+  primaryRoleId            String
+  primaryRole              Role             @relation("UserPrimaryRole", fields: [primaryRoleId], references: [id])
+  additionalRoles          UserRole[]
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
   password                 String
@@ -64,6 +65,7 @@ model User {
   reportsSubmitted         UserReport[]             @relation("ReportsSubmitted")
   reportsReceived          UserReport[]             @relation("ReportsReceived")
   reportsReviewed          UserReport[]             @relation("ReportsReviewed")
+  twoFactorCodes           TwoFactorCode[]
 
   @@index([email])
   @@index([username])
@@ -71,7 +73,7 @@ model User {
   @@index([passwordResetToken])
   @@index([lastLoginAt])
   @@index([createdAt])
-  @@index([role])
+  @@index([primaryRoleId])
   @@map("users")
   @@schema("auth")
 }
@@ -156,6 +158,22 @@ model SecurityEvent {
   @@index([eventType, createdAt])
   @@index([ipAddress, createdAt])
   @@map("security_events")
+  @@schema("auth")
+}
+
+model TwoFactorCode {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  type      String   // SETUP, LOGIN
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([code, used, expiresAt])
+  @@map("two_factor_codes")
   @@schema("auth")
 }
 
@@ -306,6 +324,26 @@ model FeatureFlag {
   @@schema("auth")
 }
 
+model SecurityLog {
+  id          String   @id @default(cuid())
+  event       String   // Event type (LOGIN, LOGOUT, PASSWORD_CHANGE, etc.)
+  userId      String?  // User who performed the action
+  username    String?  // Username for easier querying
+  ipAddress   String?  // IP address of request
+  userAgent   String?  // User agent string
+  severity    String   @default("INFO") // INFO, WARNING, ERROR, CRITICAL
+  result      String   @default("SUCCESS") // SUCCESS, FAILURE
+  metadata    Json?    // Additional event-specific data
+  timestamp   DateTime @default(now())
+  
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([event, timestamp(sort: Desc)])
+  @@index([severity, timestamp(sort: Desc)])
+  @@index([timestamp(sort: Desc)])
+  @@map("security_logs")
+  @@schema("auth")
+}
+
 model Anime {
   id            String       @id @default(cuid())
   
@@ -370,6 +408,9 @@ model Anime {
   trailer       String?      // YouTube trailer URL
   trailerUrl    String?      // Deprecated: use trailer
   
+  // External Links
+  externalLinks Json?        // Array of {name, url} objects
+  
   // External IDs
   malId         Int?         @unique
   anilistId     Int?         @unique
@@ -387,6 +428,10 @@ model Anime {
   streamingPlatforms AnimeStreamingPlatform[]
   reviews       UserAnimeReview[]
   activities    ActivityFeed[]
+  characters    AnimeCharacter[]
+  relatedAnime  RelatedAnime[] @relation("RelatedTo")
+  relatedFrom   RelatedAnime[] @relation("RelatedFrom")
+  themesData    AnimeTheme[]
   messages      Message[]
 
   @@index([slug])
@@ -404,6 +449,10 @@ model Anime {
   @@index([airing])
   @@index([status, averageRating(sort: Desc)])
   @@index([type, averageRating(sort: Desc)])
+  // Composite indexes for dashboard queries
+  @@index([viewCount(sort: Desc), averageRating(sort: Desc)]) // Trending
+  @@index([year(sort: Desc), averageRating(sort: Desc)]) // Recently Added
+  @@index([status, year(sort: Desc)]) // Currently Airing + Recent
   @@map("anime")
   @@schema("content")
 }
@@ -429,6 +478,112 @@ model AnimeGenre {
   @@id([animeId, genreId])
   @@index([genreId, animeId])
   @@map("anime_genres")
+  @@schema("content")
+}
+
+// Character and Voice Actor models
+model Character {
+  id          String   @id @default(cuid())
+  malId       Int      @unique
+  name        String
+  nameKanji   String?
+  imageUrl    String?
+  description String?
+  favorites   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  anime       AnimeCharacter[]
+  
+  @@index([malId])
+  @@map("characters")
+  @@schema("content")
+}
+
+model VoiceActor {
+  id          String   @id @default(cuid())
+  malId       Int      @unique
+  name        String
+  imageUrl    String?
+  language    String   @default("Japanese")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  characters  CharacterVoiceActor[]
+  
+  @@index([malId])
+  @@map("voice_actors")
+  @@schema("content")
+}
+
+model AnimeCharacter {
+  id          String   @id @default(cuid())
+  animeId     String
+  characterId String
+  role        String   // "Main", "Supporting", "Background"
+  favorites   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  anime       Anime      @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  character   Character  @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  voiceActors CharacterVoiceActor[]
+  
+  @@index([animeId])
+  @@index([characterId])
+  @@map("anime_characters")
+  @@schema("content")
+}
+
+model CharacterVoiceActor {
+  id                String   @id @default(cuid())
+  animeCharacterId  String
+  voiceActorId      String
+  language          String   @default("Japanese")
+  createdAt         DateTime @default(now())
+  
+  animeCharacter    AnimeCharacter @relation(fields: [animeCharacterId], references: [id], onDelete: Cascade)
+  voiceActor        VoiceActor     @relation(fields: [voiceActorId], references: [id], onDelete: Cascade)
+  
+  @@unique([animeCharacterId, voiceActorId, language])
+  @@index([voiceActorId])
+  @@index([animeCharacterId])
+  @@map("character_voice_actors")
+  @@schema("content")
+}
+
+// Related Anime model
+model RelatedAnime {
+  id          String   @id @default(cuid())
+  animeId     String   // The anime this relationship belongs to
+  relatedId   String   // The related anime
+  relation    String   // "Sequel", "Prequel", "Alternative version", "Side story", "Character", "Summary", "Other"
+  createdAt   DateTime @default(now())
+  
+  anime       Anime    @relation("RelatedFrom", fields: [animeId], references: [id], onDelete: Cascade)
+  related     Anime    @relation("RelatedTo", fields: [relatedId], references: [id], onDelete: Cascade)
+  
+  @@index([animeId])
+  @@index([relatedId])
+  @@map("related_anime")
+  @@schema("content")
+}
+
+// Anime Theme (Opening/Ending) model
+model AnimeTheme {
+  id          String   @id @default(cuid())
+  animeId     String
+  type        String   // "Opening" or "Ending"
+  number      Int?     // OP1, OP2, ED1, ED2, etc.
+  name        String   // Song name
+  artist      String?  // Artist name
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  anime       Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  
+  @@index([animeId])
+  @@map("anime_themes")
   @@schema("content")
 }
 
@@ -769,6 +924,7 @@ model SystemSettings {
   maxUploadSize             Int      @default(5242880) // 5MB in bytes
   rateLimit                 Int      @default(100) // requests per minute
   sessionTimeout            Int      @default(86400) // 24 hours in seconds
+  maxUserListItems          Int      @default(5000) // Max anime per user list
   enableRecommendations     Boolean  @default(true)
   enableSocialFeatures      Boolean  @default(true)
   createdAt                 DateTime @default(now())
@@ -776,4 +932,175 @@ model SystemSettings {
   
   @@map("system_settings")
   @@schema("auth")
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  displayName String
+  description String?
+  isSystem    Boolean      @default(false) // System roles (user, tester, admin) cannot be deleted
+  isDefault   Boolean      @default(false) // Default role for new users
+  priority    Int          @default(0) // Higher priority = more permissions
+  permissions RolePermission[]
+  primaryUsers User[]      @relation("UserPrimaryRole")
+  additionalUsers UserRole[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  @@index([isSystem])
+  @@index([priority])
+  @@map("roles")
+  @@schema("auth")
+}
+
+model Permission {
+  id          String       @id @default(cuid())
+  key         String       @unique
+  name        String
+  description String?
+  category    String       @default("general") // admin, content, user, moderation, etc.
+  roles       RolePermission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  @@index([category])
+  @@map("permissions")
+  @@schema("auth")
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  granted      Boolean    @default(true) // Can be false for explicit denial
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+  @@schema("auth")
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+  @@schema("auth")
+}
+
+// Analytics Models
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  event     String
+  properties Json?
+  userId    String?
+  sessionId String
+  timestamp DateTime
+  url       String
+  userAgent String
+  viewport  Json?
+  referrer  String?
+  
+  @@index([userId])
+  @@index([sessionId])
+  @@index([event])
+  @@index([timestamp])
+  @@map("analytics_events")
+  @@schema("user_data")
+}
+
+model AnalyticsSession {
+  id         String    @id @default(cuid())
+  sessionId  String    @unique
+  userId     String?
+  startTime  DateTime
+  lastActivity DateTime
+  pageViews  Int       @default(0)
+  events     Int       @default(0)
+  referrer   String?
+  utmSource  String?
+  utmMedium  String?
+  utmCampaign String?
+  
+  @@index([userId])
+  @@index([sessionId])
+  @@index([lastActivity])
+  @@map("analytics_sessions")
+  @@schema("user_data")
+}
+
+model SearchAnalytics {
+  id           String   @id @default(cuid())
+  query        String   @unique
+  count        Int      @default(0)
+  totalResults Int      @default(0)
+  firstSearched DateTime @default(now())
+  lastSearched DateTime @default(now())
+  filters      Json?
+  
+  @@index([query])
+  @@index([count])
+  @@index([lastSearched])
+  @@map("search_analytics")
+  @@schema("user_data")
+}
+
+model AnimeAnalytics {
+  id             String   @id @default(cuid())
+  animeId        String   @unique
+  views          Int      @default(0)
+  likes          Int      @default(0)
+  shares         Int      @default(0)
+  comments       Int      @default(0)
+  favorites      Int      @default(0)
+  firstInteraction DateTime @default(now())
+  lastInteraction DateTime @default(now())
+  
+  @@index([animeId])
+  @@index([views])
+  @@index([likes])
+  @@index([lastInteraction])
+  @@map("anime_analytics")
+  @@schema("user_data")
+}
+
+model FeatureAnalytics {
+  id         String   @id @default(cuid())
+  feature    String   @unique
+  usageCount Int      @default(0)
+  firstUsed  DateTime @default(now())
+  lastUsed   DateTime @default(now())
+  
+  @@index([feature])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@map("feature_analytics")
+  @@schema("user_data")
+}
+
+model UserActionAnalytics {
+  id         String   @id @default(cuid())
+  action     String   @unique
+  target     String?
+  count      Int      @default(0)
+  firstAction DateTime @default(now())
+  lastAction DateTime @default(now())
+  
+  @@index([action])
+  @@index([count])
+  @@index([lastAction])
+  @@map("user_action_analytics")
+  @@schema("user_data")
 }

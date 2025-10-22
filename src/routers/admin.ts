@@ -31,7 +31,11 @@ export const adminRouter = router({
 
       const where: any = {}
       if (role) {
-        where.role = role
+        // Get the role ID for the filter
+        const roleRecord = await db.role.findFirst({ where: { name: role } })
+        if (roleRecord) {
+          where.primaryRoleId = roleRecord.id
+        }
       }
 
       const [users, total] = await Promise.all([
@@ -45,7 +49,11 @@ export const adminRouter = router({
             email: true,
             name: true,
             username: true,
-            role: true,
+            primaryRole: {
+              select: {
+                name: true
+              }
+            },
             emailVerified: true,
             createdAt: true,
             lastLoginAt: true,
@@ -55,7 +63,10 @@ export const adminRouter = router({
       ])
 
       return {
-        users,
+        users: users.map(user => ({
+          ...user,
+          role: user.primaryRole?.name || 'user'
+        })),
         pagination: {
           page,
           limit,
@@ -252,6 +263,10 @@ export const adminRouter = router({
       // Only admins can view stats
       requireAdmin(ctx.user.role)
 
+      // Get role IDs
+      const testerRole = await db.role.findFirst({ where: { name: UserRole.TESTER } })
+      const adminRole = await db.role.findFirst({ where: { name: UserRole.ADMIN } })
+
       const [
         totalUsers, 
         totalTesters, 
@@ -262,8 +277,8 @@ export const adminRouter = router({
         totalUserAnimeListEntries
       ] = await Promise.all([
         db.user.count(),
-        db.user.count({ where: { role: UserRole.TESTER } }),
-        db.user.count({ where: { role: UserRole.ADMIN } }),
+        testerRole ? db.user.count({ where: { primaryRoleId: testerRole.id } }) : 0,
+        adminRole ? db.user.count({ where: { primaryRoleId: adminRole.id } }) : 0,
         db.anime.count(),
         db.featureFlag.count(),
         db.user.count({
@@ -309,7 +324,11 @@ export const adminRouter = router({
           email: true,
           name: true,
           username: true,
-          role: true,
+          primaryRole: {
+            select: {
+              name: true
+            }
+          },
           emailVerified: true,
           createdAt: true,
           lastLoginAt: true,
@@ -321,7 +340,10 @@ export const adminRouter = router({
         throw new Error('User not found')
       }
 
-      return user
+      return {
+        ...user,
+        role: user.primaryRole?.name || 'user'
+      }
     }),
 
   // Update user role
@@ -582,47 +604,64 @@ export const adminRouter = router({
     .query(async ({ ctx }) => {
       requireAdmin(ctx.user.role)
 
-      // Settings stored as JSON in a single row with key 'system'
-      // We'll use a simple key-value approach in the database
-      const settings = await db.$queryRaw<Array<{ key: string; value: string }>>`
-        SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
-      `
+      // Get or create system settings using Prisma model
+      let settings = await db.systemSettings.findFirst()
 
-      if (settings.length === 0) {
-        // Return default settings
-        return {
-          general: {
+      if (!settings) {
+        // Create default settings if they don't exist
+        settings = await db.systemSettings.create({
+          data: {
             siteName: 'AnimeSenpai',
             siteDescription: 'Track, discover, and explore your favorite anime',
             maintenanceMode: false,
-            allowRegistration: true,
-            requireEmailVerification: true,
-          },
-          features: {
+            registrationEnabled: true,
+            emailVerificationRequired: true,
+            maxUploadSize: 5242880,
+            rateLimit: 100,
+            sessionTimeout: 86400,
+            maxUserListItems: 5000,
             enableRecommendations: true,
             enableSocialFeatures: true,
-            enableAchievements: true,
-            enableComments: true,
-          },
-          security: {
-            sessionTimeout: 30,
-            maxLoginAttempts: 5,
-            requireStrongPasswords: true,
-            enableTwoFactor: false,
-          },
-          notifications: {
-            emailNotifications: true,
-            newUserAlert: true,
-            errorReporting: true,
-          },
-          analytics: {
-            googleAnalyticsId: '',
-            enableTracking: false,
           }
-        }
+        })
       }
 
-      return JSON.parse(settings[0].value)
+      // Return in the expected format
+      return {
+        general: {
+          siteName: settings.siteName,
+          siteDescription: settings.siteDescription,
+          maintenanceMode: settings.maintenanceMode,
+          allowRegistration: settings.registrationEnabled,
+          requireEmailVerification: settings.emailVerificationRequired,
+        },
+        features: {
+          enableRecommendations: settings.enableRecommendations,
+          enableSocialFeatures: settings.enableSocialFeatures,
+          enableAchievements: true, // Not in schema yet
+          enableComments: true, // Not in schema yet
+        },
+        security: {
+          sessionTimeout: settings.sessionTimeout / 3600, // Convert seconds to hours
+          maxLoginAttempts: 5, // Not in schema yet
+          requireStrongPasswords: true, // Not in schema yet
+          enableTwoFactor: false, // Not in schema yet
+        },
+        notifications: {
+          emailNotifications: true, // Not in schema yet
+          newUserAlert: true, // Not in schema yet
+          errorReporting: true, // Not in schema yet
+        },
+        analytics: {
+          googleAnalyticsId: '', // Not in schema yet
+          enableTracking: false, // Not in schema yet
+        },
+        limits: {
+          maxUserListItems: settings.maxUserListItems,
+          maxUploadSize: settings.maxUploadSize,
+          rateLimit: settings.rateLimit,
+        }
+      }
     }),
 
   // Save system settings
@@ -665,41 +704,44 @@ export const adminRouter = router({
         ctx.user.id,
         'update_settings',
         async () => {
-          // Create SystemSettings table if it doesn't exist
-          await db.$executeRaw`
-            CREATE TABLE IF NOT EXISTS "SystemSettings" (
-              key TEXT PRIMARY KEY,
-              value TEXT NOT NULL,
-              "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              "updatedBy" TEXT NOT NULL
-            )
-          `
+          // Get or create settings
+          let settings = await db.systemSettings.findFirst()
 
-          // Merge with existing settings
-          const existing = await db.$queryRaw<Array<{ key: string; value: string }>>`
-            SELECT * FROM "SystemSettings" WHERE key = 'system' LIMIT 1
-          `
+          const updateData: any = {}
 
-          let currentSettings: Record<string, any> = {}
-          if (existing.length > 0) {
-            currentSettings = JSON.parse(existing[0].value)
+          // Map input to schema fields
+          if (input.general) {
+            if (input.general.siteName) updateData.siteName = input.general.siteName
+            if (input.general.siteDescription) updateData.siteDescription = input.general.siteDescription
+            if (input.general.maintenanceMode !== undefined) updateData.maintenanceMode = input.general.maintenanceMode
+            if (input.general.allowRegistration !== undefined) updateData.registrationEnabled = input.general.allowRegistration
+            if (input.general.requireEmailVerification !== undefined) updateData.emailVerificationRequired = input.general.requireEmailVerification
           }
 
-          // Merge new settings
-          const updatedSettings = {
-            ...currentSettings,
-            ...input
+          if (input.features) {
+            if (input.features.enableRecommendations !== undefined) updateData.enableRecommendations = input.features.enableRecommendations
+            if (input.features.enableSocialFeatures !== undefined) updateData.enableSocialFeatures = input.features.enableSocialFeatures
+          }
+
+          if (input.security && input.security.sessionTimeout) {
+            updateData.sessionTimeout = input.security.sessionTimeout * 3600 // Convert hours to seconds
           }
 
           // Upsert settings
-          await db.$executeRaw`
-            INSERT INTO "SystemSettings" (key, value, "updatedBy", "updatedAt")
-            VALUES ('system', ${JSON.stringify(updatedSettings)}::text, ${ctx.user.email}, CURRENT_TIMESTAMP)
-            ON CONFLICT (key) DO UPDATE SET
-              value = ${JSON.stringify(updatedSettings)}::text,
-              "updatedBy" = ${ctx.user.email},
-              "updatedAt" = CURRENT_TIMESTAMP
-          `
+          if (settings) {
+            await db.systemSettings.update({
+              where: { id: settings.id },
+              data: updateData
+            })
+          } else {
+            await db.systemSettings.create({
+              data: {
+                ...updateData,
+                siteName: updateData.siteName || 'AnimeSenpai',
+                siteDescription: updateData.siteDescription || 'Track, discover, and explore your favorite anime'
+              }
+            })
+          }
 
           // Log security event
           await logSecurityEvent(
@@ -1032,6 +1074,495 @@ export const adminRouter = router({
         { userId: input.userId, subject: input.subject },
         ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
       )
+    }),
+
+  // ==================== PERMISSION MANAGEMENT ====================
+
+  // Get all permissions with optional filtering
+  getAllPermissions: protectedProcedure
+    .input(z.object({
+      category: z.string().optional(),
+      search: z.string().optional(),
+    }).optional())
+    .query(async ({ input = {}, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const where: any = {}
+      
+      if (input.category) {
+        where.category = input.category
+      }
+      
+      if (input.search) {
+        where.OR = [
+          { name: { contains: input.search, mode: 'insensitive' } },
+          { key: { contains: input.search, mode: 'insensitive' } },
+          { description: { contains: input.search, mode: 'insensitive' } },
+        ]
+      }
+
+      const [permissions, categories] = await Promise.all([
+        db.permission.findMany({
+          where,
+          include: {
+            roles: {
+              include: {
+                role: {
+                  select: {
+                    id: true,
+                    name: true,
+                    displayName: true,
+                  }
+                }
+              }
+            },
+            _count: {
+              select: {
+                roles: true
+              }
+            }
+          },
+          orderBy: [
+            { category: 'asc' },
+            { name: 'asc' },
+          ]
+        }),
+        db.permission.findMany({
+          select: {
+            category: true
+          },
+          distinct: ['category'],
+          orderBy: {
+            category: 'asc'
+          }
+        })
+      ])
+
+      return {
+        permissions,
+        categories: categories.map(c => c.category)
+      }
+    }),
+
+  // Get single permission details
+  getPermission: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+    }))
+    .query(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const permission = await db.permission.findUnique({
+        where: { id: input.id },
+        include: {
+          roles: {
+            include: {
+              role: {
+                select: {
+                  id: true,
+                  name: true,
+                  displayName: true,
+                  description: true,
+                  isSystem: true,
+                  priority: true,
+                }
+              }
+            }
+          }
+        }
+      })
+
+      if (!permission) {
+        throw new Error('Permission not found')
+      }
+
+      return permission
+    }),
+
+  // Create new permission
+  createPermission: protectedProcedure
+    .input(z.object({
+      key: z.string().min(3).max(100),
+      name: z.string().min(3).max(100),
+      description: z.string().optional(),
+      category: z.string().min(3).max(50),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Check if permission key already exists
+      const existing = await db.permission.findUnique({
+        where: { key: input.key }
+      })
+
+      if (existing) {
+        throw new Error('Permission with this key already exists')
+      }
+
+      const permission = await db.permission.create({
+        data: {
+          key: input.key,
+          name: input.name,
+          description: input.description,
+          category: input.category,
+        },
+        include: {
+          _count: {
+            select: {
+              roles: true
+            }
+          }
+        }
+      })
+
+      // Log the creation
+      await logSecurityEvent(
+        ctx.user.id,
+        'permission_created',
+        { 
+          permissionId: permission.id,
+          key: permission.key,
+          name: permission.name,
+          category: permission.category,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return permission
+    }),
+
+  // Update permission
+  updatePermission: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(3).max(100).optional(),
+      description: z.string().optional(),
+      category: z.string().min(3).max(50).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const { id, ...data } = input
+
+      const permission = await db.permission.update({
+        where: { id },
+        data,
+        include: {
+          _count: {
+            select: {
+              roles: true
+            }
+          }
+        }
+      })
+
+      // Log the update
+      await logSecurityEvent(
+        ctx.user.id,
+        'permission_updated',
+        { 
+          permissionId: permission.id,
+          key: permission.key,
+          updates: data,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return permission
+    }),
+
+  // Delete permission
+  deletePermission: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const permission = await db.permission.findUnique({
+        where: { id: input.id },
+        include: {
+          _count: {
+            select: {
+              roles: true
+            }
+          }
+        }
+      })
+
+      if (!permission) {
+        throw new Error('Permission not found')
+      }
+
+      // Delete the permission (role_permissions will cascade delete)
+      await db.permission.delete({
+        where: { id: input.id }
+      })
+
+      // Log the deletion
+      await logSecurityEvent(
+        ctx.user.id,
+        'permission_deleted',
+        { 
+          permissionId: permission.id,
+          key: permission.key,
+          name: permission.name,
+          rolesAffected: permission._count.roles,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { success: true }
+    }),
+
+  // Assign permission to role
+  assignPermissionToRole: protectedProcedure
+    .input(z.object({
+      permissionId: z.string(),
+      roleId: z.string(),
+      granted: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Check if permission and role exist
+      const [permission, role] = await Promise.all([
+        db.permission.findUnique({ where: { id: input.permissionId } }),
+        db.role.findUnique({ where: { id: input.roleId } }),
+      ])
+
+      if (!permission || !role) {
+        throw new Error('Permission or role not found')
+      }
+
+      // Upsert the role permission
+      const rolePermission = await db.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: input.roleId,
+            permissionId: input.permissionId,
+          }
+        },
+        create: {
+          roleId: input.roleId,
+          permissionId: input.permissionId,
+          granted: input.granted,
+        },
+        update: {
+          granted: input.granted,
+        },
+        include: {
+          permission: true,
+          role: true,
+        }
+      })
+
+      // Log the assignment
+      await logSecurityEvent(
+        ctx.user.id,
+        'permission_assigned',
+        { 
+          permissionId: permission.id,
+          permissionKey: permission.key,
+          roleId: role.id,
+          roleName: role.name,
+          granted: input.granted,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return rolePermission
+    }),
+
+  // Remove permission from role
+  removePermissionFromRole: protectedProcedure
+    .input(z.object({
+      permissionId: z.string(),
+      roleId: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Get permission and role details for logging
+      const rolePermission = await db.rolePermission.findUnique({
+        where: {
+          roleId_permissionId: {
+            roleId: input.roleId,
+            permissionId: input.permissionId,
+          }
+        },
+        include: {
+          permission: true,
+          role: true,
+        }
+      })
+
+      if (!rolePermission) {
+        throw new Error('Permission assignment not found')
+      }
+
+      // Delete the role permission
+      await db.rolePermission.delete({
+        where: {
+          roleId_permissionId: {
+            roleId: input.roleId,
+            permissionId: input.permissionId,
+          }
+        }
+      })
+
+      // Log the removal
+      await logSecurityEvent(
+        ctx.user.id,
+        'permission_removed',
+        { 
+          permissionId: rolePermission.permission.id,
+          permissionKey: rolePermission.permission.key,
+          roleId: rolePermission.role.id,
+          roleName: rolePermission.role.name,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { success: true }
+    }),
+
+  // Get role's permissions
+  getRolePermissions: protectedProcedure
+    .input(z.object({
+      roleId: z.string(),
+    }))
+    .query(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const role = await db.role.findUnique({
+        where: { id: input.roleId },
+        include: {
+          permissions: {
+            include: {
+              permission: true
+            },
+            orderBy: {
+              permission: {
+                category: 'asc'
+              }
+            }
+          }
+        }
+      })
+
+      if (!role) {
+        throw new Error('Role not found')
+      }
+
+      return role
+    }),
+
+  // Bulk assign permissions to role
+  bulkAssignPermissions: protectedProcedure
+    .input(z.object({
+      roleId: z.string(),
+      permissionIds: z.array(z.string()),
+      granted: z.boolean().default(true),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Check if role exists
+      const role = await db.role.findUnique({ where: { id: input.roleId } })
+      if (!role) {
+        throw new Error('Role not found')
+      }
+
+      // Create all role permissions
+      const createdPermissions = await Promise.all(
+        input.permissionIds.map(permissionId =>
+          db.rolePermission.upsert({
+            where: {
+              roleId_permissionId: {
+                roleId: input.roleId,
+                permissionId,
+              }
+            },
+            create: {
+              roleId: input.roleId,
+              permissionId,
+              granted: input.granted,
+            },
+            update: {
+              granted: input.granted,
+            }
+          })
+        )
+      )
+
+      // Log the bulk assignment
+      await logSecurityEvent(
+        ctx.user.id,
+        'permissions_bulk_assigned',
+        { 
+          roleId: role.id,
+          roleName: role.name,
+          permissionCount: input.permissionIds.length,
+          granted: input.granted,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { 
+        success: true,
+        count: createdPermissions.length
+      }
+    }),
+
+  // Bulk remove permissions from role
+  bulkRemovePermissions: protectedProcedure
+    .input(z.object({
+      roleId: z.string(),
+      permissionIds: z.array(z.string()),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      // Check if role exists
+      const role = await db.role.findUnique({ where: { id: input.roleId } })
+      if (!role) {
+        throw new Error('Role not found')
+      }
+
+      // Delete all role permissions
+      const result = await db.rolePermission.deleteMany({
+        where: {
+          roleId: input.roleId,
+          permissionId: {
+            in: input.permissionIds
+          }
+        }
+      })
+
+      // Log the bulk removal
+      await logSecurityEvent(
+        ctx.user.id,
+        'permissions_bulk_removed',
+        { 
+          roleId: role.id,
+          roleName: role.name,
+          permissionCount: result.count,
+        },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
+      )
+
+      return { 
+        success: true,
+        count: result.count
+      }
     }),
 })
 

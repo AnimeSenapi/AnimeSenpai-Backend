@@ -191,10 +191,17 @@ export const onboardingRouter = router({
         await Promise.all(ratingOperations)
       }
       
-      // Update preferences
-      await db.userPreferences.update({
+      // Update preferences (create if doesn't exist)
+      await db.userPreferences.upsert({
         where: { userId: ctx.user.id },
-        data: {
+        update: {
+          favoriteGenres: input.favoriteGenres,
+          favoriteTags: input.favoriteTags || [],
+          discoveryMode: input.discoveryMode,
+          onboardingCompleted: true
+        },
+        create: {
+          userId: ctx.user.id,
           favoriteGenres: input.favoriteGenres,
           favoriteTags: input.favoriteTags || [],
           discoveryMode: input.discoveryMode,
@@ -208,9 +215,13 @@ export const onboardingRouter = router({
   // Skip onboarding (user can do it later)
   skipOnboarding: protectedProcedure
     .mutation(async ({ ctx }) => {
-      await db.userPreferences.update({
+      await db.userPreferences.upsert({
         where: { userId: ctx.user.id },
-        data: {
+        update: {
+          onboardingCompleted: true
+        },
+        create: {
+          userId: ctx.user.id,
           onboardingCompleted: true
         }
       })

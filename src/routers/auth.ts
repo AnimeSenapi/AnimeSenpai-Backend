@@ -89,11 +89,24 @@ export const authRouter = router({
         // Hash password and create user
         const hashedPassword = await hashPassword(password)
         
+        // Get default role (user role)
+        const defaultRole = await db.role.findFirst({
+          where: { isDefault: true }
+        })
+
+        if (!defaultRole) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Default role not found. Please contact support.'
+          })
+        }
+
         const user = await db.user.create({
           data: {
             email,
             username,
             password: hashedPassword,
+            primaryRoleId: defaultRole.id,
             gdprConsent,
             gdprConsentAt: new Date(),
             marketingConsent,
@@ -105,7 +118,8 @@ export const authRouter = router({
             }
           },
           include: {
-            preferences: true
+            preferences: true,
+            primaryRole: true
           }
         })
 
@@ -140,7 +154,7 @@ export const authRouter = router({
             name: user.name,
             avatar: user.avatar,
             bio: user.bio,
-            role: user.role,
+            role: user.primaryRole?.name || 'user',
             emailVerified: user.emailVerified,
             preferences: user.preferences
           },
@@ -158,7 +172,8 @@ export const authRouter = router({
   signin: publicProcedure
     .input(z.object({
       email: z.string().email(),
-      password: z.string()
+      password: z.string(),
+      rememberMe: z.boolean().optional()
     }))
     .mutation(async ({ input, ctx }) => {
       const { email, password } = input
@@ -171,7 +186,10 @@ export const authRouter = router({
       // Find user
       const user = await db.user.findUnique({
         where: { email },
-        include: { preferences: true }
+        include: { 
+          preferences: true,
+          primaryRole: true
+        }
       })
 
       if (!user) {
@@ -256,7 +274,7 @@ export const authRouter = router({
           name: user.name,
           avatar: user.avatar,
           bio: user.bio,
-          role: user.role,
+          role: user.primaryRole?.name || 'user',
           emailVerified: user.emailVerified,
           preferences: user.preferences
         },
@@ -269,16 +287,32 @@ export const authRouter = router({
   // Get current user
   me: protectedProcedure
     .query(async ({ ctx }) => {
+      // Fetch user with primary role
+      const user = await db.user.findUnique({
+        where: { id: ctx.user.id },
+        include: {
+          primaryRole: true,
+          preferences: true
+        }
+      })
+
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'User not found'
+        })
+      }
+
       return {
-        id: ctx.user.id,
-        email: ctx.user.email,
-        username: ctx.user.username,
-        name: ctx.user.name,
-        avatar: ctx.user.avatar,
-        bio: ctx.user.bio,
-        role: ctx.user.role,
-        emailVerified: ctx.user.emailVerified,
-        preferences: ctx.user.preferences
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        name: user.name,
+        avatar: user.avatar,
+        bio: user.bio,
+        role: user.primaryRole?.name || 'user',
+        emailVerified: user.emailVerified,
+        preferences: user.preferences
       }
     }),
 

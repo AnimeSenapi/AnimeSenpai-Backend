@@ -212,6 +212,22 @@ export const logAuth = {
   suspiciousActivity: (userId: string, activity: string, context?: LogContext) => {
     logger.security(`Suspicious activity detected for user ${userId}: ${activity}`, context, { userId, activity })
   },
+  
+  twoFactorSetup: (userId: string, enabled: boolean, context?: LogContext) => {
+    logger.security(`2FA ${enabled ? 'enabled' : 'disabled'} for user ${userId}`, context, { userId, enabled })
+  },
+  
+  twoFactorVerify: (userId: string, success: boolean, context?: LogContext) => {
+    logger.security(`2FA verification ${success ? 'successful' : 'failed'} for user ${userId}`, context, { userId, success })
+  },
+  
+  twoFactorDisable: (userId: string, success: boolean, context?: LogContext) => {
+    logger.security(`2FA ${success ? 'disabled' : 'disable failed'} for user ${userId}`, context, { userId, success })
+  },
+  
+  twoFactorLogin: (userId: string, success: boolean, context?: LogContext) => {
+    logger.auth(`2FA login ${success ? 'successful' : 'failed'} for user ${userId}`, context, { userId, success })
+  },
 }
 
 export const logError = {

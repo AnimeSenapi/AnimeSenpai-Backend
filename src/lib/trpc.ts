@@ -95,7 +95,10 @@ const isAuthed = t.middleware(async ({ next, ctx, path }) => {
     // Get user from database
     const user = await db.user.findUnique({
       where: { id: payload.userId },
-      include: { preferences: true }
+      include: { 
+        preferences: true,
+        primaryRole: true
+      }
     })
 
     if (!user) {
@@ -128,10 +131,16 @@ const isAuthed = t.middleware(async ({ next, ctx, path }) => {
 
     logger.auth(`Authenticated request to ${path}`, { ...logContext, userId: user.id })
 
+    // Add role property for backward compatibility
+    const userWithRole = {
+      ...user,
+      role: user.primaryRole?.name || 'user'
+    }
+
     return next({
       ctx: {
         ...ctx,
-        user,
+        user: userWithRole,
         sessionId: payload.sessionId
       }
     })

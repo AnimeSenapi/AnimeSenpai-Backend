@@ -182,6 +182,45 @@ function log(message, type = 'info') {
   console.log(`[${timestamp}] ${prefix} ${message}`)
 }
 
+// Utility: Progress bar with ETA
+function printProgressBar(current, total, label = 'Progress') {
+  const percentage = Math.round((current / total) * 100)
+  const barLength = 40
+  const filledLength = Math.round((barLength * current) / total)
+  const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength)
+  
+  // Calculate ETA
+  let etaText = ''
+  if (current > 0 && current < total) {
+    const elapsed = Date.now() - state.startTime
+    const rate = current / (elapsed / 1000 / 60) // items per minute
+    const remaining = total - current
+    const etaMinutes = remaining / rate
+    etaText = ` ETA: ${formatTime(etaMinutes)}`
+  }
+  
+  process.stdout.write(`\r${label}: [${bar}] ${percentage}% (${current}/${total})${etaText}`)
+  
+  if (current === total) {
+    process.stdout.write('\n')
+  }
+}
+
+// Format time (minutes to human readable)
+function formatTime(minutes) {
+  if (minutes < 60) {
+    return `${Math.round(minutes)}m`
+  } else if (minutes < 1440) {
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
+    return `${hours}h ${mins}m`
+  } else {
+    const days = Math.floor(minutes / 1440)
+    const hours = Math.floor((minutes % 1440) / 60)
+    return `${days}d ${hours}h`
+  }
+}
+
 // Update health check file
 async function updateHealthCheck() {
   try {
@@ -370,14 +409,126 @@ function isAdultContent(animeData) {
   return false
 }
 
+// Validate anime data before saving
+function validateAnimeData(anime) {
+  // Required fields
+  if (!anime.title) {
+    throw new Error('Missing title')
+  }
+  
+  // Validate data types
+  if (anime.episodes !== null && anime.episodes !== undefined && typeof anime.episodes !== 'number') {
+    anime.episodes = null
+  }
+  
+  if (anime.averageRating !== null && anime.averageRating !== undefined && typeof anime.averageRating !== 'number') {
+    anime.averageRating = 0
+  }
+  
+  // Sanitize strings
+  if (anime.synopsis) {
+    anime.synopsis = anime.synopsis.substring(0, 10000) // Limit to 10k chars
+  }
+  
+  if (anime.background) {
+    anime.background = anime.background.substring(0, 10000) // Limit to 10k chars
+  }
+  
+  // Validate URLs
+  if (anime.coverImage && !isValidUrl(anime.coverImage)) {
+    anime.coverImage = null
+  }
+  
+  if (anime.bannerImage && !isValidUrl(anime.bannerImage)) {
+    anime.bannerImage = null
+  }
+  
+  if (anime.trailer && !isValidUrl(anime.trailer)) {
+    anime.trailer = null
+  }
+  
+  // Ensure arrays are arrays
+  if (!Array.isArray(anime.titleSynonyms)) anime.titleSynonyms = []
+  if (!Array.isArray(anime.studios)) anime.studios = []
+  if (!Array.isArray(anime.producers)) anime.producers = []
+  if (!Array.isArray(anime.licensors)) anime.licensors = []
+  if (!Array.isArray(anime.themes)) anime.themes = []
+  if (!Array.isArray(anime.demographics)) anime.demographics = []
+  // if (!Array.isArray(anime.externalLinks)) anime.externalLinks = [] // Temporarily disabled
+  if (!Array.isArray(anime.genres)) anime.genres = []
+  if (!Array.isArray(anime.streamingPlatforms)) anime.streamingPlatforms = []
+  
+  return anime
+}
+
+// Validate URL
+function isValidUrl(string) {
+  try {
+    new URL(string)
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+// Generate smart slug from anime data
+function generateSlug(animeData) {
+  const title = animeData.title_english || animeData.title || animeData.title_japanese || 'untitled'
+  
+  // Base slug from English title
+  let slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  
+  // If there are title synonyms, check if any provide better differentiation
+  if (animeData.title_synonyms && animeData.title_synonyms.length > 0) {
+    // Use the most descriptive synonym if it contains season/part/movie info
+    const betterTitle = animeData.title_synonyms.find(syn => 
+      syn.toLowerCase().includes('season') || 
+      syn.toLowerCase().includes('part') ||
+      syn.toLowerCase().includes('movie') ||
+      syn.toLowerCase().includes('film') ||
+      syn.toLowerCase().includes('ova') ||
+      syn.toLowerCase().includes('special')
+    )
+    if (betterTitle) {
+      slug = betterTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    }
+  }
+  
+  return slug
+}
+
+// Check if slug already exists in database
+async function slugExists(slug) {
+  try {
+    const existing = await db.anime.findUnique({
+      where: { slug },
+      select: { id: true }
+    })
+    return !!existing
+  } catch (error) {
+    console.error(`Error checking slug existence: ${error.message}`)
+    return false
+  }
+}
+
 // Process and format anime data with COMPLETE fields
 function processAnimeData(animeData, streamingPlatforms = []) {
+  // Generate smart slug
+  let slug = generateSlug(animeData)
+  
+  // If slug is a duplicate, add year as fallback (only for exact duplicates)
+  // We'll handle this during import by checking database
+  
   return {
     id: animeData.mal_id.toString(),
     malId: animeData.mal_id,
-    slug: animeData.title.toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, ''),
+    slug, // Will be updated if duplicate during import
     title: animeData.title,
     titleEnglish: animeData.title_english,
     titleJapanese: animeData.title_japanese,
@@ -385,7 +536,7 @@ function processAnimeData(animeData, streamingPlatforms = []) {
     synopsis: animeData.synopsis,
     background: animeData.background,
     coverImage: animeData.images?.jpg?.large_image_url || animeData.images?.jpg?.image_url,
-    bannerImage: null,
+    bannerImage: animeData.images?.jpg?.large_image_url || null, // Banner image
     trailer: animeData.trailer?.embed_url,
     trailerUrl: animeData.trailer?.url,
     year: animeData.year || (animeData.aired?.from ? new Date(animeData.aired.from).getFullYear() : null),
@@ -411,6 +562,7 @@ function processAnimeData(animeData, streamingPlatforms = []) {
     genres: animeData.genres?.map(g => ({ id: g.mal_id.toString(), name: g.name })) || [],
     themes: animeData.themes?.map(t => t.name) || [],
     demographics: animeData.demographics?.map(d => d.name) || [],
+    // externalLinks: animeData.external?.map(ext => ({ name: ext.name, url: ext.url })) || [], // Temporarily disabled
     streamingPlatforms: streamingPlatforms
   }
 }
@@ -431,100 +583,140 @@ async function saveBatchToDatabase() {
     
     for (const anime of batch) {
       try {
+        // Validate anime data before saving
+        const validatedAnime = validateAnimeData(anime)
+        
         await prisma.$transaction(async (tx) => {
+          // Check for slug duplicates and add year if needed
+          let finalSlug = validatedAnime.slug
+          const existingWithSlug = await tx.anime.findUnique({
+            where: { slug: anime.slug },
+            select: { id: true }
+          })
+          
+          // If slug exists and it's not this anime, add year as fallback
+          if (existingWithSlug && existingWithSlug.id !== validatedAnime.id) {
+            const year = validatedAnime.year || (validatedAnime.aired ? new Date(validatedAnime.aired).getFullYear() : null)
+            if (year) {
+              finalSlug = `${validatedAnime.slug}-${year}`
+              log(`⚠️  Slug collision for "${validatedAnime.title}". Using: ${finalSlug}`)
+            } else {
+              log(`⚠️  Slug collision for "${validatedAnime.title}" but no year available. Using: ${validatedAnime.slug}`)
+            }
+          }
+          
           // Upsert anime
           await tx.anime.upsert({
-            where: { id: anime.id },
+            where: { id: validatedAnime.id },
             create: {
-              id: anime.id,
-              slug: anime.slug,
-              title: anime.title,
-              titleEnglish: anime.titleEnglish,
-              titleJapanese: anime.titleJapanese,
-              titleSynonyms: anime.titleSynonyms,
-              synopsis: anime.synopsis,
-              background: anime.background,
-              coverImage: anime.coverImage,
-              bannerImage: anime.bannerImage,
-              trailer: anime.trailer,
-              trailerUrl: anime.trailerUrl,
-              year: anime.year,
-              season: anime.season,
-              aired: anime.aired,
-              broadcast: anime.broadcast,
-              type: anime.type,
-              status: anime.status,
-              airing: anime.airing,
-              episodes: anime.episodes,
-              duration: anime.duration,
-              rating: anime.rating,
-              averageRating: anime.averageRating,
-              scoredBy: anime.scoredBy,
-              rank: anime.rank,
-              popularity: anime.popularity,
-              members: anime.members,
-              favorites: anime.favorites,
-              source: anime.source,
-              studios: anime.studios,
-              producers: anime.producers,
-              licensors: anime.licensors,
-              themes: anime.themes,
-              demographics: anime.demographics,
-              malId: anime.malId
+              id: validatedAnime.id,
+              slug: finalSlug,
+              title: validatedAnime.title,
+              titleEnglish: validatedAnime.titleEnglish,
+              titleJapanese: validatedAnime.titleJapanese,
+              titleSynonyms: validatedAnime.titleSynonyms,
+              synopsis: validatedAnime.synopsis,
+              background: validatedAnime.background,
+              coverImage: validatedAnime.coverImage,
+              bannerImage: validatedAnime.bannerImage,
+              trailer: validatedAnime.trailer,
+              trailerUrl: validatedAnime.trailerUrl,
+              year: validatedAnime.year,
+              season: validatedAnime.season,
+              aired: validatedAnime.aired,
+              broadcast: validatedAnime.broadcast,
+              type: validatedAnime.type,
+              status: validatedAnime.status,
+              airing: validatedAnime.airing,
+              episodes: validatedAnime.episodes,
+              duration: validatedAnime.duration,
+              rating: validatedAnime.rating,
+              averageRating: validatedAnime.averageRating,
+              scoredBy: validatedAnime.scoredBy,
+              rank: validatedAnime.rank,
+              popularity: validatedAnime.popularity,
+              members: validatedAnime.members,
+              favorites: validatedAnime.favorites,
+              source: validatedAnime.source,
+              studios: validatedAnime.studios,
+              producers: validatedAnime.producers,
+              licensors: validatedAnime.licensors,
+              themes: validatedAnime.themes,
+              demographics: validatedAnime.demographics,
+              // externalLinks: validatedAnime.externalLinks, // Temporarily disabled
+              malId: validatedAnime.malId
             },
             update: {
-              title: anime.title,
-              titleEnglish: anime.titleEnglish,
-              titleJapanese: anime.titleJapanese,
-              titleSynonyms: anime.titleSynonyms,
-              synopsis: anime.synopsis,
-              background: anime.background,
-              coverImage: anime.coverImage,
-              trailer: anime.trailer,
-              trailerUrl: anime.trailerUrl,
-              year: anime.year,
-              season: anime.season,
-              aired: anime.aired,
-              broadcast: anime.broadcast,
-              type: anime.type,
-              status: anime.status,
-              airing: anime.airing,
-              episodes: anime.episodes,
-              duration: anime.duration,
-              rating: anime.rating,
-              averageRating: anime.averageRating,
-              scoredBy: anime.scoredBy,
-              rank: anime.rank,
-              popularity: anime.popularity,
-              members: anime.members,
-              favorites: anime.favorites,
-              source: anime.source,
-              studios: anime.studios,
-              producers: anime.producers,
-              licensors: anime.licensors,
-              themes: anime.themes,
-              demographics: anime.demographics,
-              malId: anime.malId
+              title: validatedAnime.title,
+              titleEnglish: validatedAnime.titleEnglish,
+              titleJapanese: validatedAnime.titleJapanese,
+              titleSynonyms: validatedAnime.titleSynonyms,
+              synopsis: validatedAnime.synopsis,
+              background: validatedAnime.background,
+              coverImage: validatedAnime.coverImage,
+              bannerImage: validatedAnime.bannerImage,
+              trailer: validatedAnime.trailer,
+              trailerUrl: validatedAnime.trailerUrl,
+              year: validatedAnime.year,
+              season: validatedAnime.season,
+              aired: validatedAnime.aired,
+              broadcast: validatedAnime.broadcast,
+              type: validatedAnime.type,
+              status: validatedAnime.status,
+              airing: validatedAnime.airing,
+              episodes: validatedAnime.episodes,
+              duration: validatedAnime.duration,
+              rating: validatedAnime.rating,
+              averageRating: validatedAnime.averageRating,
+              scoredBy: validatedAnime.scoredBy,
+              rank: validatedAnime.rank,
+              popularity: validatedAnime.popularity,
+              members: validatedAnime.members,
+              favorites: validatedAnime.favorites,
+              source: validatedAnime.source,
+              studios: validatedAnime.studios,
+              producers: validatedAnime.producers,
+              licensors: validatedAnime.licensors,
+              themes: validatedAnime.themes,
+              demographics: validatedAnime.demographics,
+              // externalLinks: validatedAnime.externalLinks, // Temporarily disabled
+              malId: validatedAnime.malId
             }
           })
           
           // Handle genres
-          for (const genre of anime.genres) {
-            await tx.genre.upsert({
-              where: { id: genre.id },
-              create: { id: genre.id, name: genre.name, slug: genre.name.toLowerCase().replace(/\s+/g, '-') },
-              update: { name: genre.name }
+          for (const genre of validatedAnime.genres) {
+            // Check if genre with this ID exists
+            const existingGenre = await tx.genre.findUnique({
+              where: { id: genre.id }
             })
+            
+            if (!existingGenre) {
+              // Check if genre with this name exists
+              const existingByName = await tx.genre.findFirst({
+                where: { name: genre.name }
+              })
+              
+              if (existingByName) {
+                // Use existing genre ID
+                genre.id = existingByName.id
+              } else {
+                // Create new genre
+                await tx.genre.create({
+                  data: { id: genre.id, name: genre.name, slug: genre.name.toLowerCase().replace(/\s+/g, '-') }
+                })
+              }
+            }
             
             await tx.animeGenre.upsert({
               where: {
                 animeId_genreId: {
-                  animeId: anime.id,
+                  animeId: validatedAnime.id,
                   genreId: genre.id
                 }
               },
               create: {
-                animeId: anime.id,
+                animeId: validatedAnime.id,
                 genreId: genre.id
               },
               update: {}
@@ -532,7 +724,7 @@ async function saveBatchToDatabase() {
           }
           
           // Handle streaming platforms
-          for (const platform of anime.streamingPlatforms || []) {
+          for (const platform of validatedAnime.streamingPlatforms || []) {
             const platformSlug = platform.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
             const platformMetadata = KNOWN_PLATFORMS[platformSlug] || {}
             
@@ -555,12 +747,12 @@ async function saveBatchToDatabase() {
             await tx.animeStreamingPlatform.upsert({
               where: {
                 animeId_platformId: {
-                  animeId: anime.id,
+                  animeId: validatedAnime.id,
                   platformId: dbPlatform.id
                 }
               },
               create: {
-                animeId: anime.id,
+                animeId: validatedAnime.id,
                 platformId: dbPlatform.id,
                 url: platform.url
               },
@@ -696,12 +888,14 @@ async function processGenres() {
     state.stats.currentPage = 0
     
     log(`\n📚 Processing Genre: ${genre.name} (${i + 1}/${GENRES.length})`, 'info')
+    printProgressBar(i + 1, GENRES.length, 'Overall Progress')
     
     let page = 1
     let hasMore = true
     let fetchedInGenre = 0
+    const maxPages = 40 // 40 pages * 25 anime = 1000 anime per genre
     
-    while (hasMore && state.isRunning && fetchedInGenre < 1000) {
+    while (hasMore && state.isRunning && page <= maxPages) {
       state.stats.currentPage = page
       hasMore = await fetchAnimeByGenre(genre, page)
       
@@ -710,13 +904,18 @@ async function processGenres() {
         fetchedInGenre += 25
       }
       
+      // Show progress every 5 pages
+      if (page % 5 === 0) {
+        printProgressBar(page, maxPages, `  ${genre.name} Pages`)
+      }
+      
       if (page % 10 === 0) {
         printStats()
       }
     }
     
     state.stats.genresCompleted++
-    log(`✅ Completed Genre: ${genre.name} (Fetched ${fetchedInGenre} pages)`, 'success')
+    log(`✅ Completed Genre: ${genre.name} (Fetched ${fetchedInGenre} anime)`, 'success')
     
     if (state.pendingAnime.length > 0) {
       await saveBatchToDatabase()
@@ -724,6 +923,10 @@ async function processGenres() {
     
     printStats()
   }
+  
+  console.log('\n' + '='.repeat(70))
+  log('🎉 All genres completed!', 'success')
+  console.log('='.repeat(70) + '\n')
 }
 
 // Fetch top anime (fallback)
@@ -906,17 +1109,21 @@ async function main() {
   }
   
   log('\n✨ All diagnostics passed! Starting import...\n', 'success')
-  log('⚖️  BALANCED MODE - Fast & Stable (Recommended)', 'info')
-  log(`Rate limit: 0.83 req/sec (1200ms delay) - CONSERVATIVE`, 'info')
-  log(`Concurrent streaming: DISABLED (sequential only)`, 'info')
-  log(`Batch size: 20 anime per DB transaction`, 'info')
-  log(`Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
-  log(`Filters out: Hentai and Rx-rated content automatically`, 'info')
-  log(`📊 Expected: ~1,300 anime/hour, 10k anime in 5-6 hours`, 'info')
-  log(`⚡ Faster than ultra-safe, still very stable!`, 'success')
-  log('Press Ctrl+C to stop gracefully', 'info')
-  log(`Stats will be saved to ${STATE_FILE} every 5 minutes`, 'info')
-  log(`\n⏳ Waiting ${STARTUP_DELAY/1000} seconds before first request to avoid rate limits...`, 'info')
+  console.log('='.repeat(70))
+  log('⚙️  IMPORT CONFIGURATION', 'info')
+  console.log('='.repeat(70))
+  log(`📊 Target: Top 1000 anime per genre (${GENRES.length} genres)`, 'info')
+  log(`📈 Expected: ~27,000 total anime (68 genres × 1000)`, 'info')
+  log(`⏱️  Rate limit: 0.83 req/sec (1200ms delay)`, 'info')
+  log(`🔄 Concurrent streaming: DISABLED (sequential only)`, 'info')
+  log(`💾 Batch size: ${BATCH_SIZE} anime per DB transaction`, 'info')
+  log(`🚫 Filters out: Hentai, Rx-rated, and Ecchi content`, 'info')
+  log(`⏰ Expected time: ~20-25 hours for all genres`, 'info')
+  log(`📁 Stats saved to: ${STATE_FILE} every 5 minutes`, 'info')
+  console.log('='.repeat(70))
+  log('⚡ Starting import now!', 'success')
+  log('Press Ctrl+C to stop gracefully and save progress', 'info')
+  log(`\n⏳ Waiting ${STARTUP_DELAY/1000} seconds before first request...`, 'info')
   
   // Wait before starting to avoid any lingering rate limits
   await sleep(STARTUP_DELAY)

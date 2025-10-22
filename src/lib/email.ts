@@ -405,3 +405,11 @@ export class EmailService {
 }
 
 export const emailService = EmailService.getInstance();
+
+/**
+ * Send email using the email service
+ * Convenience function for direct email sending
+ */
+export async function sendEmail(template: EmailTemplate): Promise<boolean> {
+  return emailService.sendCustomAdminEmail(template);
+}

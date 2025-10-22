@@ -12,13 +12,21 @@ export const userRouter = router({
     .input(z.object({
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']).optional(),
       page: z.number().min(1).default(1),
-      limit: z.number().min(1).max(100).default(20),
+      limit: z.number().min(1).max(50000).optional(), // Will be capped by system settings
       sortBy: z.enum(['updatedAt', 'createdAt', 'title', 'progress']).default('updatedAt'),
       sortOrder: z.enum(['asc', 'desc']).default('desc')
     }).optional())
     .query(async ({ input = {}, ctx }) => {
-      const { status, page = 1, limit = 20, sortBy = 'updatedAt', sortOrder = 'desc' } = input
+      // Get system settings for max limit
+      const systemSettings = await db.systemSettings.findFirst()
+      const maxLimit = systemSettings?.maxUserListItems || 5000
+      
+      const { status, page = 1, sortBy = 'updatedAt', sortOrder = 'desc' } = input
+      const requestedLimit = input.limit || maxLimit
+      const limit = Math.min(requestedLimit, maxLimit) // Cap at system max
       const skip = (page - 1) * limit
+      
+      console.log(`[DEBUG] getAnimeList called - user: ${ctx.user.id}, status: ${status}, page: ${page}, limit: ${limit}, maxLimit: ${maxLimit}, skip: ${skip}`)
 
       const where: any = {
         userId: ctx.user.id
@@ -55,6 +63,8 @@ export const userRouter = router({
         }),
         db.userAnimeList.count({ where })
       ])
+
+      console.log(`[DEBUG] User ${ctx.user.id} anime list: found ${animeLists.length} items (total: ${total}, limit: ${limit}, skip: ${skip})`)
 
       // Fetch full anime details
       const animeIds = animeLists.map(item => item.animeId)
@@ -122,6 +132,7 @@ export const userRouter = router({
             genres: anime.genres.map(g => g.genre)
           } : null,
           listStatus: listItem.status,
+          isFavorite: listItem.isFavorite, // Include favorite flag
           progress: listItem.progress,
           score: listItem.score,
           notes: listItem.notes,
@@ -177,7 +188,7 @@ export const userRouter = router({
     .input(z.object({
       animeId: z.string(),
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']),
-      isFavorite: z.boolean().default(false),
+      isFavorite: z.boolean().optional(),
       progress: z.number().min(0).default(0),
       score: z.number().min(1).max(10).optional(),
       notes: z.string().optional()
@@ -200,9 +211,9 @@ export const userRouter = router({
       const startedAt = (status === 'watching' || status === 'completed') ? now : null
       const completedAt = status === 'completed' ? now : null
 
-      // Handle favorite as a special case
+      // Handle favorite as a special case - it can be BOTH favorite AND have a status
       const actualStatus = status === 'favorite' ? 'plan-to-watch' : status
-      const actualIsFavorite = status === 'favorite' ? true : isFavorite
+      const actualIsFavorite = status === 'favorite' ? true : (isFavorite ?? false)
 
       // Upsert anime list entry
       const animeList = await db.userAnimeList.upsert({
@@ -215,9 +226,9 @@ export const userRouter = router({
         update: {
           status: actualStatus,
           isFavorite: actualIsFavorite,
-          progress,
-          score,
-          notes,
+          progress: progress !== undefined ? progress : undefined,
+          score: score !== undefined ? score : undefined,
+          notes: notes !== undefined ? notes : undefined,
           completedAt: actualStatus === 'completed' ? (completedAt || now) : null
         },
         create: {
@@ -232,6 +243,8 @@ export const userRouter = router({
           completedAt
         }
       })
+
+      console.log(`[DEBUG] Added/Updated anime ${animeId} for user ${ctx.user.id}: status=${actualStatus}, isFavorite=${actualIsFavorite}`)
 
       // Create activity if favorited
       if (actualIsFavorite) {

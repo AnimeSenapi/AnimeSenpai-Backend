@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
+import { router, publicProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { cache, cacheKeys, cacheTTL } from '../lib/cache'
 import { Prisma } from '@prisma/client'
@@ -260,7 +260,7 @@ export const animeRouter = router({
       }
 
       // Cache for 5 minutes
-      cache.set(cacheKey, result, cacheTTL.medium)
+      cache.set(cacheKey, result, cacheTTL.MEDIUM)
       
       return result
     }),
@@ -337,8 +337,8 @@ export const animeRouter = router({
     .query(async ({ input = { slug: 'attack-on-titan' } }) => {
       const anime = await db.anime.findFirst({
         where: { 
-          slug: input.slug,
-          ...getContentFilter()
+          ...(input.slug ? { slug: input.slug } : {}),
+          ...getContentFilter(),
         },
         select: {
           id: true,
@@ -448,7 +448,7 @@ export const animeRouter = router({
 
       // Get the anime first
       const anime = await db.anime.findFirst({
-        where: input.animeId ? { id: input.animeId } : { slug: input.slug },
+        where: input.animeId ? { id: input.animeId } : (input.slug ? { slug: input.slug } : {}),
         select: {
           id: true,
           title: true,
@@ -547,7 +547,7 @@ export const animeRouter = router({
       
       // Try to get from cache first (5 minute TTL)
       return cache.getOrSet(
-        cacheKeys.trending(),
+        cacheKeys.key('anime', 'trending'),
         async () => {
           const anime = await db.anime.findMany({
         where: {
@@ -620,7 +620,7 @@ export const animeRouter = router({
             }
           }))
         },
-        cacheTTL.medium // 5 minutes
+        cacheTTL.MEDIUM // 5 minutes
       )
     }),
 
@@ -740,7 +740,7 @@ export const animeRouter = router({
       
       // Cache common requests for 5 minutes
       if (cacheKey) {
-        cache.set(cacheKey, result, cacheTTL.medium)
+        cache.set(cacheKey, result, cacheTTL.MEDIUM)
       }
       
       return result
@@ -750,7 +750,7 @@ export const animeRouter = router({
   getGenres: publicProcedure
     .query(async () => {
       return cache.getOrSet(
-        cacheKeys.genres(),
+        cacheKeys.key('genres', 'all'),
         async () => {
           const genres = await db.genre.findMany({
             select: {
@@ -766,7 +766,7 @@ export const animeRouter = router({
 
           return genres
         },
-        cacheTTL.long // 15 minutes - genres rarely change
+        cacheTTL.LONG // 15 minutes - genres rarely change
       )
     }),
 

@@ -92,11 +92,11 @@ export class AppError extends Error {
     super(message)
     this.name = 'AppError'
     this.code = code
-    this.details = details
-    this.field = field
+    this.details = details ?? undefined
+    this.field = field ?? undefined
     this.timestamp = new Date().toISOString()
-    this.requestId = requestId
-    this.userId = userId
+    this.requestId = requestId ?? undefined
+    this.userId = userId ?? undefined
     this.isOperational = isOperational
 
     // Maintains proper stack trace for where our error was thrown

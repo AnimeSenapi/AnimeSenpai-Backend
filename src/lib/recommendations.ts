@@ -631,8 +631,8 @@ export async function getTrendingAnime(limit: number = 12): Promise<Recommendati
     reason: 'Trending now'
   }))
   
-  // Cache for 1 hour
-  cache.set(cacheKey, result, 60 * 60 * 1000)
+  // Cache for 1 hour (3600 seconds)
+  cache.set(cacheKey, result, 3600)
   
   return result.slice(0, limit)
 }

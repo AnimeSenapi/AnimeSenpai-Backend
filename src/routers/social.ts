@@ -698,9 +698,30 @@ export const socialRouter = router({
       const logContext = extractLogContext(ctx.req)
       
       try {
+        // Normalize username: decode URL encoding and strip @ prefix
+        let normalizedUsername = input.username
+        try {
+          normalizedUsername = decodeURIComponent(normalizedUsername)
+        } catch (_) {
+          // ignore decode errors; proceed with original
+        }
+        if (normalizedUsername.startsWith('%40')) {
+          normalizedUsername = normalizedUsername.slice(3)
+        }
+        if (normalizedUsername.startsWith('@')) {
+          normalizedUsername = normalizedUsername.slice(1)
+        }
+        normalizedUsername = normalizedUsername.toLowerCase().trim()
+        
         // Try exact match first
-        let user = await db.user.findUnique({
-          where: { username: input.username },
+        console.log('Searching for user with username:', normalizedUsername)
+        let user = await db.user.findFirst({
+          where: { 
+            username: {
+              mode: 'insensitive',
+              equals: normalizedUsername
+            }
+          },
           select: {
             id: true,
             username: true,
@@ -708,9 +729,10 @@ export const socialRouter = router({
             avatar: true,
             bio: true,
             createdAt: true,
-            role: true,
+            primaryRoleId: true,
           }
         })
+        console.log('Found user:', user)
         
         // If not found, try case-insensitive search for existing uppercase usernames
         if (!user) {
@@ -718,7 +740,7 @@ export const socialRouter = router({
             where: {
               username: {
                 mode: 'insensitive',
-                equals: input.username
+                equals: normalizedUsername
               }
             },
             select: {
@@ -728,7 +750,7 @@ export const socialRouter = router({
               avatar: true,
               bio: true,
               createdAt: true,
-              role: true,
+              primaryRoleId: true,
             },
             take: 1
           })
@@ -768,6 +790,7 @@ export const socialRouter = router({
         }
         
         // Get stats
+        console.log('Calculating stats for user:', user.id)
         const [followersCount, followingCount, friendsCount, animeCount, reviewsCount] = await Promise.all([
           db.follow.count({ where: { followingId: user.id } }),
           db.follow.count({ where: { followerId: user.id } }),
@@ -782,6 +805,7 @@ export const socialRouter = router({
           db.userAnimeList.count({ where: { userId: user.id } }),
           db.userAnimeReview.count({ where: { userId: user.id, isPublic: true } })
         ])
+        console.log('Stats calculated:', { followersCount, followingCount, friendsCount, animeCount, reviewsCount })
         
         logger.info('User profile viewed', logContext, {
           username: input.username,
@@ -1145,7 +1169,7 @@ export const socialRouter = router({
           INNER JOIN "user_data"."user_anime_lists" al ON al."userId" = u.id
           WHERE al."animeId" = ANY(${myAnimeIds})
             AND u.id != ALL(${connectedUserIds})
-            AND u.email_verified = true
+            AND u."emailVerified" = true
             AND al.status IN ('watching', 'completed')
           GROUP BY u.id, u.username, u.avatar
           HAVING COUNT(DISTINCT al."animeId") >= 3

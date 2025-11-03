@@ -3,9 +3,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from './routers'
 import { Context } from './lib/trpc'
 import { logger, extractLogContext, generateRequestId } from './lib/logger'
-import { createError, handleError } from './lib/errors'
-import { errorRateMiddleware } from './lib/monitoring'
-import { queryMonitoringMiddleware } from './lib/query-monitor'
+import { handleError } from './lib/errors'
 import { gzip } from 'zlib'
 import { promisify } from 'util'
 
@@ -42,6 +40,27 @@ async function findAvailablePort(startPort: number): Promise<number> {
 
 // Start server
 ;(async () => {
+  // Initialize cache system
+  const { cache } = await import('./lib/cache')
+  const { CacheWarmer } = await import('./lib/cache-middleware')
+  
+  // Warm up cache
+  await CacheWarmer.warmUp()
+  
+  // Initialize monitoring and health check systems
+  const { monitoringService } = await import('./lib/monitoring-service')
+  const { healthChecker } = await import('./lib/health-check')
+  const { errorHandler } = await import('./lib/error-handler')
+  const { queryOptimizer } = await import('./lib/query-optimizer')
+  const { securityManager } = await import('./lib/security')
+  const { performanceMonitor } = await import('./lib/performance-monitor')
+  
+  // Start monitoring
+  await monitoringService.start()
+  
+  // Start performance monitoring
+  performanceMonitor.startProfilingMode()
+  
   // Initialize background jobs
   const { initializeBackgroundJobs } = await import('./lib/background-jobs')
   initializeBackgroundJobs()
@@ -71,9 +90,31 @@ async function findAvailablePort(startPort: number): Promise<number> {
       
       // Allow Vercel preview deployments (*.vercel.app)
       const isVercelPreview = origin.endsWith('.vercel.app')
-      const corsOrigin = allowedOrigins.includes(origin) || isVercelPreview ? origin : allowedOrigins[0]
+      const corsOrigin = allowedOrigins.includes(origin) || isVercelPreview ? origin : allowedOrigins[0]!
       
       try {
+        // Security analysis
+        const securityAnalysis = await securityManager.analyzeRequest(request)
+        if (!securityAnalysis.allowed) {
+          logger.warn('Request blocked by security', logContext, undefined, {
+            reason: securityAnalysis.reason,
+            ip: logContext.ipAddress,
+            userAgent: request.headers.get('user-agent')
+          })
+          
+          return new Response(JSON.stringify({
+            error: 'Request blocked',
+            reason: securityAnalysis.reason
+          }), {
+            status: 403,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': corsOrigin,
+              'X-Request-ID': requestId,
+            } as HeadersInit,
+          })
+        }
+
         // Log incoming request
         logger.request(request.method, request.url, logContext, {
           userAgent: request.headers.get('user-agent'),
@@ -90,32 +131,25 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          },
+          } as HeadersInit,
         })
       }
 
       // Health check endpoint
       if (url.pathname === '/health' || url.pathname === '/') {
-        const healthResponse = {
-          status: 'ok',
-          message: 'AnimeSenpai API Server is running',
-          timestamp: new Date().toISOString(),
-          version: '1.0.0',
-          uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          environment: process.env.NODE_ENV || 'development',
-        }
+        const { healthChecker } = await import('./lib/health-check')
+        const healthStatus = await healthChecker.runAllChecks()
         
-        logger.info('Health check requested', logContext)
+        logger.api('Health check requested', logContext, { healthStatus })
         
-        return new Response(JSON.stringify(healthResponse), {
-          status: 200,
+        return new Response(JSON.stringify(healthStatus, null, 2), {
+          status: healthStatus.status === 'unhealthy' ? 503 : 200,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          },
+          } as HeadersInit,
         })
       }
 
@@ -124,6 +158,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
         const { queryStats } = await import('./lib/db')
         const { getRateLimitStats } = await import('./lib/rate-limit')
         const { jobQueue } = await import('./lib/background-jobs')
+        const { cache } = await import('./lib/cache')
         
         const avgResponseTime = performanceMetrics.requests > 0 
           ? (performanceMetrics.totalResponseTime / performanceMetrics.requests).toFixed(2)
@@ -132,6 +167,8 @@ async function findAvailablePort(startPort: number): Promise<number> {
         const avgQueryTime = queryStats.totalQueries > 0
           ? (queryStats.totalDuration / queryStats.totalQueries).toFixed(2)
           : 0
+        
+        const cacheStats = await cache.getStats()
         
         const metricsResponse = {
           server: {
@@ -149,6 +186,15 @@ async function findAvailablePort(startPort: number): Promise<number> {
               duration: `${queryStats.slowestQuery.duration}ms`,
               query: queryStats.slowestQuery.query.substring(0, 100),
             },
+          },
+          cache: {
+            connected: cacheStats.connected,
+            size: cacheStats.size,
+            maxSize: cacheStats.maxSize,
+            memoryUsage: `${cacheStats.memoryUsage.toFixed(2)}MB`,
+            hitRate: `${cacheStats.hitRate}%`,
+            evicted: cacheStats.evicted,
+            expired: cacheStats.expired,
           },
           rateLimit: getRateLimitStats(),
           backgroundJobs: jobQueue.getStats(),
@@ -172,7 +218,31 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          },
+          } as HeadersInit,
+        })
+      }
+
+      // Monitoring dashboard endpoint
+      if (url.pathname === '/monitoring') {
+        const { monitoringService } = await import('./lib/monitoring-service')
+        const { errorHandler } = await import('./lib/error-handler')
+        
+        const monitoringData = {
+          system: monitoringService.getSystemStatus(),
+          metrics: monitoringService.getMetrics().slice(-10), // Last 10 metrics
+          alerts: monitoringService.getAlerts().filter(a => !a.resolved),
+          errors: errorHandler.getErrorStats(),
+          timestamp: new Date().toISOString(),
+        }
+        
+        return new Response(JSON.stringify(monitoringData, null, 2), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Access-Control-Allow-Credentials': 'true',
+            'X-Request-ID': requestId,
+          } as HeadersInit,
         })
       }
 

@@ -357,7 +357,64 @@ export const recommendationsRouter = router({
         })
       }
       
-      const similar = await findSimilarAnimeByEmbedding(input.animeId, input.limit)
+      let similar = await findSimilarAnimeByEmbedding(input.animeId, input.limit)
+      let useEmbeddings = similar.length > 0
+      
+      // Fallback to genre-based similarity if no embeddings exist
+      if (similar.length === 0) {
+        const sourceAnime = await db.anime.findUnique({
+          where: { id: input.animeId },
+          include: {
+            genres: {
+              include: {
+                genre: true
+              }
+            }
+          }
+        })
+        
+        if (sourceAnime) {
+          const genreIds = sourceAnime.genres.map(g => g.genreId)
+          
+          // Find anime with similar genres
+          const candidateAnime = await db.anime.findMany({
+            where: {
+              id: { not: input.animeId },
+              genres: {
+                some: {
+                  genreId: { in: genreIds }
+                }
+              }
+            },
+            include: {
+              genres: {
+                include: {
+                  genre: true
+                }
+              }
+            },
+            take: input.limit * 2, // Get more to filter down
+            orderBy: {
+              averageRating: 'desc'
+            }
+          })
+          
+          // Score by genre overlap
+          similar = candidateAnime.map(anime => {
+            const animeGenres = anime.genres.map(g => g.genreId)
+            const overlap = genreIds.filter(g => animeGenres.includes(g)).length
+            const union = new Set([...genreIds, ...animeGenres]).size
+            const similarity = overlap / union
+            
+            return {
+              animeId: anime.id,
+              similarity
+            }
+          })
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, input.limit)
+        }
+      }
       
       // Get anime details
       const animeIds = similar.map(s => s.animeId)
@@ -384,6 +441,8 @@ export const recommendationsRouter = router({
               id: anime.id,
               slug: anime.slug,
               title: anime.title,
+              titleEnglish: anime.titleEnglish,
+              titleJapanese: anime.titleJapanese,
               coverImage: anime.coverImage,
               year: anime.year,
               averageRating: anime.averageRating,
@@ -393,7 +452,7 @@ export const recommendationsRouter = router({
               }))
             },
             similarity: s.similarity,
-            reason: 'Semantically similar'
+            reason: useEmbeddings ? 'Semantically similar' : 'Similar genres'
           }
         }).filter(Boolean)
       }

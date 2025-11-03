@@ -1,4 +1,5 @@
 import { AppError, ErrorCode } from './errors'
+import { getLoggerConfig, shouldLogCategory, LOG_CATEGORIES, type LogCategory } from './logger-config'
 
 export enum LogLevel {
   ERROR = 'error',
@@ -34,17 +35,15 @@ export interface LogEntry {
 }
 
 class Logger {
-  private isDevelopment: boolean
+  private config = getLoggerConfig()
   private logLevel: LogLevel
 
   constructor() {
-    this.isDevelopment = process.env.NODE_ENV === 'development'
     this.logLevel = this.getLogLevel()
   }
 
   private getLogLevel(): LogLevel {
-    const envLevel = process.env.LOG_LEVEL?.toLowerCase()
-    switch (envLevel) {
+    switch (this.config.level) {
       case 'error':
         return LogLevel.ERROR
       case 'warn':
@@ -54,7 +53,7 @@ class Logger {
       case 'debug':
         return LogLevel.DEBUG
       default:
-        return this.isDevelopment ? LogLevel.DEBUG : LogLevel.INFO
+        return LogLevel.INFO
     }
   }
 
@@ -65,19 +64,23 @@ class Logger {
     return messageLevelIndex <= currentLevelIndex
   }
 
+  private shouldLogWithCategory(level: LogLevel, category: LogCategory): boolean {
+    return this.shouldLog(level) && shouldLogCategory(category, this.config)
+  }
+
   private formatLogEntry(level: LogLevel, message: string, context?: LogContext, error?: any, metadata?: any): LogEntry {
     return {
       level,
       message,
       timestamp: new Date().toISOString(),
-      context,
+      context: context ?? undefined,
       error: error ? {
         code: error.code || 'UNKNOWN_ERROR',
         message: error.message || 'Unknown error',
         stack: error.stack,
         details: error.details,
       } : undefined,
-      metadata,
+      metadata: metadata ?? undefined,
     }
   }
 
@@ -163,20 +166,65 @@ class Logger {
     this.info(`[API] ${message}`, { ...context, category: 'api' }, metadata)
   }
 
-  // Performance logging
-  performance(message: string, duration: number, context?: LogContext, metadata?: any): void {
-    this.info(`[PERFORMANCE] ${message}`, { ...context, duration, category: 'performance' }, metadata)
-  }
-
-  // Request logging
-  request(method: string, url: string, context?: LogContext, metadata?: any): void {
-    this.info(`[REQUEST] ${method} ${url}`, { ...context, method, url, category: 'request' }, metadata)
-  }
-
   // Response logging
   response(method: string, url: string, statusCode: number, duration: number, context?: LogContext, metadata?: any): void {
     const level = statusCode >= 400 ? LogLevel.ERROR : LogLevel.INFO
     this.output(this.formatLogEntry(level, `[RESPONSE] ${method} ${url} ${statusCode}`, { ...context, method, url, statusCode, duration, category: 'response' }, undefined, metadata))
+  }
+
+  // Category-based logging methods
+  request(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.INFO, LOG_CATEGORIES.REQUEST)) {
+      this.output(this.formatLogEntry(LogLevel.INFO, `[REQUEST] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  performance(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.DEBUG, LOG_CATEGORIES.PERFORMANCE)) {
+      this.output(this.formatLogEntry(LogLevel.DEBUG, `[PERFORMANCE] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  security(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.WARN, LOG_CATEGORIES.SECURITY)) {
+      this.output(this.formatLogEntry(LogLevel.WARN, `[SECURITY] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  cache(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.DEBUG, LOG_CATEGORIES.CACHE)) {
+      this.output(this.formatLogEntry(LogLevel.DEBUG, `[CACHE] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  database(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.DEBUG, LOG_CATEGORIES.DATABASE)) {
+      this.output(this.formatLogEntry(LogLevel.DEBUG, `[DATABASE] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  monitoring(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.DEBUG, LOG_CATEGORIES.MONITORING)) {
+      this.output(this.formatLogEntry(LogLevel.DEBUG, `[MONITORING] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  auth(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.INFO, LOG_CATEGORIES.AUTH)) {
+      this.output(this.formatLogEntry(LogLevel.INFO, `[AUTH] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  api(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.INFO, LOG_CATEGORIES.API)) {
+      this.output(this.formatLogEntry(LogLevel.INFO, `[API] ${message}`, context, undefined, metadata))
+    }
+  }
+
+  system(message: string, context?: LogContext, metadata?: any): void {
+    if (this.shouldLogWithCategory(LogLevel.INFO, LOG_CATEGORIES.SYSTEM)) {
+      this.output(this.formatLogEntry(LogLevel.INFO, `[SYSTEM] ${message}`, context, undefined, metadata))
+    }
   }
 }
 
@@ -279,7 +327,7 @@ export function generateRequestId(): string {
 export function extractLogContext(req: Request, userId?: string): LogContext {
   return {
     requestId: req.headers.get('x-request-id') || generateRequestId(),
-    userId,
+    userId: userId ?? undefined,
     ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
     userAgent: req.headers.get('user-agent') || 'unknown',
     method: req.method,

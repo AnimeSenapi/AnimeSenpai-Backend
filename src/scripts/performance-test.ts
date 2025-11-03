@@ -189,7 +189,7 @@ async function runPerformanceTests() {
   console.log('\n🏆 Testing Achievements...')
   await testQuery('Get All Achievements', async () => {
     return db.achievement.findMany({
-      orderBy: { tier: 'asc' }
+      orderBy: { createdAt: 'asc' }
     })
   })
   

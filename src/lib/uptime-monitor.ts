@@ -164,8 +164,8 @@ class UptimeMonitor {
       const { PrismaClient } = await import('@prisma/client')
       const prisma = new PrismaClient()
       
-      // Simple query to check database connectivity
-      await prisma.$queryRaw`SELECT 1`
+      // Simple query to check database connectivity (use count instead of raw query for Prisma Accelerate compatibility)
+      await prisma.user.count()
       await prisma.$disconnect()
 
       return {

@@ -15,6 +15,7 @@ export enum UserRole {
   USER = 'user',       // Regular users
   TESTER = 'tester',   // Beta testers - access to unreleased features
   ADMIN = 'admin',     // Full access
+  OWNER = 'owner',     // System owner - highest access
 }
 
 // Feature flag cache (in-memory for performance)
@@ -34,6 +35,7 @@ export function hasRole(userRole: string, requiredRole: UserRole): boolean {
     [UserRole.USER]: 1,
     [UserRole.TESTER]: 2,
     [UserRole.ADMIN]: 3,
+    [UserRole.OWNER]: 4,
   }
 
   const userLevel = hierarchy[userRole] || 0
@@ -125,20 +127,25 @@ export function requireRole(userRole: string, requiredRole: UserRole) {
 }
 
 /**
- * Require admin role (throws error if not admin)
+ * Require admin level access or higher (admin priority = 3, owner priority = 4)
  */
 export function requireAdmin(userRole: string) {
-  requireRole(userRole, UserRole.ADMIN)
+  if (!hasRole(userRole, UserRole.ADMIN)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'This action requires admin level access or higher',
+    })
+  }
 }
 
 /**
- * Require tester or admin role (throws error if neither)
+ * Require tester level access or higher (tester priority = 2, admin priority = 3, owner priority = 4)
  */
 export function requireTester(userRole: string) {
-  if (!hasAnyRole(userRole, [UserRole.TESTER, UserRole.ADMIN])) {
+  if (!hasRole(userRole, UserRole.TESTER)) {
     throw new TRPCError({
       code: 'FORBIDDEN',
-      message: 'This action requires tester or admin role',
+      message: 'This action requires tester level access or higher',
     })
   }
 }

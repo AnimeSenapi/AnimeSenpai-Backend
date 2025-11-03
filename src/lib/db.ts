@@ -28,7 +28,7 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
   // Bun handles connections differently than Node.js
   datasources: {
     db: {
-      url: process.env.DATABASE_URL,
+      url: process.env.DATABASE_URL || 'file:./dev.db',
     },
   },
 })

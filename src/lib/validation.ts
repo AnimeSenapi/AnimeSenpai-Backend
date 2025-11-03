@@ -14,14 +14,14 @@ export const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters long')
   .max(128, 'Password must be less than 128 characters')
-  .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/, 
+  .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`])[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]+$/, 
     'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
 
 export const usernameSchema = z
   .string()
   .min(2, 'Username must be at least 2 characters long')
   .max(50, 'Username must be less than 50 characters')
-  .regex(/^[a-z0-9_-]+$/, 'Username must be lowercase and can only contain letters, numbers, underscores, and hyphens')
+  .regex(/^[a-z0-9_-]+$/, 'Username must be lowercase only. Please use only lowercase letters, numbers, underscores, and hyphens.')
   .toLowerCase()
   .trim()
 
@@ -302,8 +302,8 @@ export function validatePasswordStrength(password: string): { isValid: boolean; 
     errors.push('Password must contain at least one number')
   }
   
-  if (!/[@$!%*?&]/.test(password)) {
-    errors.push('Password must contain at least one special character (@$!%*?&)')
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password)) {
+    errors.push('Password must contain at least one special character')
   }
   
   // Check for common weak patterns

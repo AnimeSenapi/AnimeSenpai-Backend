@@ -25,7 +25,7 @@
     "typescript": "^5.3.3",
     "undici": "^7.16.0",
     "uuid": "^11.0.0",
-    "validator": "^13.15.15",
+    "validator": "^13.15.20",
     "zod": "^3.22.4"
   },
   "description": "AnimeSenpai Microservice Backend API",
@@ -47,18 +47,33 @@
   },
   "scripts": {
     "dev": "bun run --hot src/index.ts",
+    "dev:clean": "bun run scripts/start-clean.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
+    "test:unit": "bun run scripts/run-tests.ts --unit-only",
+    "test:integration": "bun run scripts/run-tests.ts --integration-only",
+    "test:load": "bun run scripts/run-tests.ts --load-only",
+    "test:all": "bun run scripts/run-tests.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "bun run prisma/seed.ts",
-    "type-check": "tsc --noEmit"
+    "db:seed:achievements": "bun run prisma/seed-achievements.ts",
+    "db:seed:tier-achievements": "bun run prisma/seed-tier-achievements.ts",
+    "db:seed:gamified-achievements": "bun run prisma/seed-gamified-achievements.ts",
+    "db:seed:all-achievements": "bun run prisma/seed-all-achievements-with-icons.ts",
+    "db:seed:genres": "bun run prisma/seed-genres.ts",
+    "db:clear:achievements": "bun run prisma/clear-achievements.ts",
+    "type-check": "tsc --noEmit",
+    "performance-test": "bun run src/scripts/performance-test.ts",
+    "health-check": "curl -s http://localhost:3005/health | jq",
+    "metrics": "curl -s http://localhost:3005/metrics | jq",
+    "monitoring": "curl -s http://localhost:3005/monitoring | jq"
   },
   "devDependencies": {
     "@vercel/node": "4.0.0"

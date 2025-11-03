@@ -1,11 +1,7 @@
 /**
- * Achievements Router - Phase 3 Social Features
+ * Achievements Router - Tier-based Achievement System
  * 
- * Achievement/badge system for user milestones:
- * - Watching achievements (10, 50, 100, 500 anime)
- * - Rating achievements (10, 50, 100 ratings)
- * - Social achievements (10, 50 friends)
- * - Discovery achievements (try new genres)
+ * Achievement/badge system for user milestones with tiered progression
  */
 
 import { z } from 'zod'
@@ -15,15 +11,20 @@ import { logger, extractLogContext } from '../lib/logger'
 
 export const achievementsRouter = router({
   /**
-   * Get all available achievements
+   * Get all achievement types with their tiers
    */
   getAll: publicProcedure
     .query(async () => {
       try {
         const achievements = await db.achievement.findMany({
+          include: {
+            tiers: {
+              orderBy: { createdAt: 'asc' }
+            }
+          },
           orderBy: [
             { category: 'asc' },
-            { requirement: 'asc' }
+            { baseName: 'asc' }
           ]
         })
         
@@ -32,12 +33,13 @@ export const achievementsRouter = router({
         }
         
       } catch (error) {
+        logger.error('Failed to fetch achievements', error as Error)
         throw error
       }
     }),
 
   /**
-   * Get user's achievements
+   * Get user's achievements with tier progress
    */
   getMyAchievements: protectedProcedure
     .query(async ({ ctx }) => {
@@ -47,25 +49,47 @@ export const achievementsRouter = router({
         const userAchievements = await db.userAchievement.findMany({
           where: { userId: ctx.user.id },
           include: {
-            achievement: true
+            achievement: true,
+            tier: true
           },
           orderBy: { unlockedAt: 'desc' }
         })
         
-        const allAchievements = await db.achievement.findMany()
+        const allAchievements = await db.achievement.findMany({
+          include: {
+            tiers: {
+              orderBy: { createdAt: 'asc' }
+            }
+          }
+        })
         
-        // Calculate progress for locked achievements
+        // Calculate progress for each achievement type
         const progress = await calculateUserProgress(ctx.user.id)
         
         const achievementsWithProgress = allAchievements.map(achievement => {
-          const unlocked = userAchievements.find(ua => ua.achievementId === achievement.id)
+          const unlockedTiers = userAchievements
+            .filter(ua => ua.achievementId === achievement.id)
+            .map(ua => ua.tier.tier)
+            .sort((a, b) => a - b)
+          
+          const currentProgress = progress[achievement.key] || 0
+          const nextTier = achievement.tiers.find(tier => 
+            !unlockedTiers.includes(tier.tier) && currentProgress >= tier.requirement
+          )
+          
+          const highestUnlockedTier = unlockedTiers.length > 0 ? Math.max(...unlockedTiers) : 0
+          const nextTierRequirement = achievement.tiers.find(tier => tier.tier === highestUnlockedTier + 1)?.requirement || 0
           
           return {
             ...achievement,
-            unlocked: !!unlocked,
-            unlockedAt: unlocked?.unlockedAt,
-            progress: progress[achievement.key] || 0,
-            percentage: Math.min(100, Math.floor((progress[achievement.key] || 0) / achievement.requirement * 100))
+            unlockedTiers,
+            currentProgress,
+            highestUnlockedTier,
+            nextTierRequirement,
+            nextTier,
+            progressPercentage: nextTierRequirement > 0 
+              ? Math.min(100, Math.floor(currentProgress / nextTierRequirement * 100))
+              : 100
           }
         })
         
@@ -78,13 +102,14 @@ export const achievementsRouter = router({
           return acc
         }, {} as Record<string, typeof achievementsWithProgress>)
         
-        const totalPoints = userAchievements.reduce((sum, ua) => sum + ua.achievement.points, 0)
+        const totalPoints = userAchievements.reduce((sum, ua) => sum + ua.tier.points, 0)
+        const totalTiersUnlocked = userAchievements.length
         
         return {
           achievements: achievementsWithProgress,
           byCategory,
-          unlockedCount: userAchievements.length,
-          totalCount: allAchievements.length,
+          unlockedCount: totalTiersUnlocked,
+          totalCount: allAchievements.reduce((sum, a) => sum + a.tiers.length, 0),
           totalPoints
         }
         
@@ -95,7 +120,7 @@ export const achievementsRouter = router({
     }),
 
   /**
-   * Check and unlock achievements for a user
+   * Check and unlock achievement tiers for a user
    * Called automatically after user actions
    */
   checkAndUnlock: protectedProcedure
@@ -104,31 +129,43 @@ export const achievementsRouter = router({
       
       try {
         const progress = await calculateUserProgress(ctx.user.id)
-        const allAchievements = await db.achievement.findMany()
-        const userAchievements = await db.userAchievement.findMany({
-          where: { userId: ctx.user.id },
-          select: { achievementId: true }
+        const allAchievements = await db.achievement.findMany({
+          include: {
+            tiers: {
+              orderBy: { createdAt: 'asc' }
+            }
+          }
         })
         
-        const unlockedIds = new Set(userAchievements.map(ua => ua.achievementId))
+        const userAchievements = await db.userAchievement.findMany({
+          where: { userId: ctx.user.id },
+          select: { tierId: true }
+        })
+        
+        const unlockedTierIds = new Set(userAchievements.map(ua => ua.tierId))
         const newlyUnlocked: any[] = []
         
-        // Check each achievement
+        // Check each achievement type
         for (const achievement of allAchievements) {
-          if (unlockedIds.has(achievement.id)) continue
-          
           const currentProgress = progress[achievement.key] || 0
           
-          if (currentProgress >= achievement.requirement) {
-            // Unlock achievement
+          // Find tiers that can be unlocked
+          const unlockableTiers = achievement.tiers.filter(tier => 
+            !unlockedTierIds.has(tier.id) && currentProgress >= tier.requirement
+          )
+          
+          // Unlock each tier
+          for (const tier of unlockableTiers) {
             const unlocked = await db.userAchievement.create({
               data: {
                 userId: ctx.user.id,
                 achievementId: achievement.id,
+                tierId: tier.id,
                 progress: currentProgress
               },
               include: {
-                achievement: true
+                achievement: true,
+                tier: true
               }
             })
             
@@ -139,8 +176,8 @@ export const achievementsRouter = router({
               data: {
                 userId: ctx.user.id,
                 type: 'achievement_unlocked',
-                relatedId: achievement.id,
-                message: `Achievement unlocked: ${achievement.name}!`,
+                relatedId: tier.id,
+                message: `Achievement unlocked: ${tier.name}!`,
                 actionUrl: '/achievements'
               }
             })
@@ -155,92 +192,184 @@ export const achievementsRouter = router({
         }
         
         return {
-          newlyUnlocked
+          newlyUnlocked,
+          count: newlyUnlocked.length
         }
         
       } catch (error) {
-        logger.error('Failed to check achievements', error as Error, logContext, { userId: ctx.user.id })
+        logger.error('Failed to check and unlock achievements', error as Error, logContext, { userId: ctx.user.id })
+        throw error
+      }
+    }),
+
+  /**
+   * Get achievement statistics
+   */
+  getStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      const logContext = extractLogContext(ctx.req, ctx.user.id)
+      
+      try {
+        const [
+          totalAchievements,
+          totalTiers,
+          userAchievements,
+          categoryStats
+        ] = await Promise.all([
+          db.achievement.count(),
+          db.achievementTier.count(),
+          db.userAchievement.findMany({
+            where: { userId: ctx.user.id },
+            include: {
+              tier: true
+            }
+          }),
+          db.achievement.groupBy({
+            by: ['category'],
+            _count: { id: true }
+          })
+        ])
+        
+        const totalPoints = userAchievements.reduce((sum, ua) => sum + ua.tier.points, 0)
+        const userUnlockedTiers = userAchievements.length
+        
+        return {
+          totalAchievements,
+          totalTiers,
+          unlockedTiers: userUnlockedTiers,
+          totalPoints,
+          categoryStats
+        }
+        
+      } catch (error) {
+        logger.error('Failed to fetch achievement stats', error as Error, logContext, { userId: ctx.user.id })
         throw error
       }
     })
 })
 
 /**
- * Calculate user's progress towards all achievements
+ * Calculate user progress for all achievement types
  */
 async function calculateUserProgress(userId: string): Promise<Record<string, number>> {
   const [
     animeList,
     ratings,
-    friends,
-    genresWatched,
+    completed,
     reviews,
-    activities
+    followers,
+    following,
+    mutualFollows,
+    perfectRatings,
+    userProfile
   ] = await Promise.all([
+    // Anime list stats
     db.userAnimeList.count({ where: { userId } }),
     db.userAnimeList.count({ where: { userId, score: { not: null } } }),
+    db.userAnimeList.count({ where: { userId, status: 'completed' } }),
+    
+    // Review stats
+    db.userAnimeReview.count({ where: { userId } }),
+    
+    // Social stats
+    db.friendship.count({
+      where: { user2Id: userId }
+    }),
+    db.friendship.count({
+      where: { user1Id: userId }
+    }),
     db.friendship.count({
       where: {
-        OR: [
+        AND: [
           { user1Id: userId },
-          { user2Id: userId }
+          { user2: { friendships1: { some: { user1Id: userId } } } }
         ]
       }
     }),
-    db.userAnimeList.findMany({
-      where: { userId },
-      select: {
-        animeId: true
-      }
+    
+    // Perfect ratings
+    db.userAnimeList.count({
+      where: { userId, score: 10 }
     }),
-    db.userAnimeReview.count({ where: { userId } }),
-    db.activityFeed.count({ where: { userId } })
+    
+    // Profile completion
+    db.user.findUnique({
+      where: { id: userId },
+      select: {
+        avatar: true,
+        bio: true,
+        createdAt: true
+      }
+    })
   ])
   
-  // Count unique genres (simplified - would need to query separately)
-  const uniqueGenres = new Set()
-  // Simplified: just use count of anime as proxy for genre diversity
-  const genreCount = Math.min(genresWatched.length, 20) // Rough estimate
-  
-  // Count completed anime
-  const completed = await db.userAnimeList.count({
-    where: { userId, status: 'completed' }
+  // Get unique genres from user's anime
+  const listItems = await db.userAnimeList.findMany({
+    where: { userId },
+    select: {
+      animeId: true
+    }
   })
   
+  let genreCount = 0
+  if (listItems.length > 0) {
+    const animeIds = listItems.map(item => item.animeId)
+    const animes = await db.anime.findMany({
+      where: { id: { in: animeIds } },
+      select: {
+        genres: {
+          select: {
+            genre: {
+              select: {
+                slug: true
+              }
+            }
+          }
+        }
+      }
+    })
+  
+  // Calculate unique genres
+    const uniqueGenres = new Set<string>()
+    animes.forEach(anime => {
+      anime.genres.forEach(g => {
+        uniqueGenres.add(g.genre.slug)
+    })
+  })
+    genreCount = uniqueGenres.size
+  }
+  
+  // Check if user is early adopter (joined within first month of launch)
+  const launchDate = new Date('2025-01-01')
+  const oneMonthAfterLaunch = new Date(launchDate)
+  oneMonthAfterLaunch.setMonth(oneMonthAfterLaunch.getMonth() + 1)
+  const isEarlyAdopter = userProfile?.createdAt && userProfile.createdAt <= oneMonthAfterLaunch ? 1 : 0
+  
+  // Check profile completion
+  const hasAvatar = !!userProfile?.avatar
+  const hasBio = !!userProfile?.bio && userProfile.bio.trim().length > 0
+  const isProfileComplete = hasAvatar && hasBio ? 1 : 0
+  
   return {
-    // Watching achievements
-    'first_anime': animeList > 0 ? 1 : 0,
-    'watched_10': animeList,
-    'watched_50': animeList,
-    'watched_100': animeList,
-    'watched_500': animeList,
-    'completed_10': completed,
-    'completed_50': completed,
-    'completed_100': completed,
+    // Watching achievements - using new key names from gamified achievements
+    'anime_completed': completed,
+    'anime_watched': animeList,
     
     // Rating achievements
-    'first_rating': ratings > 0 ? 1 : 0,
-    'rated_10': ratings,
-    'rated_50': ratings,
-    'rated_100': ratings,
+    'anime_rated': ratings,
+    'perfect_ratings': perfectRatings,
+    'reviews_written': reviews,
     
     // Social achievements
-    'first_friend': friends > 0 ? 1 : 0,
-    'friends_10': friends,
-    'friends_50': friends,
-    'popular_100': friends,
+    'followers_gained': followers,
+    'following_count': following,
+    'mutual_friends': mutualFollows,
     
     // Discovery achievements
-    'genre_explorer': genreCount,
-    'genre_master': genreCount,
+    'genres_explored': genreCount,
     
-    // Review achievements
-    'first_review': reviews > 0 ? 1 : 0,
-    'reviewer_10': reviews,
-    'reviewer_50': reviews,
-    
-    // Activity achievements
-    'active_user': activities,
+    // Special achievements
+    'early_adopter': isEarlyAdopter,
+    'profile_complete': isProfileComplete,
   }
 }
-

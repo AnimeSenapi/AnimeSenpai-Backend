@@ -130,10 +130,12 @@ export function getRateLimitStats() {
   
   for (const [key, entry] of rateLimitStore.entries()) {
     const identifier = key.split(':')[0]
-    stats.activeUsers.add(identifier)
-    
-    const currentCount = userRequests.get(identifier) || 0
-    userRequests.set(identifier, currentCount + entry.requests.length)
+    if (identifier) {
+      stats.activeUsers.add(identifier)
+      
+      const currentCount = userRequests.get(identifier) || 0
+      userRequests.set(identifier, currentCount + entry.requests.length)
+    }
   }
   
   stats.topUsers = Array.from(userRequests.entries())

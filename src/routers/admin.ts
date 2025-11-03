@@ -20,7 +20,7 @@ export const adminRouter = router({
     .input(z.object({
       page: z.number().min(1).default(1),
       limit: z.number().min(1).max(100).default(20),
-      role: z.enum(['user', 'tester', 'admin']).optional(),
+      role: z.enum(['user', 'tester', 'admin', 'owner']).optional(),
     }).optional())
     .query(async ({ input = {}, ctx }) => {
       // Only admins can view all users
@@ -350,7 +350,7 @@ export const adminRouter = router({
   updateUserRole: protectedProcedure
     .input(z.object({
       userId: z.string(),
-      role: z.enum(['user', 'moderator', 'admin']),
+      role: z.enum(['user', 'moderator', 'admin', 'owner']),
     }))
     .mutation(async ({ input, ctx }) => {
       requireAdmin(ctx.user.role)
@@ -1563,6 +1563,310 @@ export const adminRouter = router({
         success: true,
         count: result.count
       }
+    }),
+
+  // ===== ACHIEVEMENTS MANAGEMENT =====
+  
+  /**
+   * Get all achievements with pagination and filtering
+   */
+  getAchievements: protectedProcedure
+    .input(z.object({
+      page: z.number().min(1).default(1),
+      limit: z.number().min(1).max(100).default(20),
+      category: z.string().optional(),
+      tier: z.string().optional(),
+      search: z.string().optional(),
+    }).optional())
+    .query(async ({ input = {}, ctx }) => {
+      requireAdmin(ctx.user.role)
+      await checkAdminRateLimit(ctx.user.id)
+
+      const { page = 1, limit = 20, category, tier, search } = input
+      const skip = (page - 1) * limit
+
+      const where: any = {}
+      if (category) where.category = category
+      // Note: tier filtering would need to be done on AchievementTier, not Achievement
+      // For now, we'll skip tier filtering at the Achievement level
+      if (search) {
+        where.OR = [
+          { baseName: { contains: search, mode: 'insensitive' } },
+          { baseDescription: { contains: search, mode: 'insensitive' } },
+          { key: { contains: search, mode: 'insensitive' } }
+        ]
+      }
+
+      const [achievements, total] = await Promise.all([
+        db.achievement.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: [
+            { category: 'asc' },
+            { baseName: 'asc' },
+            { createdAt: 'asc' }
+          ],
+          include: {
+            tiers: {
+              orderBy: { tier: 'asc' }
+            },
+            _count: {
+              select: {
+                userAchievements: true
+              }
+            }
+          }
+        }),
+        db.achievement.count({ where })
+      ])
+
+      return {
+        achievements,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    }),
+
+  /**
+   * Create a new achievement
+   */
+  createAchievement: protectedProcedure
+    .input(z.object({
+      key: z.string().min(1).max(50),
+      name: z.string().min(1).max(100),
+      description: z.string().min(1).max(500),
+      icon: z.string().min(1).max(10),
+      category: z.enum(['watching', 'rating', 'social', 'discovery', 'special']),
+      tier: z.enum(['bronze', 'silver', 'gold', 'platinum', 'diamond']),
+      requirement: z.number().min(1),
+      points: z.number().min(1).max(1000).default(10),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      await checkAdminRateLimit(ctx.user.id)
+
+      // Check if key already exists
+      const existing = await db.achievement.findUnique({
+        where: { key: input.key }
+      })
+
+      if (existing) {
+        throw new Error('Achievement key already exists')
+      }
+
+      const achievement = await db.achievement.create({
+        data: input
+      })
+
+      await logSecurityEvent(
+        ctx.user.id,
+        'achievement_created',
+        `Created achievement: ${achievement.name}`,
+        { achievementId: achievement.id, key: achievement.key }
+      )
+
+      return { success: true, achievement }
+    }),
+
+  /**
+   * Update an existing achievement
+   */
+  updateAchievement: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).max(100).optional(),
+      description: z.string().min(1).max(500).optional(),
+      icon: z.string().min(1).max(10).optional(),
+      category: z.enum(['watching', 'rating', 'social', 'discovery', 'special']).optional(),
+      tier: z.enum(['bronze', 'silver', 'gold', 'platinum', 'diamond']).optional(),
+      requirement: z.number().min(1).optional(),
+      points: z.number().min(1).max(1000).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      await checkAdminRateLimit(ctx.user.id)
+
+      const { id, ...updateData } = input
+
+      // Check if achievement exists
+      const existing = await db.achievement.findUnique({
+        where: { id }
+      })
+
+      if (!existing) {
+        throw new Error('Achievement not found')
+      }
+
+      const achievement = await db.achievement.update({
+        where: { id },
+        data: updateData
+      })
+
+      await logSecurityEvent(
+        ctx.user.id,
+        'achievement_updated',
+        `Updated achievement: ${achievement.name}`,
+        { achievementId: achievement.id, key: achievement.key }
+      )
+
+      return { success: true, achievement }
+    }),
+
+  /**
+   * Delete an achievement
+   */
+  deleteAchievement: protectedProcedure
+    .input(z.object({
+      id: z.string()
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      await checkAdminRateLimit(ctx.user.id)
+
+      const { id } = input
+
+      // Check if achievement exists
+      const existing = await db.achievement.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              userAchievements: true
+            }
+          }
+        }
+      })
+
+      if (!existing) {
+        throw new Error('Achievement not found')
+      }
+
+      // Check if any users have unlocked this achievement
+      if (existing._count.userAchievements > 0) {
+        throw new Error('Cannot delete achievement that has been unlocked by users')
+      }
+
+      await db.achievement.delete({
+        where: { id }
+      })
+
+      await logSecurityEvent(
+        ctx.user.id,
+        'achievement_deleted',
+        `Deleted achievement: ${existing.name}`,
+        { achievementId: existing.id, key: existing.key }
+      )
+
+      return { success: true }
+    }),
+
+  /**
+   * Get achievement statistics
+   */
+  getAchievementStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      requireAdmin(ctx.user.role)
+
+      const [
+        totalAchievements,
+        totalUnlocks,
+        categoryStats,
+        tierStats,
+        recentUnlocks
+      ] = await Promise.all([
+        db.achievement.count(),
+        db.userAchievement.count(),
+        db.achievement.groupBy({
+          by: ['category'],
+          _count: {
+            id: true
+          }
+        }),
+        db.achievement.groupBy({
+          by: ['tier'],
+          _count: {
+            id: true
+          }
+        }),
+        db.userAchievement.findMany({
+          take: 10,
+          orderBy: { unlockedAt: 'desc' },
+          include: {
+            user: {
+              select: { id: true, name: true, username: true }
+            },
+            achievement: {
+              select: { id: true, name: true, icon: true, tier: true }
+            }
+          }
+        })
+      ])
+
+      return {
+        totalAchievements,
+        totalUnlocks,
+        categoryStats,
+        tierStats,
+        recentUnlocks
+      }
+    }),
+
+  /**
+   * Bulk create achievements from template
+   */
+  bulkCreateAchievements: protectedProcedure
+    .input(z.object({
+      achievements: z.array(z.object({
+        key: z.string().min(1).max(50),
+        name: z.string().min(1).max(100),
+        description: z.string().min(1).max(500),
+        icon: z.string().min(1).max(10),
+        category: z.enum(['watching', 'rating', 'social', 'discovery', 'special']),
+        tier: z.enum(['bronze', 'silver', 'gold', 'platinum', 'diamond']),
+        requirement: z.number().min(1),
+        points: z.number().min(1).max(1000).default(10),
+      }))
+    }))
+    .mutation(async ({ input, ctx }) => {
+      requireAdmin(ctx.user.role)
+      await checkAdminRateLimit(ctx.user.id)
+
+      const { achievements } = input
+
+      // Check for duplicate keys
+      const keys = achievements.map(a => a.key)
+      const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index)
+      if (duplicates.length > 0) {
+        throw new Error(`Duplicate keys found: ${duplicates.join(', ')}`)
+      }
+
+      // Check if any keys already exist
+      const existing = await db.achievement.findMany({
+        where: { key: { in: keys } },
+        select: { key: true }
+      })
+
+      if (existing.length > 0) {
+        throw new Error(`Keys already exist: ${existing.map(e => e.key).join(', ')}`)
+      }
+
+      const created = await db.achievement.createMany({
+        data: achievements
+      })
+
+      await logSecurityEvent(
+        ctx.user.id,
+        'achievements_bulk_created',
+        `Bulk created ${created.count} achievements`,
+        { count: created.count }
+      )
+
+      return { success: true, count: created.count }
     }),
 })
 

@@ -137,7 +137,7 @@ export async function findSimilarUsers(
 ): Promise<SimilarUser[]> {
   const cacheKey = `similar-users:${userId}`
   const cached = cache.get<SimilarUser[]>(cacheKey)
-  if (cached) return cached.slice(0, limit)
+  if (Array.isArray(cached)) return cached.slice(0, limit)
 
   // Get current user's ratings
   const userVector = await getUserRatingVector(userId)
@@ -225,7 +225,7 @@ export async function getCollaborativeRecommendations(
 ): Promise<CollaborativeRecommendation[]> {
   const cacheKey = `collaborative-recs:${userId}`
   const cached = cache.get<CollaborativeRecommendation[]>(cacheKey)
-  if (cached) return cached.slice(0, limit)
+  if (Array.isArray(cached)) return cached.slice(0, limit)
 
   // Find similar users
   const similarUsers = await findSimilarUsers(userId, 50)

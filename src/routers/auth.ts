@@ -43,6 +43,14 @@ export const authRouter = router({
 
         logger.auth('Signup attempt started', logContext, { email, username })
 
+        // Check if username contains uppercase letters
+        if (/[A-Z]/.test(username)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Username must be lowercase only. Please use only lowercase letters, numbers, underscores, and hyphens.'
+          })
+        }
+
         // Check if user already exists (email or username)
         const existingUser = await db.user.findFirst({
           where: {
@@ -156,6 +164,7 @@ export const authRouter = router({
             bio: user.bio,
             role: user.primaryRole?.name || 'user',
             emailVerified: user.emailVerified,
+            createdAt: user.createdAt,
             preferences: user.preferences
           },
           accessToken: tokens.accessToken,
@@ -276,6 +285,7 @@ export const authRouter = router({
           bio: user.bio,
           role: user.primaryRole?.name || 'user',
           emailVerified: user.emailVerified,
+          createdAt: user.createdAt,
           preferences: user.preferences
         },
         accessToken: tokens.accessToken,
@@ -312,6 +322,7 @@ export const authRouter = router({
         bio: user.bio,
         role: user.primaryRole?.name || 'user',
         emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
         preferences: user.preferences
       }
     }),
@@ -375,6 +386,7 @@ export const authRouter = router({
         bio: user.bio,
         role: user.role,
         emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
         preferences: user.preferences
       }
     }),

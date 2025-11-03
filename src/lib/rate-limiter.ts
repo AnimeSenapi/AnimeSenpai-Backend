@@ -211,7 +211,9 @@ export function getRateLimitStats(): {
   
   for (const key of rateLimitStore.keys()) {
     const type = key.split(':')[0]
-    byType[type] = (byType[type] || 0) + 1
+    if (type) {
+      byType[type] = (byType[type] || 0) + 1
+    }
   }
   
   return {

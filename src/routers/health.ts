@@ -30,8 +30,8 @@ class HealthChecker {
   async checkDatabase(): Promise<HealthCheck> {
     const start = Date.now()
     try {
-      // Simple database connectivity test
-      await db.$queryRaw`SELECT 1`
+      // Simple database connectivity test (use count instead of raw query for Prisma Accelerate compatibility)
+      await db.user.count()
       const responseTime = Date.now() - start
       
       return {

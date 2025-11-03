@@ -39,7 +39,7 @@ describe('Auth Validation', () => {
       const result = validatePasswordStrength('Password321')
       
       expect(result.isValid).toBe(false)
-      expect(result.errors).toContain('Password must contain at least one special character (@$!%*?&)')
+      expect(result.errors).toContain('Password must contain at least one special character')
     })
 
     test('should detect common sequences', () => {

@@ -834,23 +834,42 @@ model Message {
 
 // Phase 3 Social Features - Achievements
 model Achievement {
-  id          String   @id @default(cuid())
-  key         String   @unique // e.g., 'first_anime', 'watched_100', 'rated_50'
-  name        String   // Display name
-  description String
-  icon        String   // Icon/emoji
-  category    String   // 'watching', 'rating', 'social', 'discovery'
-  tier        String   // 'bronze', 'silver', 'gold', 'platinum'
-  requirement Int      // Number needed to unlock (e.g., 100 for 'watched_100')
-  points      Int      @default(10)
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  key            String   @unique // e.g., 'anime_watched', 'reviews_written', 'followers_gained'
+  baseName       String   // Base name for the achievement type
+  baseDescription String  // Base description
+  icon           String   // Icon/emoji
+  category       String   // 'watching', 'rating', 'social', 'discovery', 'special'
+  maxTier        Int      @default(1) // Maximum tier available
+  createdAt      DateTime @default(now())
   
   // Relations
+  tiers          AchievementTier[]
   userAchievements UserAchievement[]
   
   @@index([category])
-  @@index([tier])
   @@map("achievements")
+  @@schema("user_data")
+}
+
+model AchievementTier {
+  id            String   @id @default(cuid())
+  achievementId String
+  tier          Int      // 1, 2, 3, 4, 5, etc.
+  requirement   Int      // Number needed to unlock this tier
+  points        Int      @default(10)
+  name          String   // Display name for this tier
+  description   String   // Description for this tier
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  userAchievements UserAchievement[]
+  
+  @@unique([achievementId, tier])
+  @@index([achievementId])
+  @@index([tier])
+  @@map("achievement_tiers")
   @@schema("user_data")
 }
 
@@ -858,16 +877,19 @@ model UserAchievement {
   id            String   @id @default(cuid())
   userId        String
   achievementId String
+  tierId        String   // Reference to specific tier unlocked
   unlockedAt    DateTime @default(now())
-  progress      Int      @default(0) // Current progress towards achievement
+  progress      Int      @default(0) // Current progress towards next tier
   
   // Relations
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement     @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  tier        AchievementTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
   
-  @@unique([userId, achievementId])
+  @@unique([userId, tierId])
   @@index([userId, unlockedAt(sort: Desc)])
   @@index([achievementId])
+  @@index([tierId])
   @@map("user_achievements")
   @@schema("user_data")
 }

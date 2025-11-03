@@ -89,7 +89,7 @@ class BackgroundJobQueue {
     
     this.intervals.set(id, interval)
     
-    logger.info(`Scheduled recurring job: ${name} (every ${intervalMs}ms)`, {}, {
+    logger.system(`Scheduled recurring job: ${name} (every ${intervalMs}ms)`, {}, {
       jobId: id,
       interval: intervalMs,
     })
@@ -109,7 +109,7 @@ class BackgroundJobQueue {
       await job.handler()
       
       const duration = Date.now() - startTime
-      logger.info(`Job completed: ${job.name}`, {}, {
+      logger.system(`Job completed: ${job.name}`, {}, {
         jobId: job.id,
         duration,
       })
@@ -234,7 +234,7 @@ export function scheduleSessionCleanup() {
           },
         })
         
-        logger.info(`Cleaned up ${result.count} old sessions`, {}, {
+        logger.system(`Cleaned up ${result.count} old sessions`, {}, {
           deletedCount: result.count,
         })
       } catch (error) {
@@ -278,7 +278,7 @@ export function scheduleTrendingUpdate() {
         take: 100,
       })
       
-      logger.info(`Updated trending anime`, {}, {
+      logger.system(`Updated trending anime`, {}, {
         trendingCount: trending.length,
       })
     },
@@ -306,7 +306,7 @@ export function scheduleTokenCleanup() {
           },
         })
         
-        logger.info(`Cleaned up ${result.count} expired tokens`, {}, {
+        logger.system(`Cleaned up ${result.count} expired tokens`, {}, {
           deletedCount: result.count,
         })
       } catch (error) {
@@ -353,14 +353,14 @@ export function scheduleEmailDigest() {
  * Initialize all scheduled jobs
  */
 export function initializeBackgroundJobs() {
-  logger.info('Initializing background jobs...', {}, {})
+  logger.system('Initializing background jobs...', {}, {})
   
   scheduleSessionCleanup()
   scheduleTrendingUpdate()
   scheduleTokenCleanup()
   // scheduleEmailDigest() // Uncomment when email service is ready
   
-  logger.info('Background jobs initialized', {}, {
+  logger.system('Background jobs initialized', {}, {
     jobs: jobQueue.getStats(),
   })
 }

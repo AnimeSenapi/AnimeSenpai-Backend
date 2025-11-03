@@ -13,7 +13,7 @@ export const userRouter = router({
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']).optional(),
       page: z.number().min(1).default(1),
       limit: z.number().min(1).max(50000).optional(), // Will be capped by system settings
-      sortBy: z.enum(['updatedAt', 'createdAt', 'title', 'progress']).default('updatedAt'),
+      sortBy: z.enum(['updatedAt', 'createdAt', 'title']).default('updatedAt'),
       sortOrder: z.enum(['asc', 'desc']).default('desc')
     }).optional())
     .query(async ({ input = {}, ctx }) => {
@@ -189,12 +189,11 @@ export const userRouter = router({
       animeId: z.string(),
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']),
       isFavorite: z.boolean().optional(),
-      progress: z.number().min(0).default(0),
       score: z.number().min(1).max(10).optional(),
       notes: z.string().optional()
     }))
     .mutation(async ({ input, ctx }) => {
-      const { animeId, status, isFavorite, progress, score, notes } = input
+      const { animeId, status, isFavorite, score, notes } = input
 
       // Check if anime exists (select only id for existence check)
       const anime = await db.anime.findUnique({
@@ -226,7 +225,6 @@ export const userRouter = router({
         update: {
           status: actualStatus,
           isFavorite: actualIsFavorite,
-          progress: progress !== undefined ? progress : undefined,
           score: score !== undefined ? score : undefined,
           notes: notes !== undefined ? notes : undefined,
           completedAt: actualStatus === 'completed' ? (completedAt || now) : null
@@ -236,7 +234,6 @@ export const userRouter = router({
           animeId,
           status: actualStatus,
           isFavorite: actualIsFavorite,
-          progress,
           score,
           notes,
           startedAt,
@@ -284,12 +281,11 @@ export const userRouter = router({
       animeId: z.string(),
       status: z.enum(['favorite', 'watching', 'completed', 'plan-to-watch', 'on-hold', 'dropped']).optional(),
       isFavorite: z.boolean().optional(),
-      progress: z.number().min(0).optional(),
       score: z.number().min(1).max(10).optional(),
       notes: z.string().optional()
     }))
     .mutation(async ({ input, ctx }) => {
-      const { animeId, status, isFavorite, progress, score, notes } = input
+      const { animeId, status, isFavorite, score, notes } = input
 
       // Build update data
       const updateData: any = {}
@@ -303,7 +299,6 @@ export const userRouter = router({
         }
       }
       if (isFavorite !== undefined) updateData.isFavorite = isFavorite
-      if (progress !== undefined) updateData.progress = progress
       if (score !== undefined) updateData.score = score
       if (notes !== undefined) updateData.notes = notes
 
@@ -973,9 +968,27 @@ export const userRouter = router({
   // Check username availability (public endpoint)
   checkUsernameAvailability: publicProcedure
     .input(z.object({
-      username: z.string().min(2).max(50).regex(/^[a-z0-9_-]+$/, 'Username must be lowercase and can only contain letters, numbers, underscores, and hyphens').toLowerCase().trim()
+      username: z.string().min(2).max(50).trim()
     }))
     .query(async ({ input }) => {
+      // Check if username contains uppercase letters
+      if (/[A-Z]/.test(input.username)) {
+        return {
+          available: false,
+          username: input.username,
+          reason: 'Username must be lowercase only. Please use only lowercase letters, numbers, underscores, and hyphens.'
+        }
+      }
+
+      // Check if username contains invalid characters
+      if (!/^[a-z0-9_-]+$/.test(input.username)) {
+        return {
+          available: false,
+          username: input.username,
+          reason: 'Username can only contain lowercase letters, numbers, underscores, and hyphens'
+        }
+      }
+
       const existingUser = await db.user.findUnique({
         where: { username: input.username },
         select: { id: true }
@@ -1026,9 +1039,29 @@ export const userRouter = router({
     .query(async ({ input }) => {
       const { username, status, limit } = input
 
-      // Find user
-      const user = await db.user.findUnique({
-        where: { username },
+      // Normalize username: decode URL encoding and strip @ prefix
+      let normalizedUsername = username
+      try {
+        normalizedUsername = decodeURIComponent(normalizedUsername)
+      } catch (_) {
+        // ignore decode errors; proceed with original
+      }
+      if (normalizedUsername.startsWith('%40')) {
+        normalizedUsername = normalizedUsername.slice(3)
+      }
+      if (normalizedUsername.startsWith('@')) {
+        normalizedUsername = normalizedUsername.slice(1)
+      }
+      normalizedUsername = normalizedUsername.toLowerCase().trim()
+
+      // Find user with case-insensitive search
+      const user = await db.user.findFirst({
+        where: { 
+          username: {
+            mode: 'insensitive',
+            equals: normalizedUsername
+          }
+        },
         select: {
           id: true,
           preferences: {

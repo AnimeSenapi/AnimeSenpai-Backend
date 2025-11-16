@@ -1,33 +1,70 @@
-import { initTRPC, TRPCError } from '@trpc/server'
-import { getUserFromToken, verifyAccessToken } from './auth'
+import { initTRPC } from '@trpc/server'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { verifyAccessToken } from './auth'
 import { db } from './db'
 import { appErrorToTRPCError, handleError, createError } from './errors'
 import { logger, extractLogContext } from './logger'
-import { validateInput, schemas } from './validation'
+import { validateInput } from './validation'
 
 // Initialize tRPC with enhanced error formatting
 const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error, path, input, ctx }) {
     // Log the error
     const logContext = ctx?.req ? extractLogContext(ctx.req, ctx?.user?.id) : { requestId: 'unknown', ipAddress: 'unknown', userAgent: 'unknown' }
-    logger.error(`tRPC Error in ${path}`, error.cause, logContext, { 
-      path, 
-      input: typeof input === 'object' ? input : { value: input },
-      errorCode: error.code,
-      errorMessage: error.message 
-    })
+    
+    // Check for Prisma Accelerate API key errors (P6002)
+    let errorMessage = error.message
+    let errorCode = (error.cause as { code?: string })?.code || 'UNKNOWN_ERROR'
+    
+    // Check for Prisma Accelerate API key errors in various formats
+    const errorString = JSON.stringify(error)
+    const isAccelerateError = 
+      errorString.includes('P6002') ||
+      errorString.includes('API key is invalid') ||
+      errorString.includes('API Key is invalid') ||
+      error.message.includes('P6002') ||
+      error.message.includes('API key is invalid') ||
+      error.message.includes('API Key is invalid')
+    
+    if (isAccelerateError) {
+      errorMessage = 'Database connection error: Invalid Prisma Accelerate API key. Please update your DATABASE_URL in the backend .env file to use a direct PostgreSQL connection (e.g., postgresql://user:password@host:5432/database) or provide a valid Accelerate API key.'
+        errorCode = 'DATABASE_CONFIGURATION_ERROR'
+      logger.error(`Prisma Accelerate API key error in ${path}`, error, logContext, {
+          path,
+        code: 'P6002',
+        message: 'Invalid Accelerate API key - check DATABASE_URL in backend .env file',
+        errorMessage: error.message,
+        errorString: errorString.substring(0, 500)
+        })
+    } else if (error.cause instanceof PrismaClientKnownRequestError) {
+        logger.error(`Prisma error in ${path}`, error.cause, logContext, { 
+          path, 
+          input: typeof input === 'object' ? input : { value: input },
+          errorCode: error.cause.code,
+          errorMessage: error.cause.message 
+        })
+    } else {
+      logger.error(`tRPC Error in ${path}`, error.cause || error, logContext, { 
+        path, 
+        input: typeof input === 'object' ? input : { value: input },
+        errorCode,
+        errorMessage
+      })
+    }
 
     // Return formatted error response
+    const errorField = (error.cause as { field?: string })?.field
     return {
       ...shape,
       data: {
         ...shape.data,
-        code: (error.cause as { code?: string })?.code || 'UNKNOWN_ERROR',
-        field: (error.cause as { field?: string })?.field,
+        code: errorCode,
+        ...(errorField && { field: errorField }),
         timestamp: new Date().toISOString(),
         requestId: logContext.requestId,
         path,
       },
+      message: errorMessage,
     }
   },
 })
@@ -164,31 +201,10 @@ export const publicProcedureWithValidation = t.procedure
   .use(validateInputMiddleware)
   .use(rateLimitMiddleware)
 
-// Utility function to sanitize input
-function sanitizeInput(input: any): any {
-  if (typeof input === 'string') {
-    return input.trim()
-  }
-  
-  if (Array.isArray(input)) {
-    return input.map(sanitizeInput)
-  }
-  
-  if (input && typeof input === 'object') {
-    const sanitized: any = {}
-    for (const [key, value] of Object.entries(input)) {
-      sanitized[key] = sanitizeInput(value)
-    }
-    return sanitized
-  }
-  
-  return input
-}
-
 // Utility function to validate input with schema
 export function validateWithSchema<T>(schema: any, input: unknown, field?: string): T {
   try {
-    return validateInput(schema, input, { field })
+    return validateInput(schema, input, { ...(field !== undefined && { field }) })
   } catch (error) {
     throw appErrorToTRPCError(handleError(error))
   }

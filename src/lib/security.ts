@@ -7,8 +7,6 @@
 
 import { logger } from './logger'
 import { db } from './db'
-import { AppError, ErrorCode } from './errors'
-import { rateLimiter } from './rate-limiter'
 
 // Security threat types
 enum ThreatType {
@@ -220,13 +218,18 @@ class SecurityManager {
       await this.recordSecurityEvent({
         type: ThreatType.UNAUTHORIZED_ACCESS,
         severity: 'high',
-        source: { ip, userAgent, userId },
+        source: { 
+          ip, 
+          userAgent, 
+          ...(userId !== undefined && { userId }) 
+        },
         details: {
           description: 'Request from high-risk IP address',
           endpoint,
           method
         },
-        action: 'blocked'
+        action: 'blocked',
+        resolved: false
       })
       return {
         allowed: false,
@@ -249,14 +252,19 @@ class SecurityManager {
       await this.recordSecurityEvent({
         type: ThreatType.DATA_EXFILTRATION,
         severity: 'medium',
-        source: { ip, userAgent, userId },
+        source: { 
+          ip, 
+          userAgent, 
+          ...(userId !== undefined && { userId }) 
+        },
         details: {
           description: 'Request size exceeds limit',
           endpoint,
           method,
           payload: { contentLength, maxSize: this.config.maxRequestSize }
         },
-        action: 'blocked'
+        action: 'blocked',
+        resolved: false
       })
       return {
         allowed: false,
@@ -270,7 +278,7 @@ class SecurityManager {
   /**
    * Analyze request body for security threats
    */
-  async analyzeRequestBody(body: any, request: Request): Promise<{
+  async analyzeRequestBody(body: any, _request: Request): Promise<{
     safe: boolean
     threats: ThreatType[]
     sanitized?: any
@@ -333,7 +341,8 @@ class SecurityManager {
           description: 'High request frequency detected',
           endpoint: endpoint || 'unknown'
         },
-        action: 'blocked'
+        action: 'blocked',
+        resolved: false
       })
       return true
     }
@@ -350,7 +359,8 @@ class SecurityManager {
             description: 'Multiple failed login attempts',
             endpoint
           },
-          action: 'blocked'
+          action: 'blocked',
+          resolved: false
         })
         this.blockedIPs.add(ip)
         return true
@@ -369,7 +379,8 @@ class SecurityManager {
             description: 'Unusual user activity pattern detected',
             endpoint: endpoint || 'unknown'
           },
-          action: 'flagged'
+          action: 'flagged',
+          resolved: false
         })
         this.suspiciousUsers.add(userId)
         return true
@@ -461,7 +472,8 @@ class SecurityManager {
     const remoteAddr = request.headers.get('x-remote-addr')
     
     if (forwarded) {
-      return forwarded.split(',')[0].trim()
+      const firstIP = forwarded.split(',')[0]
+      return firstIP ? firstIP.trim() : 'unknown'
     }
     if (realIP) {
       return realIP
@@ -510,8 +522,10 @@ class SecurityManager {
     reputation.lastSeen = Date.now()
 
     // Update risk score based on threat type and severity
-    const severityMultiplier = { low: 1, medium: 2, high: 3, critical: 5 }[severity as keyof typeof severityMultiplier]
-    const threatScore = { sql_injection: 10, xss: 8, csrf: 6, brute_force: 7, ddos: 9, data_exfiltration: 8, unauthorized_access: 5, suspicious_activity: 3 }[threatType]
+    const severityMultipliers = { low: 1, medium: 2, high: 3, critical: 5 } as const
+    const severityMultiplier = severityMultipliers[severity as keyof typeof severityMultipliers]
+    const threatScores = { sql_injection: 10, xss: 8, csrf: 6, brute_force: 7, ddos: 9, data_exfiltration: 8, unauthorized_access: 5, suspicious_activity: 3 } as const
+    const threatScore = threatScores[threatType as keyof typeof threatScores]
     
     reputation.riskScore = Math.min(100, reputation.riskScore + (threatScore * severityMultiplier))
 
@@ -542,7 +556,7 @@ class SecurityManager {
    */
   private validateCSRFToken(token: string): boolean {
     // In a real implementation, you'd validate against stored tokens
-    return token && token.length > 10
+    return token ? token.length > 10 : false
   }
 
   /**
@@ -600,7 +614,7 @@ class SecurityManager {
     for (const [ip, events] of ipGroups.entries()) {
       if (events.length > 5) {
         this.blockedIPs.add(ip)
-        logger.warn('IP blocked due to multiple security events', undefined, undefined, {
+        logger.warn('IP blocked due to multiple security events', undefined, {
           ip,
           eventCount: events.length
         })

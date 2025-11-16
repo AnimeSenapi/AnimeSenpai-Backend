@@ -92,11 +92,19 @@ export class AppError extends Error {
     super(message)
     this.name = 'AppError'
     this.code = code
-    this.details = details ?? undefined
-    this.field = field ?? undefined
+    if (details !== undefined && details !== null) {
+      this.details = details
+    }
+    if (field !== undefined && field !== null) {
+      this.field = field
+    }
     this.timestamp = new Date().toISOString()
-    this.requestId = requestId ?? undefined
-    this.userId = userId ?? undefined
+    if (requestId !== undefined && requestId !== null) {
+      this.requestId = requestId
+    }
+    if (userId !== undefined && userId !== null) {
+      this.userId = userId
+    }
     this.isOperational = isOperational
 
     // Maintains proper stack trace for where our error was thrown
@@ -153,7 +161,7 @@ export const createError = {
   forbidden: (message = 'You don\'t have permission to do that') => 
     new AppError(ErrorCode.FORBIDDEN, message),
   
-  insufficientPermissions: (required: string) => 
+  insufficientPermissions: (_required: string) => 
     new AppError(ErrorCode.INSUFFICIENT_PERMISSIONS, 'You don\'t have the necessary permissions for this action'),
   
   // Validation Errors
@@ -192,7 +200,7 @@ export const createError = {
     new AppError(ErrorCode.RESOURCE_ALREADY_EXISTS, `That ${resource} already exists`, { resource, identifier }),
   
   // Rate Limiting
-  rateLimitExceeded: (limit: number, window: string) => 
+  rateLimitExceeded: (_limit: number, _window: string) => 
     new AppError(ErrorCode.RATE_LIMIT_EXCEEDED, `You're going too fast! Please wait a moment and try again.`),
   
   tooManyRequests: (retryAfter?: number) => 
@@ -209,13 +217,13 @@ export const createError = {
     new AppError(ErrorCode.EMAIL_ALREADY_VERIFIED, 'Your email is already verified! You can sign in now.'),
   
   // Database Errors
-  databaseError: (operation: string, details?: any) => 
+  databaseError: (_operation: string, details?: any) => 
     new AppError(ErrorCode.DATABASE_ERROR, 'We\'re having trouble saving your data. Please try again in a moment.', details),
   
   databaseConnectionError: () => 
     new AppError(ErrorCode.DATABASE_CONNECTION_ERROR, 'We\'re having trouble connecting to our servers. Please try again in a moment.'),
   
-  databaseConstraintError: (constraint: string, details?: any) => 
+  databaseConstraintError: (_constraint: string, details?: any) => 
     new AppError(ErrorCode.DATABASE_CONSTRAINT_ERROR, 'This information is already in use. Please try something different.', details),
   
   // GDPR/Privacy Errors
@@ -239,7 +247,7 @@ export const createError = {
     new AppError(ErrorCode.MAINTENANCE_MODE, 'We\'re performing some maintenance right now. We\'ll be back shortly!'),
   
   // External Service Errors
-  externalServiceError: (service: string, details?: any) => 
+  externalServiceError: (_service: string, details?: any) => 
     new AppError(ErrorCode.EXTERNAL_SERVICE_ERROR, 'We\'re having trouble connecting to one of our services. Please try again in a moment.', details),
   
   emailServiceError: (details?: any) => 
@@ -251,8 +259,6 @@ export const createError = {
 
 // Error to tRPC Error Converter
 export function appErrorToTRPCError(error: AppError): TRPCError {
-  const httpStatus = getHttpStatusFromErrorCode(error.code)
-  
   return new TRPCError({
     code: getTRPCCodeFromErrorCode(error.code),
     message: error.message,

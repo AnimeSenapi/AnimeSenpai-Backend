@@ -104,15 +104,18 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
         metadata,
         timestamp,
       },
-    }).catch(async (error) => {
+    }).catch(async (error: unknown) => {
       // If SecurityLog table doesn't exist, create it
-      if (error.code === 'P2021') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2021') {
         console.warn('[Audit] SecurityLog table not found. Please run migrations.')
       }
     })
   } catch (error) {
     // Fallback to file logging if database fails
-    logger.security('Audit event', { userId, username }, {
+    logger.security('Audit event', {
+      ...(userId !== undefined && { userId }),
+      ...(username !== undefined && { username }),
+    }, {
       event,
       severity,
       result,
@@ -224,7 +227,7 @@ export async function logDataExport(userId: string, username: string, dataType: 
 export async function logSuspiciousActivity(userId: string | undefined, activity: string, ipAddress: string, metadata?: Record<string, any>) {
   await logAuditEvent({
     event: AuditEventType.SUSPICIOUS_ACTIVITY,
-    userId,
+    ...(userId !== undefined && { userId }),
     ipAddress,
     severity: AuditSeverity.ERROR,
     metadata: {
@@ -251,7 +254,7 @@ export async function logSecurityViolation(
     ipAddress,
     severity: AuditSeverity.CRITICAL,
     result: 'FAILURE',
-    metadata,
+    ...(metadata !== undefined && { metadata }),
   })
 }
 

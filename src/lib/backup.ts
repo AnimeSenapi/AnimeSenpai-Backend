@@ -1,6 +1,6 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { writeFile, readFile, unlink, readdir } from 'fs/promises'
+import { unlink, readdir } from 'fs/promises'
 import { join } from 'path'
 import { logger } from './logger'
 
@@ -45,7 +45,7 @@ class DatabaseBackup {
 
       // Create database dump
       const dumpCommand = this.buildDumpCommand(filepath)
-      const { stdout, stderr } = await execAsync(dumpCommand)
+      const { stderr } = await execAsync(dumpCommand)
 
       if (stderr && !stderr.includes('Warning')) {
         throw new Error(`Database dump failed: ${stderr}`)
@@ -83,10 +83,16 @@ class DatabaseBackup {
       }
     } catch (error) {
       const duration = Date.now() - startTime
+
+      logger.error(
+        'Database backup failed',
+        error instanceof Error ? error : new Error('Unknown error'),
+        undefined,
+        { duration }
+      )
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-
-      logger.error('Database backup failed', { error: errorMessage, duration })
-
+      
       return {
         success: false,
         filename,
@@ -129,7 +135,10 @@ class DatabaseBackup {
     try {
       await import('fs').then(fs => fs.promises.mkdir(this.config.backupDir, { recursive: true }))
     } catch (error) {
-      logger.error('Failed to create backup directory', { error })
+      logger.error(
+        'Failed to create backup directory',
+        error instanceof Error ? error : new Error('Unknown error')
+      )
       throw error
     }
   }
@@ -148,7 +157,10 @@ class DatabaseBackup {
       
       return `${filepath.split('/').pop()}.gz`
     } catch (error) {
-      logger.error('Backup compression failed', { error })
+      logger.error(
+        'Backup compression failed',
+        error instanceof Error ? error : new Error('Unknown error')
+      )
       throw error
     }
   }
@@ -169,7 +181,10 @@ class DatabaseBackup {
       
       return `${filepath.split('/').pop()}.enc`
     } catch (error) {
-      logger.error('Backup encryption failed', { error })
+      logger.error(
+        'Backup encryption failed',
+        error instanceof Error ? error : new Error('Unknown error')
+      )
       throw error
     }
   }
@@ -194,7 +209,10 @@ class DatabaseBackup {
 
       return backups.sort((a, b) => b.created.getTime() - a.created.getTime())
     } catch (error) {
-      logger.error('Failed to list backups', { error })
+      logger.error(
+        'Failed to list backups',
+        error instanceof Error ? error : new Error('Unknown error')
+      )
       return []
     }
   }
@@ -219,7 +237,12 @@ class DatabaseBackup {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         errors.push(`Failed to delete ${backup.filename}: ${errorMessage}`)
-        logger.error('Failed to delete old backup', { filename: backup.filename, error: errorMessage })
+        logger.error(
+          'Failed to delete old backup',
+          error instanceof Error ? error : new Error('Unknown error'),
+          undefined,
+          { filename: backup.filename }
+        )
       }
     }
 
@@ -254,7 +277,7 @@ class DatabaseBackup {
 
       // Restore database
       const restoreCommand = this.buildRestoreCommand(restoreFile)
-      const { stdout, stderr } = await execAsync(restoreCommand)
+      const { stderr } = await execAsync(restoreCommand)
 
       if (stderr && !stderr.includes('Warning')) {
         throw new Error(`Database restore failed: ${stderr}`)
@@ -270,7 +293,12 @@ class DatabaseBackup {
       return { success: true }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      logger.error('Database restore failed', { filename, error: errorMessage })
+      logger.error(
+        'Database restore failed',
+        error instanceof Error ? error : new Error('Unknown error'),
+        undefined,
+        { filename }
+      )
       return { success: false, error: errorMessage }
     }
   }
@@ -323,7 +351,7 @@ const backupConfig: BackupConfig = {
   retentionDays: parseInt(process.env.BACKUP_RETENTION_DAYS || '30'),
   compression: process.env.BACKUP_COMPRESSION === 'true',
   encryption: process.env.BACKUP_ENCRYPTION === 'true',
-  encryptionKey: process.env.BACKUP_ENCRYPTION_KEY
+  ...(process.env.BACKUP_ENCRYPTION_KEY !== undefined && { encryptionKey: process.env.BACKUP_ENCRYPTION_KEY })
 }
 
 export const databaseBackup = new DatabaseBackup(backupConfig)
@@ -342,13 +370,21 @@ export async function runScheduledBackup(): Promise<void> {
         duration: result.duration
       })
     } else {
-      logger.error('Scheduled backup failed', { error: result.error })
+      logger.error(
+        'Scheduled backup failed',
+        new Error(result.error || 'Unknown error'),
+        undefined,
+        { error: result.error }
+      )
     }
 
     // Clean up old backups
     await databaseBackup.cleanupOldBackups()
   } catch (error) {
-    logger.error('Scheduled backup process failed', { error })
+    logger.error(
+      'Scheduled backup process failed',
+      error instanceof Error ? error : new Error('Unknown error')
+    )
   }
 }
 

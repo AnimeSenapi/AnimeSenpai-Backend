@@ -159,7 +159,7 @@ export async function findSimilarUsers(
     take: 1000 // Limit for performance
   })
 
-  const eligibleUserIds = eligibleUsers.map(u => u.id)
+  const eligibleUserIds = eligibleUsers.map((u: typeof eligibleUsers[0]) => u.id)
 
   // Get ratings for all eligible users
   const allRatings = await db.userAnimeList.findMany({
@@ -239,14 +239,14 @@ export async function getCollaborativeRecommendations(
     where: { userId },
     select: { animeId: true }
   })
-  const seenAnime = new Set(userAnimeList.map(a => a.animeId))
+  const seenAnime = new Set(userAnimeList.map((a: typeof userAnimeList[0]) => a.animeId))
 
   // Get dismissed anime
   const dismissed = await db.recommendationFeedback.findMany({
     where: { userId },
     select: { animeId: true }
   })
-  const dismissedAnime = new Set(dismissed.map(d => d.animeId))
+  const dismissedAnime = new Set(dismissed.map((d: typeof dismissed[0]) => d.animeId))
 
   // Get highly-rated anime from similar users
   const similarUserIds = similarUsers.map(u => u.userId)
@@ -356,9 +356,9 @@ export async function getHybridRecommendations(
  * Call this after user rates multiple anime
  */
 export function invalidateUserSimilarityCache(userId: string): void {
-  cache.delete(`similar-users:${userId}`)
-  cache.delete(`collaborative-recs:${userId}`)
-  cache.delete(`user-profile:${userId}`)
+  cache.del(`similar-users:${userId}`)
+  cache.del(`collaborative-recs:${userId}`)
+  cache.del(`user-profile:${userId}`)
 }
 
 /**
@@ -393,7 +393,7 @@ export async function getCollaborativeFilteringStats(): Promise<{
     })
   ])
 
-  const uniqueUsers = new Set(totalUsers.map(u => u.userId))
+  const uniqueUsers = new Set(totalUsers.map((u: typeof totalUsers[0]) => u.userId))
   
   return {
     totalUsersWithRatings: uniqueUsers.size,

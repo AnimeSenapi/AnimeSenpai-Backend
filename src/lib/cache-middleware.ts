@@ -5,7 +5,6 @@
  * with support for cache invalidation and conditional caching.
  */
 
-import { TRPCError } from '@trpc/server'
 import { cache, CacheUtils, CACHE_TTL } from './cache'
 import { logger } from './logger'
 
@@ -143,7 +142,7 @@ export function createCacheMiddleware(config: CacheConfig) {
  * Cache result wrapper for tRPC procedures
  */
 export function cacheResult(config: CacheConfig) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
+  return function (_target: any, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value
 
     descriptor.value = async function (...args: any[]) {
@@ -321,22 +320,20 @@ export class CacheInvalidator {
 
 /**
  * Cache warming utility
+ * 
+ * Note: Database queries are now cached via Prisma Accelerate cacheStrategy.
+ * This is kept for non-database data (ML embeddings, computed results, etc.)
  */
 export class CacheWarmer {
   /**
-   * Warm up frequently accessed data
+   * Warm up frequently accessed non-database data
+   * Database queries are handled by Prisma Accelerate automatically
    */
   static async warmUp(): Promise<void> {
     try {
-      logger.system('Starting cache warm-up')
-      
-      // Warm up genres (rarely change)
-      cache.set('genres:all', [], CACHE_TTL.GENRE)
-      
-      // Warm up system settings
-      cache.set('system:settings', {}, CACHE_TTL.LONG)
-      
-      logger.system('Cache warm-up completed')
+      logger.system('Cache warm-up: Database queries are cached by Prisma Accelerate automatically')
+      // No manual warm-up needed - Prisma Accelerate handles database query caching
+      // This method is kept for potential future use with computed data
     } catch (error) {
       logger.error('Cache warm-up failed', error as Error, undefined, {})
     }

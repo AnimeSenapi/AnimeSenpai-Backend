@@ -16,18 +16,13 @@
  * Built for performance, security, and personalization.
  */
 
-import { db } from './db'
-import { cache } from './cache'
+import { db, getCacheStrategy } from './db'
 import { 
   getCollaborativeRecommendations, 
-  findSimilarUsers,
   invalidateUserSimilarityCache as invalidateCFCache
 } from './collaborative-filtering'
 import {
-  getAnimeEmbedding,
-  findSimilarAnimeByEmbedding,
-  calculateSemanticSimilarity,
-  calculateConfidenceScore
+  findSimilarAnimeByEmbedding
 } from './ml-embeddings'
 
 // Weights for content-based similarity scoring
@@ -157,7 +152,7 @@ export function calculateAnimeSimilarity(
  * Security: No user data exposed, only anime similarity
  */
 async function getEmbeddingBasedRecommendations(
-  userId: string,
+  _userId: string,
   ratedAnime: Array<{ animeId: string; score: number }>
 ): Promise<Map<string, number>> {
   const scores = new Map<string, number>()
@@ -179,8 +174,11 @@ async function getEmbeddingBasedRecommendations(
   
   // Aggregate scores
   for (let i = 0; i < topRated.length; i++) {
-    const userRating = topRated[i].score
+    const ratedItem = topRated[i]
     const similarAnime = allSimilar[i]
+    if (!ratedItem || !similarAnime) continue
+    
+    const userRating = ratedItem.score
     
     for (const similar of similarAnime) {
       const currentScore = scores.get(similar.animeId) || 0
@@ -197,21 +195,18 @@ async function getEmbeddingBasedRecommendations(
  * Get user's preference profile from their watch history and ratings
  */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  const cacheKey = `user-profile:${userId}`
-  const cached = cache.get<UserProfile>(cacheKey)
-  if (cached) return cached
-  
-  // Get user preferences
+  // Get user preferences - cached by Prisma Accelerate
   const user = await db.user.findUnique({
     where: { id: userId },
     include: {
       preferences: true
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
   if (!user) return null
   
-  // Get rated anime
+  // Get rated anime - cached by Prisma Accelerate
   const ratings = await db.userAnimeList.findMany({
     where: {
       userId,
@@ -220,16 +215,18 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     select: {
       animeId: true,
       score: true
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
-  // Get watched anime
+  // Get watched anime - cached by Prisma Accelerate
   const watchList = await db.userAnimeList.findMany({
     where: { userId },
     select: {
       animeId: true,
       status: true
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
   const profile: UserProfile = {
@@ -237,16 +234,14 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     favoriteGenres: user.preferences?.favoriteGenres || [],
     favoriteTags: user.preferences?.favoriteTags || [],
     discoveryMode: user.preferences?.discoveryMode || 'balanced',
-    ratedAnime: ratings.map(r => ({
+    ratedAnime: ratings.map((r: typeof ratings[0]) => ({
       animeId: r.animeId,
       score: r.score || 5
     })),
     watchedAnime: watchList
   }
   
-  // Cache for 5 minutes
-  cache.set(cacheKey, profile, 5 * 60 * 1000)
-  
+  // Database queries are cached by Prisma Accelerate, no need for in-memory cache
   return profile
 }
 
@@ -256,10 +251,11 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 export async function getUserSeenAnime(userId: string): Promise<Set<string>> {
   const seenList = await db.userAnimeList.findMany({
     where: { userId },
-    select: { animeId: true }
+    select: { animeId: true },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
-  return new Set(seenList.map(item => item.animeId))
+  return new Set(seenList.map((item: typeof seenList[0]) => item.animeId))
 }
 
 /**
@@ -271,10 +267,11 @@ export async function getUserDismissedAnime(userId: string): Promise<Set<string>
       userId,
       feedbackType: { in: ['dismiss', 'hide'] }
     },
-    select: { animeId: true }
+    select: { animeId: true },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
-  return new Set(dismissed.map(item => item.animeId))
+  return new Set(dismissed.map((item: typeof dismissed[0]) => item.animeId))
 }
 
 /**
@@ -303,7 +300,7 @@ export async function getForYouRecommendations(
     profile.ratedAnime
   )
   
-  // Get all anime that user hasn't seen
+  // Get all anime that user hasn't seen - cached by Prisma Accelerate
   const candidateAnime = await db.anime.findMany({
     where: {
       id: {
@@ -317,7 +314,8 @@ export async function getForYouRecommendations(
         }
       }
     },
-    take: 200 // Limit candidates for performance
+    take: 200, // Limit candidates for performance
+    ...getCacheStrategy(300) // 5 minutes
   })
   
   // Wait for collaborative and embedding results (parallel execution)
@@ -338,14 +336,14 @@ export async function getForYouRecommendations(
     let reason = ''
     
     // 1. CONTENT-BASED SCORING (Traditional)
-    const animeGenreIds = anime.genres.map(g => g.genre.id)
+    const animeGenreIds = anime.genres.map((g: typeof anime.genres[0]) => g.genre.id)
     const genreMatch = jaccardSimilarity(animeGenreIds, profile.favoriteGenres)
     contentBasedScore += genreMatch * 0.4
     
     if (genreMatch > 0.5) {
       const matchedGenres = anime.genres
-        .filter(g => profile.favoriteGenres.includes(g.genre.id))
-        .map(g => g.genre.name)
+        .filter((g: typeof anime.genres[0]) => profile.favoriteGenres.includes(g.genre.id))
+        .map((g: typeof anime.genres[0]) => g.genre.name)
       reason = `Popular in ${matchedGenres.slice(0, 2).join(' & ')}`
     }
     
@@ -372,7 +370,8 @@ export async function getForYouRecommendations(
             genres: {
               include: { genre: true }
             }
-          }
+          },
+          ...getCacheStrategy(300) // 5 minutes
         })
         
         if (ratedAnime) {
@@ -399,15 +398,6 @@ export async function getForYouRecommendations(
       contentBasedScore * 0.40 +
       normalizedCollaborative * 0.35 +
       embeddingScore * 0.25
-    
-    // Calculate confidence (how sure we are about this recommendation)
-    const confidence = calculateConfidenceScore(
-      contentBasedScore,
-      collaborativeScore || null,
-      embeddingScore > 0 ? embeddingScore : null,
-      profile.ratedAnime.length,
-      collaborativeRecs.find(r => r.animeId === anime.id)?.similarUserCount || 0
-    )
     
     // Update reason based on strongest signal
     if (!reason) {
@@ -493,14 +483,14 @@ export async function getBecauseYouWatchedRecommendations(
   })
   
   // Calculate similarity scores
-  const scored = candidateAnime.map(anime => ({
+  const scored = candidateAnime.map((anime: typeof candidateAnime[0]) => ({
     anime,
     score: calculateAnimeSimilarity(sourceAnime, anime),
     reason: `Because you watched ${sourceAnime.title}`
   }))
   
   // Sort and return top matches
-  scored.sort((a, b) => b.score - a.score)
+  scored.sort((a: typeof scored[0], b: typeof scored[0]) => b.score - a.score)
   
   return scored.slice(0, limit)
 }
@@ -536,8 +526,8 @@ export async function getHiddenGems(
   })
   
   // Score based on genre match
-  const scored = gems.map(anime => {
-    const animeGenreIds = anime.genres.map(g => g.genre.id)
+  const scored = gems.map((anime: typeof gems[0]) => {
+    const animeGenreIds = anime.genres.map((g: typeof anime.genres[0]) => g.genre.id)
     const genreMatch = jaccardSimilarity(animeGenreIds, profile.favoriteGenres)
     
     return {
@@ -547,7 +537,7 @@ export async function getHiddenGems(
     }
   })
   
-  scored.sort((a, b) => b.score - a.score)
+  scored.sort((a: typeof scored[0], b: typeof scored[0]) => b.score - a.score)
   
   return scored.slice(0, limit)
 }
@@ -595,9 +585,9 @@ export async function getTrendingInFavoriteGenres(
     select: { name: true }
   })
   
-  const genreNames = genres.map(g => g.name).join(' & ')
+  const genreNames = genres.map((g: typeof genres[0]) => g.name).join(' & ')
   
-  return trending.map(anime => ({
+  return trending.map((anime: typeof trending[0]) => ({
     anime,
     score: 1,
     reason: `Trending in ${genreNames}`
@@ -608,10 +598,7 @@ export async function getTrendingInFavoriteGenres(
  * Get overall trending anime (non-personalized)
  */
 export async function getTrendingAnime(limit: number = 12): Promise<RecommendationScore[]> {
-  const cacheKey = 'trending-anime'
-  const cached = cache.get<RecommendationScore[]>(cacheKey)
-  if (cached) return cached.slice(0, limit)
-  
+  // Database query cached by Prisma Accelerate
   const trending = await db.anime.findMany({
     include: {
       genres: {
@@ -622,18 +609,17 @@ export async function getTrendingAnime(limit: number = 12): Promise<Recommendati
       { viewCount: 'desc' },
       { averageRating: 'desc' }
     ],
-    take: 50
+    take: 50,
+    ...getCacheStrategy(300) // 5 minutes - trending anime
   })
   
-  const result = trending.map(anime => ({
+  const result = trending.map((anime: typeof trending[0]) => ({
     anime,
     score: 1,
     reason: 'Trending now'
   }))
   
-  // Cache for 1 hour (3600 seconds)
-  cache.set(cacheKey, result, 3600)
-  
+  // Database query is cached by Prisma Accelerate, no need for in-memory cache
   return result.slice(0, limit)
 }
 
@@ -650,10 +636,11 @@ export async function getNewReleases(limit: number = 12): Promise<Recommendation
     orderBy: {
       createdAt: 'desc'
     },
-    take: limit
+    take: limit,
+    ...getCacheStrategy(600) // 10 minutes - new releases don't change often
   })
   
-  return newAnime.map(anime => ({
+  return newAnime.map((anime: typeof newAnime[0]) => ({
     anime,
     score: 1,
     reason: 'New on AnimeSenpai'
@@ -674,17 +661,18 @@ export async function getDiscoveryRecommendations(
   const seenAnime = await getUserSeenAnime(userId)
   const dismissedAnime = await getUserDismissedAnime(userId)
   
-  // Get all genres
+  // Get all genres - cached by Prisma Accelerate
   const allGenres = await db.genre.findMany({
-    select: { id: true, name: true }
+    select: { id: true, name: true },
+    ...getCacheStrategy(3600) // 1 hour - genres rarely change
   })
   
   // Find genres user hasn't explored much
   const unexploredGenres = allGenres
-    .filter(g => !profile.favoriteGenres.includes(g.id))
-    .map(g => g.id)
+    .filter((g: typeof allGenres[0]) => !profile.favoriteGenres.includes(g.id))
+    .map((g: typeof allGenres[0]) => g.id)
   
-  // Get high-quality anime from unexplored genres
+  // Get high-quality anime from unexplored genres - cached by Prisma Accelerate
   const discoveryAnime = await db.anime.findMany({
     where: {
       id: {
@@ -707,13 +695,14 @@ export async function getDiscoveryRecommendations(
     orderBy: {
       averageRating: 'desc'
     },
-    take: limit
+    take: limit,
+    ...getCacheStrategy(600) // 10 minutes
   })
   
-  return discoveryAnime.map(anime => {
+  return discoveryAnime.map((anime: typeof discoveryAnime[0]) => {
     const newGenres = anime.genres
-      .filter(g => !profile.favoriteGenres.includes(g.genre.id))
-      .map(g => g.genre.name)
+      .filter((g: typeof anime.genres[0]) => !profile.favoriteGenres.includes(g.genre.id))
+      .map((g: typeof anime.genres[0]) => g.genre.name)
     
     return {
       anime,
@@ -743,10 +732,15 @@ export async function getContinueWatchingRecommendations(
     orderBy: {
       updatedAt: 'desc'
     },
-    take: limit
+    take: limit,
+    ...getCacheStrategy(300) // 5 minutes
   })
   
-  const animeIds = watching.map(w => w.animeId)
+  const animeIds = watching.map((w: typeof watching[0]) => w.animeId)
+  if (animeIds.length === 0) {
+    return []
+  }
+  
   const animeDetails = await db.anime.findMany({
     where: {
       id: { in: animeIds }
@@ -755,10 +749,11 @@ export async function getContinueWatchingRecommendations(
       genres: {
         include: { genre: true }
       }
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
   
-  return animeDetails.map(anime => ({
+  return animeDetails.map((anime: typeof animeDetails[0]) => ({
     anime,
     score: 1,
     reason: 'Continue watching'
@@ -831,7 +826,7 @@ export async function submitRecommendationFeedback(
  * Performance: Clears caches so fresh recommendations are generated
  */
 export function invalidateUserCaches(userId: string): void {
-  cache.delete(`user-profile:${userId}`)
+  // Cache invalidation handled by Prisma Accelerate automatically
   invalidateCFCache(userId) // Clear collaborative filtering caches
 }
 
@@ -872,7 +867,7 @@ export async function getFansLikeYouRecommendations(
   })
   
   // Create map for quick lookup
-  const animeMap = new Map(animeDetails.map(a => [a.id, a]))
+  const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
   
   // Build recommendations with scores
   const recommendations: RecommendationScore[] = []
@@ -882,7 +877,7 @@ export async function getFansLikeYouRecommendations(
     if (!anime) continue
     
     recommendations.push({
-      anime,
+      anime: anime as AnimeWithGenres,
       score: rec.predictedScore,
       reason: rec.similarUserCount > 5 
         ? 'Highly recommended by fans like you'

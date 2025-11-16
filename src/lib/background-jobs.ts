@@ -5,6 +5,21 @@
 
 import { logger } from './logger'
 
+function isDatabaseConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+
+  return (
+    normalized.includes("can't reach database server") ||
+    normalized.includes('p1001') ||
+    normalized.includes('database is temporarily unavailable')
+  )
+}
+
 type JobHandler = () => Promise<void>
 
 interface Job {
@@ -19,10 +34,11 @@ interface Job {
   maxRetries?: number
 }
 
+let hasLoggedTrendingDatabaseUnavailable = false
+
 class BackgroundJobQueue {
   private jobs = new Map<string, Job>()
   private intervals = new Map<string, NodeJS.Timeout>()
-  private running = false
 
   /**
    * Register a one-time job
@@ -123,12 +139,17 @@ class BackgroundJobQueue {
     } catch (error) {
       const duration = Date.now() - startTime
       
-      logger.error(`Job failed: ${job.name}`, error, {}, {
-        jobId: job.id,
-        duration,
-        retries: job.retries,
-        maxRetries: job.maxRetries,
-      })
+      logger.error(
+        `Job failed: ${job.name}`,
+        error instanceof Error ? error : new Error(String(error)),
+        {},
+        {
+          jobId: job.id,
+          duration,
+          retries: job.retries,
+          maxRetries: job.maxRetries,
+        }
+      )
       
       // Retry logic for one-time jobs
       if (!job.schedule && job.maxRetries && job.retries !== undefined) {
@@ -147,9 +168,14 @@ class BackgroundJobQueue {
             })
           }, delay)
         } else {
-          logger.error(`Job failed after ${job.maxRetries} retries: ${job.name}`, error, {}, {
-            jobId: job.id,
-          })
+          logger.error(
+            `Job failed after ${job.maxRetries} retries: ${job.name}`,
+            error instanceof Error ? error : new Error(String(error)),
+            {},
+            {
+              jobId: job.id,
+            }
+          )
           this.jobs.delete(job.id)
         }
       }
@@ -204,12 +230,16 @@ class BackgroundJobQueue {
     
     this.intervals.clear()
     this.jobs.clear()
-    this.running = false
   }
 }
 
 // Singleton instance
 export const jobQueue = new BackgroundJobQueue()
+
+export async function resetBackgroundJobStateForTests(): Promise<void> {
+  await jobQueue.shutdown()
+  hasLoggedTrendingDatabaseUnavailable = false
+}
 
 // Example jobs
 
@@ -221,7 +251,8 @@ export function scheduleSessionCleanup() {
     'session-cleanup',
     async () => {
       try {
-        const { db } = await import('./db')
+        const { getDbWithoutOptimize } = await import('./db')
+        const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
         
         // Delete sessions older than 30 days
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -253,11 +284,13 @@ export function scheduleTrendingUpdate() {
   jobQueue.schedule(
     'trending-update',
     async () => {
-      const { db } = await import('./db')
+      const { getDbWithoutOptimize } = await import('./db')
+      const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
       
       // This is a placeholder - implement your trending algorithm
       // For example: count list additions in last 7 days, weight by recency
       
+      try {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       
       const trending = await db.userAnimeList.groupBy({
@@ -281,6 +314,29 @@ export function scheduleTrendingUpdate() {
       logger.system(`Updated trending anime`, {}, {
         trendingCount: trending.length,
       })
+        hasLoggedTrendingDatabaseUnavailable = false
+      } catch (error) {
+        if (isDatabaseConnectionError(error)) {
+          if (!hasLoggedTrendingDatabaseUnavailable) {
+            logger.warn('Skipping trending update because database is unavailable', {
+              job: 'trending-update',
+            }, {
+              job: 'trending-update',
+              reason: (error as Error)?.message,
+            })
+            hasLoggedTrendingDatabaseUnavailable = true
+          } else {
+            logger.debug('Trending update still skipped - database unavailable', {
+              job: 'trending-update',
+            })
+          }
+          return
+        }
+
+        logger.error('Failed to update trending anime', error as Error, {}, {
+          job: 'trending-update',
+        })
+      }
     },
     60 * 60 * 1000, // Hourly
   )
@@ -294,7 +350,8 @@ export function scheduleTokenCleanup() {
     'token-cleanup',
     async () => {
       try {
-        const { db } = await import('./db')
+        const { getDbWithoutOptimize } = await import('./db')
+        const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
         
         const now = new Date()
         
@@ -318,36 +375,6 @@ export function scheduleTokenCleanup() {
   )
 }
 
-/**
- * Send email digest (run daily at 9 AM)
- */
-export function scheduleEmailDigest() {
-  // Calculate time until next 9 AM
-  const now = new Date()
-  const next9AM = new Date()
-  next9AM.setHours(9, 0, 0, 0)
-  
-  if (now > next9AM) {
-    next9AM.setDate(next9AM.getDate() + 1)
-  }
-  
-  const delay = next9AM.getTime() - now.getTime()
-  
-  setTimeout(() => {
-    jobQueue.schedule(
-      'email-digest',
-      async () => {
-        // This is a placeholder - implement email digest
-        logger.info('Sending email digest...', {}, {})
-        
-        // TODO: Get users who want daily digest
-        // TODO: Generate personalized content
-        // TODO: Send emails via Resend
-      },
-      24 * 60 * 60 * 1000, // Daily
-    )
-  }, delay)
-}
 
 /**
  * Initialize all scheduled jobs
@@ -358,7 +385,6 @@ export function initializeBackgroundJobs() {
   scheduleSessionCleanup()
   scheduleTrendingUpdate()
   scheduleTokenCleanup()
-  // scheduleEmailDigest() // Uncomment when email service is ready
   
   logger.system('Background jobs initialized', {}, {
     jobs: jobQueue.getStats(),

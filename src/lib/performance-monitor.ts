@@ -7,7 +7,6 @@
 
 import { logger } from './logger'
 import { cache } from './cache'
-import { db } from './db'
 
 // Performance metrics interface
 interface PerformanceMetrics {
@@ -32,9 +31,10 @@ interface PerformanceMetrics {
     slowQueries: number
   }
   cache: {
-    hits: number
-    misses: number
     hitRate: number
+    size: number
+    evicted: number
+    expired: number
   }
   response: {
     statusCode: number
@@ -205,9 +205,10 @@ class PerformanceMonitor {
         slowQueries: 0
       },
       cache: {
-        hits: cacheStats.hits,
-        misses: cacheStats.misses,
-        hitRate: cacheStats.hitRate
+        hitRate: cacheStats.hitRate,
+        size: cacheStats.size,
+        evicted: cacheStats.evicted,
+        expired: cacheStats.expired
       },
       response: {
         statusCode,
@@ -254,7 +255,7 @@ class PerformanceMonitor {
           },
           cpu: { usage: cpu.usage, loadAverage: cpu.loadAverage },
           database: { queryCount: 0, queryTime: 0, slowQueries: 0 },
-          cache: { hits: cacheStats.hits, misses: cacheStats.misses, hitRate: cacheStats.hitRate },
+          cache: { hitRate: cacheStats.hitRate, size: cacheStats.size, evicted: cacheStats.evicted, expired: cacheStats.expired },
           response: { statusCode: 200, size: 0, compressed: false },
           errors: 0,
           warnings: 0
@@ -281,7 +282,7 @@ class PerformanceMonitor {
           },
           cpu: { usage: cpu.usage, loadAverage: cpu.loadAverage },
           database: { queryCount: 0, queryTime: 0, slowQueries: 0 },
-          cache: { hits: cacheStats.hits, misses: cacheStats.misses, hitRate: cacheStats.hitRate },
+          cache: { hitRate: cacheStats.hitRate, size: cacheStats.size, evicted: cacheStats.evicted, expired: cacheStats.expired },
           response: { statusCode: 200, size: 0, compressed: false },
           errors: 0,
           warnings: 0
@@ -474,8 +475,12 @@ class PerformanceMonitor {
     const sortedIntervals = Array.from(intervals.keys()).sort()
     if (sortedIntervals.length < 2) return
 
-    const firstInterval = intervals.get(sortedIntervals[0])!
-    const lastInterval = intervals.get(sortedIntervals[sortedIntervals.length - 1])!
+    const firstIntervalKey = sortedIntervals[0]
+    const lastIntervalKey = sortedIntervals[sortedIntervals.length - 1]
+    if (firstIntervalKey === undefined || lastIntervalKey === undefined) return
+
+    const firstInterval = intervals.get(firstIntervalKey)!
+    const lastInterval = intervals.get(lastIntervalKey)!
 
     const firstAvgDuration = firstInterval.reduce((sum, m) => sum + m.duration, 0) / firstInterval.length
     const lastAvgDuration = lastInterval.reduce((sum, m) => sum + m.duration, 0) / lastInterval.length
@@ -483,7 +488,7 @@ class PerformanceMonitor {
     const durationTrend = ((lastAvgDuration - firstAvgDuration) / firstAvgDuration) * 100
 
     if (Math.abs(durationTrend) > 20) {
-      logger.info('Performance trend detected', undefined, undefined, {
+      logger.info('Performance trend detected', undefined, {
         trend: durationTrend > 0 ? 'degrading' : 'improving',
         change: `${Math.abs(durationTrend).toFixed(1)}%`,
         firstAvg: Math.round(firstAvgDuration),
@@ -531,7 +536,7 @@ class PerformanceMonitor {
     }
 
     if (recommendations.length > 0) {
-      logger.info('Performance recommendations generated', undefined, undefined, {
+      logger.info('Performance recommendations generated', undefined, {
         count: recommendations.length,
         recommendations: recommendations.slice(0, 10) // Top 10
       })
@@ -593,10 +598,11 @@ class PerformanceMonitor {
       .sort((a, b) => b.avgTime - a.avgTime)[0]?.endpoint || 'unknown'
 
     const errorRate = (this.metrics.filter(m => m.errors > 0).length / totalRequests) * 100 || 0
-    const memoryUsage = this.metrics.length > 0 ? 
-      (this.metrics[this.metrics.length - 1].memory.heapUsed / this.metrics[this.metrics.length - 1].memory.heapTotal) * 100 : 0
-    const cacheHitRate = this.metrics.length > 0 ? 
-      this.metrics[this.metrics.length - 1].cache.hitRate : 0
+    const lastMetric = this.metrics.length > 0 ? this.metrics[this.metrics.length - 1] : undefined
+    const memoryUsage = lastMetric ? 
+      (lastMetric.memory.heapUsed / lastMetric.memory.heapTotal) * 100 : 0
+    const cacheHitRate = lastMetric ? 
+      lastMetric.cache.hitRate : 0
 
     const alertTypes: Record<string, number> = {}
     this.alerts.forEach(alert => {
@@ -660,10 +666,9 @@ class PerformanceMonitor {
     if (!this.isProfiling) return
 
     const memory = process.memoryUsage()
-    const cpu = this.getCPUUsage()
 
     // Log profiling data
-    logger.debug('Profiling data collected', undefined, undefined, {
+    logger.debug('Profiling data collected', undefined, {
       memory: {
         heapUsed: Math.round(memory.heapUsed / 1024 / 1024),
         heapTotal: Math.round(memory.heapTotal / 1024 / 1024),

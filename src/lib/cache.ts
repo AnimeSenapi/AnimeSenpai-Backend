@@ -367,8 +367,11 @@ class InMemoryCacheManager {
     let evicted = 0
 
     for (let i = 0; i < toEvict && i < entries.length; i++) {
-      this.cache.delete(entries[i][0])
-      evicted++
+      const entry = entries[i]
+      if (entry) {
+        this.cache.delete(entry[0])
+        evicted++
+      }
     }
 
     if (evicted > 0) {
@@ -486,7 +489,7 @@ export function Cacheable(
   ttl: number = CACHE_TTL.MEDIUM,
   strategy: CacheStrategy = CacheStrategy.CACHE_ASIDE
 ) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
+  return function (_target: any, _propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value
 
     descriptor.value = async function (...args: any[]) {

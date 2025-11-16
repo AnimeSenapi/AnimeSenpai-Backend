@@ -75,7 +75,7 @@ async function sendEmailAlert(alert: EmailAlert): Promise<void> {
       to: alert.to,
       subject: alert.subject,
       html: alert.html,
-      text: alert.text
+      ...(alert.text !== undefined && { text: alert.text })
     })
 
     if (error) {
@@ -88,10 +88,12 @@ async function sendEmailAlert(alert: EmailAlert): Promise<void> {
       provider: 'resend'
     })
   } catch (error) {
-    logger.error('Failed to send email alert', { 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      to: alert.to
-    })
+    logger.error(
+      'Failed to send email alert',
+      error instanceof Error ? error : new Error('Unknown error'),
+      undefined,
+      { to: alert.to }
+    )
     throw error
   }
 }
@@ -132,10 +134,12 @@ async function sendSlackAlert(alert: SlackAlert): Promise<void> {
       webhookUrl: defaultConfig.slack.webhookUrl
     })
   } catch (error) {
-    logger.error('Failed to send Slack alert', { 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      channel: alert.channel
-    })
+    logger.error(
+      'Failed to send Slack alert',
+      error instanceof Error ? error : new Error('Unknown error'),
+      undefined,
+      { channel: alert.channel }
+    )
     throw error
   }
 }
@@ -170,9 +174,10 @@ async function sendDiscordAlert(alert: DiscordAlert): Promise<void> {
       webhookUrl: defaultConfig.discord.webhookUrl
     })
   } catch (error) {
-    logger.error('Failed to send Discord alert', { 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    })
+    logger.error(
+      'Failed to send Discord alert',
+      error instanceof Error ? error : new Error('Unknown error')
+    )
     throw error
   }
 }
@@ -206,9 +211,10 @@ export async function sendAlert(
     await Promise.allSettled(promises)
     logger.info('All alerts sent successfully')
   } catch (error) {
-    logger.error('Some alerts failed to send', { 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    })
+    logger.error(
+      'Some alerts failed to send',
+      error instanceof Error ? error : new Error('Unknown error')
+    )
     throw error
   }
 }
@@ -328,8 +334,7 @@ export async function checkAlertHealth(): Promise<{
   if (defaultConfig.email.enabled && defaultConfig.email.apiKey) {
     try {
       const { Resend } = await import('resend')
-      const resend = new Resend(defaultConfig.email.apiKey)
-      // Simple API key validation
+      new Resend(defaultConfig.email.apiKey) // Simple API key validation
       health.email = true
     } catch (error) {
       logger.warn('Email service health check failed', { error })

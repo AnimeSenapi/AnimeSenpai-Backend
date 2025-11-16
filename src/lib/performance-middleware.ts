@@ -61,11 +61,11 @@ class PerformanceMiddleware {
       const originalSend = res.send
 
       // Override res.send to capture response time
-      res.send = function(body: any) {
+      res.send = (body: any) => {
         const responseTime = Date.now() - startTime
         this.updateMetrics(req, res, responseTime)
-        return originalSend.call(this, body)
-      }.bind(this)
+        return originalSend.call(res, body)
+      }
 
       // Add performance headers
       this.addPerformanceHeaders(res)

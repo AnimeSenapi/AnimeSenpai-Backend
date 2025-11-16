@@ -276,11 +276,15 @@ class MonitoringService {
     newUsersToday: number
   }> {
     try {
+      // Use client without Optimize to avoid tracing issues in monitoring context
+      const { getDbWithoutOptimize } = await import('./db')
+      const dbWithoutOptimize = getDbWithoutOptimize()
+      
       const [activeUsers, totalAnime, totalReviews, newUsersToday] = await Promise.all([
-        db.user.count({ where: { lastLoginAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
-        db.anime.count(),
-        db.userAnimeReview.count(),
-        db.user.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+        dbWithoutOptimize.user.count({ where: { lastLoginAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
+        dbWithoutOptimize.anime.count(),
+        dbWithoutOptimize.userAnimeReview.count(),
+        dbWithoutOptimize.user.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
       ])
 
       return {
@@ -439,8 +443,7 @@ class MonitoringService {
   private async checkDisk(): Promise<HealthCheck> {
     try {
       const fs = require('fs')
-      const stats = fs.statSync('.')
-      // Basic disk check - in production, you'd want more sophisticated checks
+      fs.statSync('.') // Basic disk check - in production, you'd want more sophisticated checks
       return {
         status: 'pass',
         message: 'Disk accessible',

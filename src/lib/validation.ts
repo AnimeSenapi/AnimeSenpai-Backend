@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createError, AppError, ErrorCode } from './errors'
+import { createError } from './errors'
 
 // Common validation schemas
 export const emailSchema = z
@@ -197,6 +197,16 @@ export function validateInput<T>(schema: z.ZodSchema<T>, input: unknown, context
   } catch (error) {
     if (error instanceof z.ZodError) {
       const firstError = error.errors[0]
+      if (!firstError) {
+        throw createError.validationError(
+          'Validation failed',
+          context?.field,
+          { 
+            errors: error.errors,
+            input: typeof input === 'object' ? input : { value: input }
+          }
+        )
+      }
       const field = firstError.path.join('.')
       const message = firstError.message
       

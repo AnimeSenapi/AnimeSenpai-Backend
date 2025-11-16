@@ -1,9 +1,11 @@
+import './lib/tracing'
 import { serve } from 'bun'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from './routers'
 import { Context } from './lib/trpc'
 import { logger, extractLogContext, generateRequestId } from './lib/logger'
 import { handleError } from './lib/errors'
+import { verifyCsrfToken, RefreshedCsrfToken } from './lib/csrf'
 import { gzip } from 'zlib'
 import { promisify } from 'util'
 
@@ -41,7 +43,6 @@ async function findAvailablePort(startPort: number): Promise<number> {
 // Start server
 ;(async () => {
   // Initialize cache system
-  const { cache } = await import('./lib/cache')
   const { CacheWarmer } = await import('./lib/cache-middleware')
   
   // Warm up cache
@@ -49,9 +50,6 @@ async function findAvailablePort(startPort: number): Promise<number> {
   
   // Initialize monitoring and health check systems
   const { monitoringService } = await import('./lib/monitoring-service')
-  const { healthChecker } = await import('./lib/health-check')
-  const { errorHandler } = await import('./lib/error-handler')
-  const { queryOptimizer } = await import('./lib/query-optimizer')
   const { securityManager } = await import('./lib/security')
   const { performanceMonitor } = await import('./lib/performance-monitor')
   
@@ -67,7 +65,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
   
   const availablePort = await findAvailablePort(port)
 
-  const server = serve({
+  serve({
     port: availablePort,
     async fetch(request) {
       const startTime = Date.now()
@@ -96,7 +94,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
         // Security analysis
         const securityAnalysis = await securityManager.analyzeRequest(request)
         if (!securityAnalysis.allowed) {
-          logger.warn('Request blocked by security', logContext, undefined, {
+          logger.warn('Request blocked by security', logContext, {
             reason: securityAnalysis.reason,
             ip: logContext.ipAddress,
             userAgent: request.headers.get('user-agent')
@@ -111,12 +109,12 @@ async function findAvailablePort(startPort: number): Promise<number> {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': corsOrigin,
               'X-Request-ID': requestId,
-            } as HeadersInit,
+            } as Record<string, string>,
           })
         }
 
         // Log incoming request
-        logger.request(request.method, request.url, logContext, {
+        logger.request(`${request.method} ${request.url}`, logContext, {
           userAgent: request.headers.get('user-agent'),
           contentLength: request.headers.get('content-length'),
           contentType: request.headers.get('content-type'),
@@ -131,7 +129,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          } as HeadersInit,
+          } as Record<string, string>,
         })
       }
 
@@ -149,14 +147,14 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          } as HeadersInit,
+          } as Record<string, string>,
         })
       }
 
       // Metrics endpoint
       if (url.pathname === '/metrics') {
         const { queryStats } = await import('./lib/db')
-        const { getRateLimitStats } = await import('./lib/rate-limit')
+        const { getRateLimitStats } = await import('./lib/rate-limiter')
         const { jobQueue } = await import('./lib/background-jobs')
         const { cache } = await import('./lib/cache')
         
@@ -218,7 +216,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          } as HeadersInit,
+          } as Record<string, string>,
         })
       }
 
@@ -242,7 +240,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
             'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
-          } as HeadersInit,
+          } as Record<string, string>,
         })
       }
 

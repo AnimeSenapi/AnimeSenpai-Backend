@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers - must use specific origin with credentials, not '*'
   if (isAllowed && origin) {
     res.setHeader('Access-Control-Allow-Origin', origin)
-  } else if (allowedOrigins.length > 0) {
+  } else if (allowedOrigins.length > 0 && allowedOrigins[0]) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0])
   } else {
     // Fallback: if no CORS_ORIGINS set, allow the requesting origin
@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     
     // Ensure CORS headers are set
-    res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : allowedOrigins[0])
+    res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : (allowedOrigins[0] || '*'))
     
     res.status(response.status).send(data)
   } catch (error: any) {

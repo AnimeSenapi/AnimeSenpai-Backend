@@ -47,7 +47,6 @@ export const adminRouter = router({
           select: {
             id: true,
             email: true,
-            name: true,
             username: true,
             primaryRole: {
               select: {
@@ -63,8 +62,9 @@ export const adminRouter = router({
       ])
 
       return {
-        users: users.map(user => ({
+        users: users.map((user: typeof users[0]) => ({
           ...user,
+          name: null,
           role: user.primaryRole?.name || 'user'
         })),
         pagination: {
@@ -182,7 +182,7 @@ export const adminRouter = router({
 
       const flag = await setFeatureFlag(input.key, {
         name: input.name,
-        description: input.description,
+        ...(input.description !== undefined && { description: input.description }),
         enabled: input.enabled,
         roles: input.roles,
       })
@@ -322,7 +322,6 @@ export const adminRouter = router({
         select: {
           id: true,
           email: true,
-          name: true,
           username: true,
           primaryRole: {
             select: {
@@ -340,9 +339,12 @@ export const adminRouter = router({
         throw new Error('User not found')
       }
 
+      const { primaryRole, ...rest } = user
+
       return {
-        ...user,
-        role: user.primaryRole?.name || 'user'
+        ...rest,
+        name: null,
+        role: primaryRole?.name || 'user'
       }
     }),
 
@@ -402,7 +404,7 @@ export const adminRouter = router({
 
       // For now, we'll set a field or handle it via role
       // You might want to add a 'banned' or 'suspended' field to your schema
-      const user = await db.user.update({
+      await db.user.update({
         where: { id: input.userId },
         data: { 
           // Add banned field if you have it in schema
@@ -475,7 +477,6 @@ export const adminRouter = router({
         where: {
           OR: [
             { email: { contains: input.query, mode: 'insensitive' } },
-            { name: { contains: input.query, mode: 'insensitive' } },
             { username: { contains: input.query, mode: 'insensitive' } },
           ]
         },
@@ -483,15 +484,23 @@ export const adminRouter = router({
         select: {
           id: true,
           email: true,
-          name: true,
           username: true,
-          role: true,
+          emailVerified: true,
           createdAt: true,
           lastLoginAt: true,
+          primaryRole: {
+            select: {
+              name: true
+            }
+          },
         }
       })
 
-      return users
+      return users.map((user: any) => ({
+        ...user,
+        name: null,
+        role: user.primaryRole?.name || 'user'
+      }))
     }),
 
   // Delete anime
@@ -728,13 +737,14 @@ export const adminRouter = router({
           }
 
           // Upsert settings
+          let updatedSettings
           if (settings) {
-            await db.systemSettings.update({
+            updatedSettings = await db.systemSettings.update({
               where: { id: settings.id },
               data: updateData
             })
           } else {
-            await db.systemSettings.create({
+            updatedSettings = await db.systemSettings.create({
               data: {
                 ...updateData,
                 siteName: updateData.siteName || 'AnimeSenpai',
@@ -774,7 +784,7 @@ export const adminRouter = router({
         async () => {
           const user = await db.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, email: true, name: true }
+            select: { id: true, email: true, username: true }
           })
 
           if (!user) {
@@ -845,7 +855,6 @@ export const adminRouter = router({
   updateUserDetails: protectedProcedure
     .input(z.object({
       userId: z.string(),
-      name: z.string().optional(),
       username: z.string().optional(),
       email: z.string().email().optional(),
     }))
@@ -859,10 +868,17 @@ export const adminRouter = router({
         async () => {
           const { userId, ...updateData } = input
 
-          // Remove undefined values
-          const cleanUpdateData = Object.fromEntries(
+          // Remove undefined values and type for Prisma update
+          const cleanUpdateData: {
+            username?: string
+            email?: string
+            emailVerified?: boolean
+          } = Object.fromEntries(
             Object.entries(updateData).filter(([_, v]) => v !== undefined)
-          )
+          ) as {
+            username?: string
+            email?: string
+          }
 
           // Check if email is being changed and if it's already in use
           if (cleanUpdateData.email) {
@@ -895,12 +911,15 @@ export const adminRouter = router({
             select: {
               id: true,
               email: true,
-              name: true,
               username: true,
               emailVerified: true,
-              role: true,
               createdAt: true,
               lastLoginAt: true,
+              primaryRole: {
+                select: {
+                  name: true
+                }
+              },
             }
           })
 
@@ -917,7 +936,16 @@ export const adminRouter = router({
             ctx.req?.headers.get('user-agent') || undefined
           )
 
-          return { success: true, user }
+          const { primaryRole, ...rest } = user
+
+          return { 
+            success: true,
+            user: {
+              ...rest,
+              name: null,
+              role: primaryRole?.name || 'user'
+            }
+          }
         },
         { userId: input.userId, fields: Object.keys(input) },
         ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
@@ -938,31 +966,30 @@ export const adminRouter = router({
           select: {
             id: true,
             email: true,
-            name: true,
             username: true,
             createdAt: true,
             lastLoginAt: true,
           }
         }),
         db.userAnimeList.count({ where: { userId: input.userId } }),
-        db.review.count({ where: { userId: input.userId } }),
-        db.friend.count({ 
+        db.userAnimeReview.count({ where: { userId: input.userId } }),
+        db.friendship.count({ 
           where: {
             OR: [
-              { userId: input.userId, status: 'accepted' },
-              { friendId: input.userId, status: 'accepted' }
+              { user1Id: input.userId, status: 'accepted' },
+              { user2Id: input.userId, status: 'accepted' }
             ]
           }
         }),
         db.follow.count({ where: { followingId: input.userId } }),
         db.securityLog.findMany({
           where: { userId: input.userId },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { timestamp: 'desc' },
           take: 10,
           select: {
             id: true,
-            eventType: true,
-            createdAt: true,
+            event: true,
+            timestamp: true,
             ipAddress: true,
             userAgent: true,
           }
@@ -974,14 +1001,23 @@ export const adminRouter = router({
       }
 
       return {
-        user,
+        user: {
+          ...user,
+          name: null,
+        },
         stats: {
           animeList: animeListCount,
           reviews: reviewsCount,
           friends: friendsCount,
           followers: followersCount,
         },
-        recentActivity: securityLogs
+        recentActivity: securityLogs.map((log: any) => ({
+          id: log.id,
+          eventType: log.event,
+          createdAt: log.timestamp,
+          ipAddress: log.ipAddress,
+          userAgent: log.userAgent,
+        }))
       }
     }),
 
@@ -1002,7 +1038,7 @@ export const adminRouter = router({
         async () => {
           const user = await db.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, email: true, name: true }
+            select: { id: true, email: true, username: true }
           })
 
           if (!user) {
@@ -1021,7 +1057,7 @@ export const adminRouter = router({
 
           const sanitizedSubject = sanitizeHtml(input.subject)
           const sanitizedMessage = sanitizeHtml(input.message)
-          const sanitizedName = user.name ? sanitizeHtml(user.name) : ''
+          const sanitizedName = user.username ? sanitizeHtml(user.username) : ''
 
           // Send custom email
           const html = `
@@ -1140,7 +1176,7 @@ export const adminRouter = router({
 
       return {
         permissions,
-        categories: categories.map(c => c.category)
+        categories: categories.map((c: typeof categories[0]) => c.category)
       }
     }),
 
@@ -1582,7 +1618,7 @@ export const adminRouter = router({
       requireAdmin(ctx.user.role)
       await checkAdminRateLimit(ctx.user.id)
 
-      const { page = 1, limit = 20, category, tier, search } = input
+      const { page = 1, limit = 20, category, search } = input
       const skip = (page - 1) * limit
 
       const where: any = {}
@@ -1666,8 +1702,9 @@ export const adminRouter = router({
       await logSecurityEvent(
         ctx.user.id,
         'achievement_created',
-        `Created achievement: ${achievement.name}`,
-        { achievementId: achievement.id, key: achievement.key }
+        { achievementId: achievement.id, key: achievement.key, name: achievement.name },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
       )
 
       return { success: true, achievement }
@@ -1710,8 +1747,9 @@ export const adminRouter = router({
       await logSecurityEvent(
         ctx.user.id,
         'achievement_updated',
-        `Updated achievement: ${achievement.name}`,
-        { achievementId: achievement.id, key: achievement.key }
+        { achievementId: achievement.id, key: achievement.key, name: achievement.name },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
       )
 
       return { success: true, achievement }
@@ -1758,8 +1796,9 @@ export const adminRouter = router({
       await logSecurityEvent(
         ctx.user.id,
         'achievement_deleted',
-        `Deleted achievement: ${existing.name}`,
-        { achievementId: existing.id, key: existing.key }
+        { achievementId: existing.id, key: existing.key, name: existing.name },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
       )
 
       return { success: true }
@@ -1798,7 +1837,7 @@ export const adminRouter = router({
           orderBy: { unlockedAt: 'desc' },
           include: {
             user: {
-              select: { id: true, name: true, username: true }
+              select: { id: true, username: true }
             },
             achievement: {
               select: { id: true, name: true, icon: true, tier: true }
@@ -1812,7 +1851,10 @@ export const adminRouter = router({
         totalUnlocks,
         categoryStats,
         tierStats,
-        recentUnlocks
+        recentUnlocks: recentUnlocks.map((unlock: any) => ({
+          ...unlock,
+          user: unlock.user ? { ...unlock.user, name: null } : null,
+        }))
       }
     }),
 
@@ -1852,7 +1894,7 @@ export const adminRouter = router({
       })
 
       if (existing.length > 0) {
-        throw new Error(`Keys already exist: ${existing.map(e => e.key).join(', ')}`)
+        throw new Error(`Keys already exist: ${existing.map((e: typeof existing[0]) => e.key).join(', ')}`)
       }
 
       const created = await db.achievement.createMany({
@@ -1862,8 +1904,9 @@ export const adminRouter = router({
       await logSecurityEvent(
         ctx.user.id,
         'achievements_bulk_created',
-        `Bulk created ${created.count} achievements`,
-        { count: created.count }
+        { count: created.count },
+        ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
+        ctx.req?.headers.get('user-agent') || undefined
       )
 
       return { success: true, count: created.count }

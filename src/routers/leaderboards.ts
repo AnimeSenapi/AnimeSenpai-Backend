@@ -45,7 +45,7 @@ export const leaderboardsRouter = router({
       
       // Count anime for each user
       const usersWithCounts = await Promise.all(
-        allUsers.map(async (user) => {
+        allUsers.map(async (user: typeof allUsers[0]) => {
           const count = await db.userAnimeList.count({
             where: {
               userId: user.id,
@@ -94,7 +94,7 @@ export const leaderboardsRouter = router({
       
       // Count reviews for each user
       const usersWithCounts = await Promise.all(
-        allUsers.map(async (user) => {
+        allUsers.map(async (user: typeof allUsers[0]) => {
           const count = await db.userAnimeReview.count({
             where: {
               userId: user.id,
@@ -143,7 +143,7 @@ export const leaderboardsRouter = router({
       
       // Count friendships for each user (both directions)
       const usersWithCounts = await Promise.all(
-        allUsers.map(async (user) => {
+        allUsers.map(async (user: typeof allUsers[0]) => {
           const count1 = await db.friendship.count({
             where: { user1Id: user.id }
           })
@@ -205,7 +205,7 @@ export const leaderboardsRouter = router({
             where: { userId: ctx.user.id },
             include: { achievement: true }
           })
-          userScore = achievements.reduce((sum, ua) => sum + ua.achievement.points, 0)
+          userScore = achievements.reduce((sum: number, ua: typeof achievements[0]) => sum + ua.achievement.points, 0)
           // Would need to calculate for all users - simplified for now
           rank = 0
           total = 0

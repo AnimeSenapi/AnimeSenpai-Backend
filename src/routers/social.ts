@@ -616,7 +616,7 @@ export const socialRouter = router({
         ])
         
         return {
-          followers: followers.map(f => f.follower),
+          followers: followers.map((f: typeof followers[0]) => f.follower),
           total,
           page,
           totalPages: Math.ceil(total / limit)
@@ -669,7 +669,7 @@ export const socialRouter = router({
         ])
         
         return {
-          following: following.map(f => f.following),
+          following: following.map((f: typeof following[0]) => f.following),
           total,
           page,
           totalPages: Math.ceil(total / limit)
@@ -1021,7 +1021,7 @@ export const socialRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       try {
-        const settings = await db.userPrivacySettings.upsert({
+        await db.userPrivacySettings.upsert({
           where: { userId: ctx.user.id },
           create: {
             userId: ctx.user.id,
@@ -1098,7 +1098,7 @@ export const socialRouter = router({
           WHERE "user2Id" = ${ctx.user.id}
         `
         
-        const connectedUserIds = existingConnections.map(c => c.userId)
+        const connectedUserIds = existingConnections.map((c: typeof existingConnections[0]) => c.userId)
         connectedUserIds.push(ctx.user.id) // Don't recommend self
         
         // Get my anime list to find users with similar tastes
@@ -1133,7 +1133,7 @@ export const socialRouter = router({
           
           // Get anime count for each user
           const usersWithCount = await Promise.all(
-            randomUsers.map(async (u) => {
+            randomUsers.map(async (u: typeof randomUsers[0]) => {
               const count = await db.userAnimeList.count({
                 where: { userId: u.id }
               })
@@ -1179,7 +1179,7 @@ export const socialRouter = router({
         
         // Get mutual friends count for each recommendation
         const recommendations = await Promise.all(
-          usersWithSharedAnime.map(async (user) => {
+          usersWithSharedAnime.map(async (user: typeof usersWithSharedAnime[0]) => {
             // Count mutual friends
             const mutualFriends = await db.$queryRaw<{ count: number }[]>`
               SELECT COUNT(*)::int as count FROM (

@@ -9,13 +9,11 @@
  */
 
 import { db } from './db'
-import { cache } from './cache'
 import { TRPCError } from '@trpc/server'
 
 export interface FriendProfile {
   id: string
   username: string
-  name: string | null
   avatar: string | null
   bio: string | null
   isFollowing: boolean
@@ -28,7 +26,6 @@ export interface Activity {
   id: string
   userId: string
   username: string
-  name: string | null | undefined
   avatar: string | null | undefined
   activityType: string
   animeId: string | null
@@ -206,7 +203,6 @@ export async function getFollowers(
           select: {
             id: true,
             username: true,
-            name: true,
             avatar: true,
             bio: true
           }
@@ -228,13 +224,12 @@ export async function getFollowers(
       where: { followerId: requesterId },
       select: { followingId: true }
     })
-    requesterFollowing = new Set(following.map(f => f.followingId))
+    requesterFollowing = new Set(following.map((f: typeof following[0]) => f.followingId))
   }
 
-  const profiles: FriendProfile[] = followers.map(f => ({
+  const profiles: FriendProfile[] = followers.map((f: typeof followers[0]) => ({
     id: f.follower.id,
     username: f.follower.username,
-    name: f.follower.name,
     avatar: f.follower.avatar,
     bio: f.follower.bio,
     isFollowing: requesterFollowing.has(f.follower.id),
@@ -254,7 +249,7 @@ export async function getFollowers(
  */
 export async function getFollowing(
   userId: string,
-  requesterId: string | null,
+  _requesterId: string | null,
   limit: number = 20,
   offset: number = 0
 ): Promise<{ following: FriendProfile[]; total: number }> {
@@ -266,7 +261,6 @@ export async function getFollowing(
           select: {
             id: true,
             username: true,
-            name: true,
             avatar: true,
             bio: true
           }
@@ -287,12 +281,11 @@ export async function getFollowing(
     where: { followingId: userId },
     select: { followerId: true }
   })
-  followerIds = new Set(followers.map(f => f.followerId))
+  followerIds = new Set(followers.map((f: typeof followers[0]) => f.followerId))
 
-  const profiles: FriendProfile[] = following.map(f => ({
+  const profiles: FriendProfile[] = following.map((f: typeof following[0]) => ({
     id: f.following.id,
     username: f.following.username,
-    name: f.following.name,
     avatar: f.following.avatar,
     bio: f.following.bio,
     isFollowing: true,
@@ -315,18 +308,19 @@ export async function getMutualFollows(
   userId: string,
   limit: number = 50
 ): Promise<FriendProfile[]> {
-  const cacheKey = `mutual-follows:${userId}`
-  const cached = cache.get<FriendProfile[]>(cacheKey)
-  if (cached) return cached.slice(0, limit)
-
-  // Get users that userId follows
+  // Get users that userId follows - cached by Prisma Accelerate
   const following = await db.follow.findMany({
     where: { followerId: userId },
-    select: { followingId: true }
+    select: { followingId: true },
+    ...getCacheStrategy(300) // 5 minutes
   })
-  const followingIds = following.map(f => f.followingId)
+  const followingIds = following.map((f: typeof following[0]) => f.followingId)
 
-  // Find which of those also follow back
+  if (followingIds.length === 0) {
+    return []
+  }
+
+  // Find which of those also follow back - cached by Prisma Accelerate
   const mutualFollows = await db.follow.findMany({
     where: {
       followerId: { in: followingIds },
@@ -337,18 +331,17 @@ export async function getMutualFollows(
         select: {
           id: true,
           username: true,
-          name: true,
           avatar: true,
           bio: true
         }
       }
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
 
-  const profiles = mutualFollows.map(f => ({
+  const profiles = mutualFollows.map((f: typeof mutualFollows[0]) => ({
     id: f.follower.id,
     username: f.follower.username,
-    name: f.follower.name,
     avatar: f.follower.avatar,
     bio: f.follower.bio,
     isFollowing: true,
@@ -357,9 +350,7 @@ export async function getMutualFollows(
     followedAt: f.createdAt
   }))
 
-  // Cache for 5 minutes
-  cache.set(cacheKey, profiles, 5 * 60 * 1000)
-
+  // Database queries are cached by Prisma Accelerate, no need for in-memory cache
   return profiles.slice(0, limit)
 }
 
@@ -451,8 +442,8 @@ export async function getActivityFeed(
   ])
 
   // Get user details and anime details
-  const userIds = [...new Set(activities.map(a => a.userId))]
-  const animeIds = activities.filter(a => a.animeId).map(a => a.animeId!)
+  const userIds = [...new Set(activities.map((a: typeof activities[0]) => a.userId))]
+  const animeIds = activities.filter((a: typeof activities[0]) => a.animeId).map((a: typeof activities[0]) => a.animeId!)
 
   const [users, anime] = await Promise.all([
     db.user.findMany({
@@ -460,7 +451,6 @@ export async function getActivityFeed(
       select: {
         id: true,
         username: true,
-        name: true,
         avatar: true
       }
     }),
@@ -474,10 +464,10 @@ export async function getActivityFeed(
     })
   ])
 
-  const userMap = new Map(users.map(u => [u.id, u]))
-  const animeMap = new Map(anime.map(a => [a.id, a]))
+  const userMap = new Map<string, typeof users[0]>(users.map((u: typeof users[0]) => [u.id, u]))
+  const animeMap = new Map<string, typeof anime[0]>(anime.map((a: typeof anime[0]) => [a.id, a]))
 
-  const enrichedActivities: Activity[] = activities.map(activity => {
+  const enrichedActivities: Activity[] = activities.map((activity: typeof activities[0]) => {
     const user = userMap.get(activity.userId)
     const animeData = activity.animeId ? animeMap.get(activity.animeId) : null
     const metadata = activity.metadata ? JSON.parse(activity.metadata) : {}
@@ -486,7 +476,6 @@ export async function getActivityFeed(
       id: activity.id,
       userId: activity.userId,
       username: user?.username || 'Unknown',
-      name: user?.name,
       avatar: user?.avatar,
       activityType: activity.activityType,
       animeId: activity.animeId,
@@ -516,10 +505,6 @@ export async function getFriendRecommendations(
   averageFriendRating: number
   friendNames: string[]
 }>> {
-  const cacheKey = `friend-recs:${userId}`
-  const cached = cache.get<any[]>(cacheKey)
-  if (cached) return cached.slice(0, limit)
-
   // Get mutual friends
   const friends = await getMutualFollows(userId, 100)
   const friendIds = friends.map(f => f.id)
@@ -528,14 +513,15 @@ export async function getFriendRecommendations(
     return []
   }
 
-  // Get user's seen anime
+  // Get user's seen anime - cached by Prisma Accelerate
   const userAnimeList = await db.userAnimeList.findMany({
     where: { userId },
-    select: { animeId: true }
+    select: { animeId: true },
+    ...getCacheStrategy(300) // 5 minutes
   })
-  const seenAnime = new Set(userAnimeList.map(a => a.animeId))
+  const seenAnime = new Set(userAnimeList.map((a: typeof userAnimeList[0]) => a.animeId))
 
-  // Get friends' highly-rated anime
+  // Get friends' highly-rated anime - cached by Prisma Accelerate
   const friendsAnime = await db.userAnimeList.findMany({
     where: {
       userId: { in: friendIds },
@@ -546,7 +532,8 @@ export async function getFriendRecommendations(
       animeId: true,
       userId: true,
       score: true
-    }
+    },
+    ...getCacheStrategy(300) // 5 minutes
   })
 
   // Group by anime
@@ -574,7 +561,7 @@ export async function getFriendRecommendations(
     // Get friend names (limit to 3 for display)
     const friendUserIds = group.userIds.slice(0, 3)
     const friendUsers = friends.filter(f => friendUserIds.includes(f.id))
-    const friendNames = friendUsers.map(f => f.name || f.username)
+    const friendNames = friendUsers.map(f => f.username)
 
     recommendations.push({
       animeId,
@@ -592,9 +579,7 @@ export async function getFriendRecommendations(
     return b.averageFriendRating - a.averageFriendRating
   })
 
-  // Cache for 1 hour
-  cache.set(cacheKey, recommendations, 60 * 60 * 1000)
-
+  // Database queries are cached by Prisma Accelerate, no need for in-memory cache
   return recommendations.slice(0, limit)
 }
 
@@ -636,15 +621,15 @@ export async function getSocialProof(
     }
   })
 
-  const ratedFriends = friendsAnimeList.filter(f => f.score !== null)
+  const ratedFriends = friendsAnimeList.filter((f: typeof friendsAnimeList[0]) => f.score !== null)
   const avgRating = ratedFriends.length > 0
-    ? ratedFriends.reduce((sum, f) => sum + (f.score || 0), 0) / ratedFriends.length
+    ? ratedFriends.reduce((sum: number, f: typeof ratedFriends[0]) => sum + (f.score || 0), 0) / ratedFriends.length
     : null
 
   // Get up to 3 friend names
-  const friendUserIds = friendsAnimeList.slice(0, 3).map(f => f.userId)
+  const friendUserIds = friendsAnimeList.slice(0, 3).map((f: typeof friendsAnimeList[0]) => f.userId)
   const friendUsers = friends.filter(f => friendUserIds.includes(f.id))
-  const friendNames = friendUsers.map(f => f.name || f.username)
+  const friendNames = friendUsers.map(f => f.username)
 
   return {
     friendsWatched: friendsAnimeList.length,
@@ -729,12 +714,12 @@ async function notifyFriendsOfActivity(
     // Get user info
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { name: true, username: true }
+      select: { username: true }
     })
 
     if (!user) return
 
-    const userName = user.name || user.username
+    const userName = user.username
 
     // Create notifications for friends
     const message = activityType === 'rated_anime'
@@ -811,12 +796,8 @@ export async function markNotificationsRead(
  * Clear social caches for a user
  * Call after follow/unfollow actions
  */
-function clearSocialCaches(userId: string): void {
-  cache.delete(`mutual-follows:${userId}`)
-  cache.delete(`friend-recs:${userId}`)
-  cache.delete(`follower-count:${userId}`)
-  cache.delete(`following-count:${userId}`)
-  cache.delete(`social-counts:${userId}`) // FIX: Match the cache key used in getSocialCounts
+function clearSocialCaches(_userId: string): void {
+  // Cache invalidation handled by Prisma Accelerate automatically
 }
 
 /**
@@ -827,16 +808,15 @@ function clearSocialCaches(userId: string): void {
 export async function getSocialCounts(
   userId: string
 ): Promise<{ followers: number; following: number; mutualFollows: number }> {
-  const cacheKey = `social-counts:${userId}`
-  const cached = cache.get<any>(cacheKey)
-  if (cached) return cached
-
+  // Database queries cached by Prisma Accelerate
   const [followers, following, mutualFollowsList] = await Promise.all([
     db.follow.count({
-      where: { followingId: userId }
+      where: { followingId: userId },
+      ...getCacheStrategy(300) // 5 minutes
     }),
     db.follow.count({
-      where: { followerId: userId }
+      where: { followerId: userId },
+      ...getCacheStrategy(300) // 5 minutes
     }),
     getMutualFollows(userId, 1000)
   ])
@@ -847,9 +827,7 @@ export async function getSocialCounts(
     mutualFollows: mutualFollowsList.length
   }
 
-  // Cache for 5 minutes
-  cache.set(cacheKey, counts, 5 * 60 * 1000)
-
+  // Database queries are cached by Prisma Accelerate, no need for in-memory cache
   return counts
 }
 

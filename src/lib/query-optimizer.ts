@@ -5,9 +5,8 @@
  * for database operations in the AnimeSenpai backend.
  */
 
-import { db } from './db'
+import { getBaseClientForEvents } from './db'
 import { logger } from './logger'
-import { cache } from './cache'
 
 // Query performance metrics
 interface QueryMetrics {
@@ -263,8 +262,11 @@ class QueryOptimizer {
    */
   private startQueryAnalysis(): void {
     // Monitor Prisma queries
-    if (process.env.NODE_ENV === 'development') {
-      db.$on('query', (e) => {
+    // Use base client for event listeners since extended clients don't expose $on
+    const baseClient = getBaseClientForEvents()
+    if (process.env.NODE_ENV === 'development' && baseClient) {
+      // @ts-ignore - Prisma event emitter
+      baseClient.$on('query', (e: any) => {
         this.analyzeQuery(e.query, e.duration, e.params)
       })
     }
@@ -283,7 +285,7 @@ class QueryOptimizer {
       query: this.normalizeQuery(query),
       duration,
       timestamp: Date.now(),
-      parameters: params,
+      ...(params !== undefined && { parameters: params }),
       cached: false,
       optimized: false,
       suggestions: []
@@ -292,7 +294,7 @@ class QueryOptimizer {
     // Check if query is slow
     if (duration > this.slowQueryThreshold) {
       metrics.suggestions = this.generateOptimizationSuggestions(query, duration)
-      logger.warn('Slow query detected', undefined, undefined, {
+      logger.warn('Slow query detected', undefined, {
         query: metrics.query,
         duration,
         suggestions: metrics.suggestions
@@ -350,7 +352,8 @@ class QueryOptimizer {
     }
 
     // Check for complex WHERE clauses
-    if (query.includes('where') && query.split('where')[1].split(' ').length > 10) {
+    const whereClause = query.split('where')[1]
+    if (query.includes('where') && whereClause && whereClause.split(' ').length > 10) {
       suggestions.push('Consider simplifying WHERE clause or adding composite indexes')
     }
 
@@ -472,7 +475,7 @@ class QueryOptimizer {
       averageDuration: Math.round(averageDuration),
       slowestQuery: slowestQuery.duration > 0 ? slowestQuery : null,
       mostCommonQueries,
-      optimizationSuggestions: this.generateOptimizationSuggestions(),
+      optimizationSuggestions: this.generateComprehensiveOptimizationSuggestions(),
       indexRecommendations: this.indexRecommendations
     }
   }
@@ -480,7 +483,7 @@ class QueryOptimizer {
   /**
    * Generate comprehensive optimization suggestions
    */
-  private generateOptimizationSuggestions(): OptimizationSuggestion[] {
+  private generateComprehensiveOptimizationSuggestions(): OptimizationSuggestion[] {
     const suggestions: OptimizationSuggestion[] = []
 
     // Analyze query patterns
@@ -525,7 +528,7 @@ class QueryOptimizer {
   /**
    * Optimize a specific query
    */
-  async optimizeQuery(originalQuery: string, parameters?: any[]): Promise<{
+  async optimizeQuery(originalQuery: string, _parameters?: any[]): Promise<{
     optimized: boolean
     suggestions: string[]
     estimatedImprovement: number

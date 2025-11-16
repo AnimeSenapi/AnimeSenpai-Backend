@@ -1,5 +1,5 @@
 import { logger } from './logger'
-import { sendHealthCheckAlert } from './alerts'
+import { sendUptimeAlert } from './alerts'
 
 interface HealthCheck {
   service: string
@@ -93,15 +93,14 @@ class UptimeMonitor {
 
         // Send alert if service is down
         if (healthCheck.status === 'down') {
-          await sendHealthCheckAlert(
+          await sendUptimeAlert(
             endpoint.name,
             healthCheck.status,
-            healthCheck.details
+            responseTime
           )
         }
       } catch (error) {
-        logger.error('Health check failed', { 
-          error, 
+        logger.error('Health check failed', error instanceof Error ? error : new Error(String(error)), undefined, {
           service: endpoint.name,
           url: endpoint.url 
         })
@@ -117,25 +116,25 @@ class UptimeMonitor {
   }
 
   private async performHealthCheck(endpoint: any): Promise<HealthCheck> {
-    const startTime = Date.now()
-    
     try {
       if (endpoint.url === 'internal://database') {
         return await this.checkDatabaseHealth()
       }
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), endpoint.timeout || this.config.timeout)
-
-      const response = await fetch(endpoint.url, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'AnimeSenpai-UptimeMonitor/1.0'
-        }
+      const timeout = endpoint.timeout || this.config.timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), timeout)
       })
 
-      clearTimeout(timeoutId)
+      const response = await Promise.race([
+        fetch(endpoint.url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'AnimeSenpai-UptimeMonitor/1.0'
+          }
+        }),
+        timeoutPromise
+      ])
 
       const expectedStatus = endpoint.expectedStatus || 200
       const isHealthy = response.status === expectedStatus
@@ -160,13 +159,11 @@ class UptimeMonitor {
 
   private async checkDatabaseHealth(): Promise<HealthCheck> {
     try {
-      // Import Prisma client dynamically to avoid circular dependencies
-      const { PrismaClient } = await import('@prisma/client')
-      const prisma = new PrismaClient()
+      // Import db from our extended client (includes Optimize and Accelerate)
+      const { db } = await import('./db')
       
       // Simple query to check database connectivity (use count instead of raw query for Prisma Accelerate compatibility)
-      await prisma.user.count()
-      await prisma.$disconnect()
+      await db.user.count()
 
       return {
         service: 'Database',
@@ -191,7 +188,7 @@ class UptimeMonitor {
   getOverallStatus(): 'healthy' | 'degraded' | 'down' {
     const checks = Array.from(this.healthChecks.values())
     
-    if (checks.length === 0) return 'unknown'
+    if (checks.length === 0) return 'healthy'
     
     const downServices = checks.filter(check => check.status === 'down')
     

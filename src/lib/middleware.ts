@@ -31,10 +31,11 @@ export function requestTimingMiddleware(req: Request, res: Response, next: Funct
     
     // Log slow requests
     if (duration > 2000) {
-      logger.performance(`Slow request: ${req.method} ${req.url}`, duration, logContext, {
+      logger.performance(`Slow request: ${req.method} ${req.url}`, logContext, {
         method: req.method,
         url: req.url,
         statusCode: res.statusCode,
+        duration,
       })
     }
     
@@ -45,7 +46,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: Funct
 }
 
 // Error handling middleware
-export function errorHandlingMiddleware(error: any, req: Request, res: Response, next: Function) {
+export function errorHandlingMiddleware(error: any, req: Request, res: Response, _next: Function) {
   const logContext = extractLogContext(req as any, (req as any).user?.id)
   
   // Handle different types of errors
@@ -155,7 +156,7 @@ export function rateLimitErrorHandler(req: Request, res: Response) {
 }
 
 // Security headers middleware
-export function securityHeadersMiddleware(req: Request, res: Response, next: Function) {
+export function securityHeadersMiddleware(_req: Request, res: Response, next: Function) {
   // Remove X-Powered-By header
   res.removeHeader('X-Powered-By')
   
@@ -185,11 +186,11 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Fun
 }
 
 // Request logging middleware
-export function requestLoggingMiddleware(req: Request, res: Response, next: Function) {
+export function requestLoggingMiddleware(req: Request, _res: Response, next: Function) {
   const logContext = extractLogContext(req as any)
   
   // Log the request
-  logger.request(req.method, req.url, logContext, {
+  logger.request(`${req.method} ${req.url}`, logContext, {
     body: req.method !== 'GET' ? req.body : undefined,
     query: req.query,
     params: req.params,

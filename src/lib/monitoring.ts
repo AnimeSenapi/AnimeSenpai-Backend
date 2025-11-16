@@ -1,5 +1,5 @@
 import { logger } from './logger'
-import { sendAlert, sendErrorAlert, sendPerformanceAlert } from './alerts'
+import { sendAlert } from './alerts'
 
 interface ErrorMetrics {
   timestamp: number
@@ -38,9 +38,9 @@ class ErrorRateMonitor {
       errorCount: 1,
       totalRequests: 1,
       errorRate: 100,
-      endpoint,
-      statusCode,
-      errorType
+      ...(endpoint !== undefined && { endpoint }),
+      ...(statusCode !== undefined && { statusCode }),
+      ...(errorType !== undefined && { errorType })
     }
 
     this.errorMetrics.push(errorMetric)
@@ -57,8 +57,8 @@ class ErrorRateMonitor {
       errorCount: isError ? 1 : 0,
       totalRequests: 1,
       errorRate: isError ? 100 : 0,
-      endpoint,
-      statusCode
+      ...(endpoint !== undefined && { endpoint }),
+      ...(statusCode !== undefined && { statusCode })
     }
 
     this.errorMetrics.push(metric)
@@ -119,7 +119,7 @@ class ErrorRateMonitor {
       timestamp: new Date().toISOString()
     }
 
-    logger.error('High error rate detected', alertMessage)
+    logger.error('High error rate detected', undefined, undefined, alertMessage)
 
     try {
       // Send alerts using the new unified API
@@ -128,7 +128,7 @@ class ErrorRateMonitor {
           to: process.env.ALERT_EMAIL || 'admin@animesenpai.com',
           subject: `High Error Rate Alert - ${errorRate.toFixed(2)}%`,
           html: this.formatEmailAlert(alertMessage),
-          text: alertMessage
+          text: this.formatTextAlert(alertMessage)
         },
         {
           webhookUrl: process.env.SLACK_WEBHOOK_URL || '',
@@ -143,7 +143,7 @@ class ErrorRateMonitor {
         }
       )
     } catch (error) {
-      logger.error('Failed to send error rate alert', { error })
+      logger.error('Failed to send error rate alert', error instanceof Error ? error : new Error(String(error)))
     }
   }
 
@@ -168,6 +168,25 @@ class ErrorRateMonitor {
     return Object.entries(topErrors)
       .map(([key, count]) => `• ${key}: ${count} errors`)
       .join('\n')
+  }
+
+  private formatTextAlert(alert: any): string {
+    return `
+🚨 High Error Rate Alert
+
+Error Rate: ${alert.details.errorRate}%
+Total Errors: ${alert.details.totalErrors}
+Total Requests: ${alert.details.totalRequests}
+Time Window: ${alert.details.timeWindow}
+Threshold: ${alert.details.threshold}
+
+Top Errors:
+${Object.entries(alert.topErrors)
+  .map(([key, count]) => `• ${key}: ${count} errors`)
+  .join('\n')}
+
+Alert generated at: ${alert.timestamp}
+    `.trim()
   }
 
   private formatEmailAlert(alert: any): string {
@@ -220,11 +239,8 @@ export const errorRateMonitor = new ErrorRateMonitor()
 // Middleware to automatically track requests and errors
 export function errorRateMiddleware() {
   return (req: any, res: any, next: any) => {
-    const startTime = Date.now()
-    
     // Track the request
     res.on('finish', () => {
-      const duration = Date.now() - startTime
       const endpoint = `${req.method} ${req.path}`
       const statusCode = res.statusCode
       

@@ -29,7 +29,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
   // Pattern 1: "X of Y" (e.g., "Rascal Does Not Dream of...")
   const ofPattern = /^(.+\s+of)\s+.+$/i
   const ofMatch = workingTitle.match(ofPattern)
-  if (ofMatch) {
+  if (ofMatch && ofMatch[1]) {
     const baseSeriesName = ofMatch[1].trim()
     const subtitle = workingTitle.replace(ofMatch[1], '').trim()
     return {
@@ -43,7 +43,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
   // Pattern 2: "X in Y" (e.g., "Alya Sometimes Hides Her Feelings in Russian")
   const inPattern = /^(.+\s+in)\s+.+$/i
   const inMatch = workingTitle.match(inPattern)
-  if (inMatch) {
+  if (inMatch && inMatch[1]) {
     const baseSeriesName = inMatch[1].trim()
     const subtitle = workingTitle.replace(inMatch[1], '').trim()
     return {
@@ -58,7 +58,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
   // E.g., "TONIKAWA: Over the Moon for You" vs "TONIKAWA: Fly Me to the Moon"
   const colonPattern = /^([^:]+):\s*.+$/
   const colonMatch = workingTitle.match(colonPattern)
-  if (colonMatch) {
+  if (colonMatch && colonMatch[1]) {
     const baseTitle = colonMatch[1].trim()
     // Only use this if the base title is short enough (likely a series name)
     if (baseTitle.length <= 40 && !baseTitle.match(/Season|Part|Final|Arc/i)) {
@@ -80,20 +80,20 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
     { regex: /:\s*The Final/i, number: 5, name: 'The Final' },
     
     // Season patterns
-    { regex: /:\s*Season\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
-    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Season/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
-    { regex: /\sS(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    { regex: /:\s*Season\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Season ${m[1] || '0'}` },
+    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Season/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Season ${m[1] || '0'}` },
+    { regex: /\sS(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Season ${m[1] || '0'}` },
     
     // Part patterns
-    { regex: /:\s*Part\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Part ${m[1]}` },
-    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Part/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Part ${m[1]}` },
+    { regex: /:\s*Part\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Part ${m[1] || '0'}` },
+    { regex: /:\s*(\d+)(?:st|nd|rd|th)\s*Part/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Part ${m[1] || '0'}` },
     
     // Cour patterns
-    { regex: /:\s*Cour\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Cour ${m[1]}` },
+    { regex: /:\s*Cour\s*(\d+)/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Cour ${m[1] || '0'}` },
     { regex: /:\s*2nd\s*Cour/i, number: 2, name: '2nd Cour' },
     
     // Arc patterns
-    { regex: /:\s*([\w\s]+)\s*Arc$/i, number: 2, name: (m: RegExpMatchArray) => `${m[1]} Arc` },
+    { regex: /:\s*([\w\s]+)\s*Arc$/i, number: 2, name: (m: RegExpMatchArray) => `${m[1] || ''} Arc` },
     
     // Roman numerals (must be at the end or before subtitle)
     { regex: /\s+II(?:\s|:|$)/i, number: 2, name: 'Season 2' },
@@ -106,8 +106,8 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
     { regex: /:\s*V$/i, number: 5, name: 'Season 5' },
     
     // Numbers at the end (with caution - must have separator)
-    { regex: /:\s*(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
-    { regex: /\s+(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1]), name: (m: RegExpMatchArray) => `Season ${m[1]}` },
+    { regex: /:\s*(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Season ${m[1] || '0'}` },
+    { regex: /\s+(\d+)$/i, number: (m: RegExpMatchArray) => parseInt(m[1] || '0'), name: (m: RegExpMatchArray) => `Season ${m[1] || '0'}` },
     
     // Sequel indicators
     { regex: /:\s*2nd\s*/i, number: 2, name: '2nd Season' },
@@ -192,7 +192,7 @@ export function createSeriesEntries(anime: any[]): any[] {
       // Override with series name instead of season-specific name
       displayTitle: seriesName,
       seasonCount: sortedSeasons.length,
-      seasons: sortedSeasons.map((s, index) => {
+      seasons: sortedSeasons.map((s, _index) => {
         const info = extractSeriesInfo(s.title, s.titleEnglish)
         return {
           seasonNumber: info.seasonNumber,

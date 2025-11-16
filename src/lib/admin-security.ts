@@ -8,7 +8,6 @@
  * - Suspicious activity detection
  */
 
-import { db } from './db'
 import { logger } from './logger'
 import { TRPCError } from '@trpc/server'
 
@@ -137,14 +136,31 @@ export async function detectSuspiciousActivity(
 
 /**
  * Validate IP whitelist (optional - disable by default)
+ * Set ADMIN_IP_WHITELIST environment variable with comma-separated IPs to enable
  */
 export function checkIPWhitelist(ipAddress: string): boolean {
-  // Optional: Implement IP whitelist for admin actions
-  // const whitelist = process.env.ADMIN_IP_WHITELIST?.split(',') || []
-  // if (whitelist.length > 0 && !whitelist.includes(ipAddress)) {
-  //   return false
-  // }
-  return true
+  const whitelistEnv = process.env.ADMIN_IP_WHITELIST
+  if (!whitelistEnv || whitelistEnv.trim() === '') {
+    // No whitelist configured - allow all IPs
+    return true
+  }
+  
+  const whitelist = whitelistEnv.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0)
+  if (whitelist.length === 0) {
+    return true
+  }
+  
+  // Check if IP is in whitelist
+  const isAllowed = whitelist.includes(ipAddress)
+  
+  if (!isAllowed) {
+    logger.warn('IP address not in admin whitelist', { ipAddress }, {
+    ipAddress,
+      whitelist: whitelist.length > 0 ? 'configured' : 'none'
+    })
+  }
+
+  return isAllowed
 }
 
 /**

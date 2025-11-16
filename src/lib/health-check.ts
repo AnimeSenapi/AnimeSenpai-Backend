@@ -5,10 +5,8 @@
  * including database, cache, external services, and business logic.
  */
 
-import { db } from './db'
+import { getDirectDbClient } from './db'
 import { cache } from './cache'
-import { logger } from './logger'
-import { monitoringService } from './monitoring-service'
 
 // Health check result interface
 interface HealthCheckResult {
@@ -41,6 +39,23 @@ interface HealthStatus {
   }
 }
 
+function isDatabaseConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+
+  return (
+    normalized.includes("can't reach database server") ||
+    normalized.includes('p1001') ||
+    normalized.includes('database connection failed') ||
+    normalized.includes('database is temporarily unavailable') ||
+    normalized.includes('prisma:client:operation span is expected to be entered')
+  )
+}
+
 class HealthChecker {
   private readonly checks: Map<string, () => Promise<HealthCheckResult>> = new Map()
 
@@ -66,7 +81,6 @@ class HealthChecker {
    * Run all health checks
    */
   async runAllChecks(): Promise<HealthStatus> {
-    const startTime = Date.now()
     const checks: HealthCheckResult[] = []
 
     // Run all checks in parallel
@@ -137,15 +151,16 @@ class HealthChecker {
    */
   private async checkDatabase(): Promise<HealthCheckResult> {
     const start = Date.now()
+    const dbClient = getDirectDbClient()
     
     try {
       // Test basic connection (use count instead of raw query for Prisma Accelerate compatibility)
       const queryStart = Date.now()
-      await db.user.count()
+      await dbClient.user.count()
       const queryTime = Date.now() - queryStart
       
       // Test transaction
-      await db.$transaction(async (tx) => {
+      await dbClient.$transaction(async (tx) => {
         await tx.user.count()
       })
       
@@ -166,10 +181,26 @@ class HealthChecker {
         timestamp: Date.now(),
       }
     } catch (error) {
+      const responseTime = Date.now() - start
+
+      if (isDatabaseConnectionError(error)) {
+        return {
+          name: 'database',
+          status: 'degraded',
+          responseTime,
+          message: 'Database unavailable - running in degraded mode',
+          details: {
+            error: (error as Error).message,
+            hint: 'Start the Postgres service locally or update DATABASE_URL to a reachable instance.',
+          },
+          timestamp: Date.now(),
+        }
+      }
+
       return {
         name: 'database',
         status: 'unhealthy',
-        responseTime: Date.now() - start,
+        responseTime,
         message: 'Database connection failed',
         details: { error: (error as Error).message },
         timestamp: Date.now(),
@@ -194,7 +225,7 @@ class HealthChecker {
       cache.set(testKey, testValue, 60)
       
       // Test get
-      const retrieved = cache.get(testKey)
+      const retrieved = cache.get<{ test: boolean; timestamp: number }>(testKey)
       
       // Test delete
       cache.del(testKey)
@@ -203,8 +234,8 @@ class HealthChecker {
       
       // Check cache performance
       const isSlow = responseTime > 100 // 100ms threshold
-      // Only flag low hit rate if we have meaningful traffic (more than 10 total operations)
-      const hasTraffic = (stats.hits || 0) + (stats.misses || 0) > 10
+      // Only flag low hit rate if we have meaningful traffic (cache has entries)
+      const hasTraffic = stats.size > 0
       const isLowHitRate = hasTraffic && stats.hitRate < 50
       
       let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
@@ -375,11 +406,21 @@ class HealthChecker {
           successRate: Math.round(successRate),
           successful,
           total,
-          services: services.map((service, index) => ({
-            name: service.name,
-            status: results[index].status,
-            error: results[index].status === 'rejected' ? (results[index] as PromiseRejectedResult).reason : undefined,
-          })),
+          services: services.map((service, index) => {
+            const result = results[index]
+            if (!result) {
+              return {
+                name: service.name,
+                status: 'rejected' as const,
+                error: 'Result not available',
+              }
+            }
+            return {
+              name: service.name,
+              status: result.status,
+              error: result.status === 'rejected' ? (result as PromiseRejectedResult).reason : undefined,
+            }
+          }),
         },
         timestamp: Date.now(),
       }
@@ -400,13 +441,14 @@ class HealthChecker {
    */
   private async checkBusinessLogic(): Promise<HealthCheckResult> {
     const start = Date.now()
+    const dbClient = getDirectDbClient()
     
     try {
       // Test core business operations
       const [userCount, animeCount, reviewCount] = await Promise.all([
-        db.user.count(),
-        db.anime.count(),
-        db.userAnimeReview.count(),
+        dbClient.user.count(),
+        dbClient.anime.count(),
+        dbClient.userAnimeReview.count(),
       ])
       
       const responseTime = Date.now() - start
@@ -427,10 +469,26 @@ class HealthChecker {
         timestamp: Date.now(),
       }
     } catch (error) {
+      const responseTime = Date.now() - start
+
+      if (isDatabaseConnectionError(error)) {
+        return {
+          name: 'business_logic',
+          status: 'degraded',
+          responseTime,
+          message: 'Business logic check skipped - database unavailable',
+          details: {
+            error: (error as Error).message,
+            hint: 'Start the Postgres service or verify the Prisma connection.',
+          },
+          timestamp: Date.now(),
+        }
+      }
+
       return {
         name: 'business_logic',
         status: 'unhealthy',
-        responseTime: Date.now() - start,
+        responseTime,
         message: 'Business logic check failed',
         details: { error: (error as Error).message },
         timestamp: Date.now(),

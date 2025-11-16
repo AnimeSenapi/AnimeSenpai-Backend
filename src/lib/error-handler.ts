@@ -7,7 +7,6 @@
 
 import { AppError, ErrorCode } from './errors'
 import { logger } from './logger'
-import { monitoringService } from './monitoring-service'
 
 // Error context interface
 interface ErrorContext {
@@ -97,7 +96,7 @@ class ErrorHandler {
     return {
       error: appError,
       shouldRetry,
-      recoveryAction,
+      ...(recoveryAction !== undefined && { recoveryAction }),
     }
   }
 
@@ -111,7 +110,6 @@ class ErrorHandler {
 
     // Classify generic errors
     const message = error.message.toLowerCase()
-    const stack = error.stack?.toLowerCase() || ''
 
     // Database errors
     if (message.includes('database') || message.includes('connection') || message.includes('query')) {
@@ -309,7 +307,7 @@ class ErrorHandler {
   /**
    * Map generic error to ErrorCode
    */
-  private mapErrorToCode(error: Error, classification: ErrorClassification): ErrorCode {
+  private mapErrorToCode(_error: Error, classification: ErrorClassification): ErrorCode {
     switch (classification.category) {
       case 'database':
         return ErrorCode.DATABASE_ERROR
@@ -362,10 +360,10 @@ class ErrorHandler {
   ): Promise<void> {
     const logLevel = this.getLogLevel(classification.severity)
     const logContext = {
-      requestId: context.requestId,
-      userId: context.userId,
-      endpoint: context.endpoint,
-      method: context.method,
+      ...(context.requestId !== undefined && { requestId: context.requestId }),
+      ...(context.userId !== undefined && { userId: context.userId }),
+      ...(context.endpoint !== undefined && { endpoint: context.endpoint }),
+      ...(context.method !== undefined && { method: context.method }),
     }
 
     const metadata = {
@@ -521,8 +519,8 @@ class ErrorHandler {
     try {
       // In a real implementation, you'd send alerts via email, Slack, etc.
       logger.error('ALERT: Critical error detected', error, {
-        requestId: context.requestId,
-        userId: context.userId,
+        ...(context.requestId !== undefined && { requestId: context.requestId }),
+        ...(context.userId !== undefined && { userId: context.userId }),
       }, {
         errorCode: error.code,
         severity: classification.severity,

@@ -45,10 +45,10 @@ class QueryMonitor {
       timestamp: now,
       query: this.sanitizeQuery(query),
       duration,
-      endpoint,
-      userId,
-      queryType,
-      table
+      ...(endpoint !== undefined && { endpoint }),
+      ...(userId !== undefined && { userId }),
+      ...(queryType !== undefined && { queryType }),
+      ...(table !== undefined && { table })
     }
 
     this.queryMetrics.push(queryMetric)
@@ -135,7 +135,7 @@ class QueryMonitor {
       this.lastAlertTime = now
       this.slowQueries.delete(queryHash) // Reset counter after alert
     } catch (error) {
-      logger.error('Failed to send slow query alert', { error })
+      logger.error('Failed to send slow query alert', error instanceof Error ? error : new Error(String(error)))
     }
   }
 

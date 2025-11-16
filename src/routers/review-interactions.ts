@@ -443,7 +443,7 @@ export const reviewInteractionsRouter = router({
           }
         })
         
-        const friendIds = friendships.map(f => 
+        const friendIds = friendships.map((f: typeof friendships[0]) => 
           f.user1Id === ctx.user.id ? f.user2Id : f.user1Id
         )
         

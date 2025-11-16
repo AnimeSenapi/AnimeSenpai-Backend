@@ -1,9 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '../src/routers'
 
 // Vercel Serverless Function Handler
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   // Get allowed origins from environment
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || []
   const origin = req.headers.origin || ''
@@ -23,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers - must use specific origin with credentials, not '*'
   if (isAllowed && origin) {
     res.setHeader('Access-Control-Allow-Origin', origin)
-  } else if (allowedOrigins.length > 0) {
+  } else if (allowedOrigins.length > 0 && allowedOrigins[0]) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0])
   } else {
     // Fallback: if no CORS_ORIGINS set, allow the requesting origin
@@ -60,17 +59,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Build headers
   const headers = new Headers()
   Object.entries(req.headers).forEach(([key, value]) => {
-    if (value) {
-      headers.set(key, Array.isArray(value) ? value.join(', ') : value)
+    if (value !== undefined && value !== null) {
+      const headerValue = Array.isArray(value) ? value.join(', ') : String(value)
+      headers.set(key, headerValue)
     }
   })
 
   // Build fetch request
-  const fetchReq = new Request(url, {
-    method,
-    headers,
-    body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
-  })
+  const fetchReq = new Request(
+    url,
+    method !== 'GET' && method !== 'HEAD'
+      ? { method, headers, body: JSON.stringify(req.body ?? null) }
+      : { method, headers }
+  )
 
   try {
     // Use tRPC's fetch adapter
@@ -92,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     
     // Ensure CORS headers are set
-    res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : allowedOrigins[0])
+    res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : (allowedOrigins[0] || '*'))
     
     res.status(response.status).send(data)
   } catch (error: any) {

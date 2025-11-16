@@ -53,7 +53,7 @@ class RetryLogic {
         
         // Check if we should retry this error
         if (this.config.retryCondition && !this.config.retryCondition(lastError)) {
-          logger.warn(`Operation failed with non-retryable error on attempt ${attempt}`, {
+          logger.warn(`Operation failed with non-retryable error on attempt ${attempt}`, undefined, {
             error: lastError.message,
             attempts,
             totalTime: Date.now() - startTime
@@ -70,7 +70,7 @@ class RetryLogic {
         // Don't wait after the last attempt
         if (attempt < this.config.maxAttempts) {
           const delay = this.calculateDelay(attempt)
-          logger.warn(`Operation failed on attempt ${attempt}, retrying in ${delay}ms`, {
+          logger.warn(`Operation failed on attempt ${attempt}, retrying in ${delay}ms`, undefined, {
             error: lastError.message,
             attempt,
             delay,
@@ -83,8 +83,7 @@ class RetryLogic {
     }
     
     const totalTime = Date.now() - startTime
-    logger.error(`Operation failed after ${attempts} attempts`, {
-      error: lastError!.message,
+    logger.error(`Operation failed after ${attempts} attempts`, lastError!, undefined, {
       attempts,
       totalTime,
       operation: operation.name || 'anonymous'
@@ -174,7 +173,7 @@ export const externalApiRetryConfig = retryLogicManager.createConfig('external-a
 
 // Retry decorator
 export function withRetry(configName: string, customConfig?: RetryConfig) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
+  return function (_target: any, _propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value
     const config = customConfig || retryLogicManager.getConfig(configName)
     

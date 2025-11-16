@@ -41,7 +41,10 @@ export const systemSettingsRouter = router({
       sessionTimeout: z.number().min(3600).max(2592000).optional(), // 1 hour - 30 days
       maxUserListItems: z.number().min(100).max(50000).optional(), // 100 - 50,000
       enableRecommendations: z.boolean().optional(),
-      enableSocialFeatures: z.boolean().optional()
+      enableSocialFeatures: z.boolean().optional(),
+      // App Status Badge
+      appStatus: z.string().optional(),
+      appStatusTooltip: z.string().nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       // Require admin access
@@ -50,14 +53,40 @@ export const systemSettingsRouter = router({
       // Get or create default settings
       let settings = await db.systemSettings.findFirst()
       
+      const data = {
+        siteName: input.siteName,
+        siteDescription: input.siteDescription,
+        maintenanceMode: input.maintenanceMode,
+        maintenanceMessage: input.maintenanceMessage ?? null,
+        registrationEnabled: input.registrationEnabled,
+        emailVerificationRequired: input.emailVerificationRequired,
+        maxUploadSize: input.maxUploadSize,
+        rateLimit: input.rateLimit,
+        sessionTimeout: input.sessionTimeout,
+        maxUserListItems: input.maxUserListItems,
+        enableRecommendations: input.enableRecommendations,
+        enableSocialFeatures: input.enableSocialFeatures,
+      }
+
       if (!settings) {
-        settings = await db.systemSettings.create({
-          data: input
-        })
+        settings = await db.systemSettings.create({ data })
       } else {
         settings = await db.systemSettings.update({
           where: { id: settings.id },
-          data: input
+          data: {
+            siteName: data.siteName ?? settings.siteName,
+            siteDescription: data.siteDescription ?? settings.siteDescription,
+            maintenanceMode: data.maintenanceMode ?? settings.maintenanceMode,
+            maintenanceMessage: data.maintenanceMessage ?? settings.maintenanceMessage,
+            registrationEnabled: data.registrationEnabled ?? settings.registrationEnabled,
+            emailVerificationRequired: data.emailVerificationRequired ?? settings.emailVerificationRequired,
+            maxUploadSize: data.maxUploadSize ?? settings.maxUploadSize,
+            rateLimit: data.rateLimit ?? settings.rateLimit,
+            sessionTimeout: data.sessionTimeout ?? settings.sessionTimeout,
+            maxUserListItems: data.maxUserListItems ?? settings.maxUserListItems,
+            enableRecommendations: data.enableRecommendations ?? settings.enableRecommendations,
+            enableSocialFeatures: data.enableSocialFeatures ?? settings.enableSocialFeatures,
+          }
         })
       }
 

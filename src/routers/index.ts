@@ -23,6 +23,7 @@ import { roleManagementRouter } from './role-management'
 import { systemSettingsRouter } from './system-settings'
 import { monitoringRouter } from './monitoring'
 import { analyticsRouter } from './analytics'
+import { appStatusRouter } from './app-status'
 
 export const appRouter = router({
   auth: authRouter,
@@ -49,6 +50,7 @@ export const appRouter = router({
   systemSettings: systemSettingsRouter,
   monitoring: monitoringRouter,
   analytics: analyticsRouter,
+  appStatus: appStatusRouter,
 })
 
 export type AppRouter = typeof appRouter

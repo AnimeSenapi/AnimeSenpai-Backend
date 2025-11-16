@@ -39,7 +39,7 @@ class SecretsManager {
         tag: tag.toString(this.config.encoding)
       }
     } catch (error) {
-      logger.error('Secret encryption failed', { error })
+      logger.error('Secret encryption failed', error instanceof Error ? error : new Error(String(error)))
       throw new Error('Failed to encrypt secret')
     }
   }
@@ -56,7 +56,7 @@ class SecretsManager {
       
       return decrypted
     } catch (error) {
-      logger.error('Secret decryption failed', { error })
+      logger.error('Secret decryption failed', error instanceof Error ? error : new Error(String(error)))
       throw new Error('Failed to decrypt secret')
     }
   }
@@ -72,7 +72,7 @@ class SecretsManager {
       logger.info('Secret stored successfully', { key })
       return true
     } catch (error) {
-      logger.error('Failed to store secret', { key, error })
+      logger.error('Failed to store secret', error instanceof Error ? error : new Error(String(error)), undefined, { key })
       return false
     }
   }
@@ -90,7 +90,7 @@ class SecretsManager {
       
       return decrypted
     } catch (error) {
-      logger.error('Failed to retrieve secret', { key, error })
+      logger.error('Failed to retrieve secret', error instanceof Error ? error : new Error(String(error)), undefined, { key })
       return null
     }
   }
@@ -104,7 +104,7 @@ class SecretsManager {
       }
       return deleted
     } catch (error) {
-      logger.error('Failed to delete secret', { key, error })
+      logger.error('Failed to delete secret', error instanceof Error ? error : new Error(String(error)), undefined, { key })
       return false
     }
   }
@@ -131,7 +131,7 @@ class SecretsManager {
       // Re-encrypt all secrets
       this.secrets.clear()
       
-      for (const [key, secretData] of oldSecrets) {
+      for (const [key] of oldSecrets) {
         try {
           // Temporarily use old key to decrypt
           const tempConfig = { ...this.config, encryptionKey: oldKey }
@@ -143,7 +143,7 @@ class SecretsManager {
             await this.storeSecret(key, decrypted)
           }
         } catch (error) {
-          logger.error('Failed to re-encrypt secret during key rotation', { key, error })
+          logger.error('Failed to re-encrypt secret during key rotation', error instanceof Error ? error : new Error(String(error)), undefined, { key })
           // Continue with other secrets
         }
       }
@@ -151,7 +151,7 @@ class SecretsManager {
       logger.info('Encryption key rotated successfully')
       return true
     } catch (error) {
-      logger.error('Failed to rotate encryption key', { error })
+      logger.error('Failed to rotate encryption key', error instanceof Error ? error : new Error(String(error)))
       return false
     }
   }
@@ -193,7 +193,7 @@ class SecretsManager {
       logger.info('Secrets imported successfully', { count: Object.keys(secrets).length })
       return true
     } catch (error) {
-      logger.error('Failed to import secrets', { error })
+      logger.error('Failed to import secrets', error instanceof Error ? error : new Error(String(error)))
       return false
     }
   }
@@ -257,7 +257,7 @@ export async function initializeSecrets(): Promise<void> {
 
     logger.info('Secrets manager initialized successfully')
   } catch (error) {
-    logger.error('Failed to initialize secrets manager', { error })
+    logger.error('Failed to initialize secrets manager', error instanceof Error ? error : new Error(String(error)))
     throw error
   }
 }

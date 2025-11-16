@@ -73,14 +73,16 @@ class Logger {
       level,
       message,
       timestamp: new Date().toISOString(),
-      context: context ?? undefined,
-      error: error ? {
-        code: error.code || 'UNKNOWN_ERROR',
-        message: error.message || 'Unknown error',
-        stack: error.stack,
-        details: error.details,
-      } : undefined,
-      metadata: metadata ?? undefined,
+      ...(context !== undefined && { context }),
+      ...(error && {
+        error: {
+          code: error.code || 'UNKNOWN_ERROR',
+          message: error.message || 'Unknown error',
+          stack: error.stack,
+          details: error.details,
+        },
+      }),
+      ...(metadata !== undefined && { metadata }),
     }
   }
 
@@ -89,7 +91,7 @@ class Logger {
       return
     }
 
-    if (this.isDevelopment) {
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
       // Pretty print for development
       const color = this.getColorForLevel(entry.level)
       const prefix = `[${entry.timestamp}] ${entry.level.toUpperCase()}`
@@ -143,27 +145,6 @@ class Logger {
 
   debug(message: string, context?: LogContext, metadata?: any): void {
     this.output(this.formatLogEntry(LogLevel.DEBUG, message, context, undefined, metadata))
-  }
-
-  // Specialized logging methods
-  auth(message: string, context?: LogContext, metadata?: any): void {
-    this.info(`[AUTH] ${message}`, { ...context, category: 'auth' }, metadata)
-  }
-
-  security(message: string, context?: LogContext, metadata?: any): void {
-    this.warn(`[SECURITY] ${message}`, { ...context, category: 'security' }, metadata)
-  }
-
-  database(message: string, context?: LogContext, metadata?: any): void {
-    this.debug(`[DATABASE] ${message}`, { ...context, category: 'database' }, metadata)
-  }
-
-  email(message: string, context?: LogContext, metadata?: any): void {
-    this.info(`[EMAIL] ${message}`, { ...context, category: 'email' }, metadata)
-  }
-
-  api(message: string, context?: LogContext, metadata?: any): void {
-    this.info(`[API] ${message}`, { ...context, category: 'api' }, metadata)
   }
 
   // Response logging
@@ -303,18 +284,18 @@ export const logError = {
 export const logPerformance = {
   slowQuery: (query: string, duration: number, context?: LogContext) => {
     if (duration > 1000) { // Log queries slower than 1 second
-      logger.performance(`Slow database query: ${duration}ms`, duration, context, { query })
+      logger.performance(`Slow database query: ${duration}ms`, context, { query, duration })
     }
   },
   
   slowRequest: (method: string, url: string, duration: number, context?: LogContext) => {
     if (duration > 2000) { // Log requests slower than 2 seconds
-      logger.performance(`Slow request: ${method} ${url}`, duration, context, { method, url })
+      logger.performance(`Slow request: ${method} ${url}`, context, { method, url, duration })
     }
   },
   
   memoryUsage: (usage: NodeJS.MemoryUsage, context?: LogContext) => {
-    logger.performance('Memory usage', 0, context, usage)
+    logger.performance('Memory usage', context, usage)
   },
 }
 
@@ -327,7 +308,7 @@ export function generateRequestId(): string {
 export function extractLogContext(req: Request, userId?: string): LogContext {
   return {
     requestId: req.headers.get('x-request-id') || generateRequestId(),
-    userId: userId ?? undefined,
+    ...(userId !== undefined && { userId }),
     ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
     userAgent: req.headers.get('user-agent') || 'unknown',
     method: req.method,

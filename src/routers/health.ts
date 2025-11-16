@@ -1,4 +1,3 @@
-import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../lib/trpc'
 import { db } from '../lib/db'
@@ -12,7 +11,6 @@ interface HealthStatus {
   environment: string
   checks: {
     database: HealthCheck
-    redis?: HealthCheck
     externalServices?: HealthCheck
   }
 }
@@ -41,7 +39,7 @@ class HealthChecker {
       }
     } catch (error) {
       const responseTime = Date.now() - start
-      logger.error('Database health check failed', { error })
+      logger.error('Database health check failed', error instanceof Error ? error : new Error(String(error)))
       
       return {
         status: 'fail',
@@ -52,30 +50,6 @@ class HealthChecker {
     }
   }
 
-  async checkRedis(): Promise<HealthCheck> {
-    const start = Date.now()
-    try {
-      // Redis connectivity test would go here
-      // For now, we'll simulate a check
-      const responseTime = Date.now() - start
-      
-      return {
-        status: 'pass',
-        responseTime,
-        message: 'Redis connection successful'
-      }
-    } catch (error) {
-      const responseTime = Date.now() - start
-      logger.error('Redis health check failed', { error })
-      
-      return {
-        status: 'fail',
-        responseTime,
-        message: 'Redis connection failed',
-        details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }
-    }
-  }
 
   async checkExternalServices(): Promise<HealthCheck> {
     const start = Date.now()
@@ -90,14 +64,24 @@ class HealthChecker {
         services.map(async (service) => {
           if (!service.url) return { name: service.name, status: 'skip' }
           
-          const response = await fetch(service.url, { 
-            method: 'HEAD',
-            timeout: 5000 
-          })
-          return { 
-            name: service.name, 
-            status: response.ok ? 'pass' : 'fail',
-            statusCode: response.status
+          try {
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Request timeout')), 5000)
+            })
+            
+            const fetchPromise = fetch(service.url, { method: 'HEAD' })
+            const response = await Promise.race([fetchPromise, timeoutPromise])
+            
+            return { 
+              name: service.name, 
+              status: response.ok ? 'pass' : 'fail',
+              statusCode: response.status
+            }
+          } catch {
+            return {
+              name: service.name,
+              status: 'fail' as const
+            }
           }
         })
       )
@@ -125,7 +109,7 @@ class HealthChecker {
       }
     } catch (error) {
       const responseTime = Date.now() - start
-      logger.error('External services health check failed', { error })
+      logger.error('External services health check failed', error instanceof Error ? error : new Error(String(error)))
       
       return {
         status: 'fail',
@@ -137,14 +121,13 @@ class HealthChecker {
   }
 
   async getHealthStatus(): Promise<HealthStatus> {
-    const [databaseCheck, redisCheck, externalServicesCheck] = await Promise.all([
+    const [databaseCheck, externalServicesCheck] = await Promise.all([
       this.checkDatabase(),
-      this.checkRedis(),
       this.checkExternalServices()
     ])
 
     // Determine overall status
-    const checks = [databaseCheck, redisCheck, externalServicesCheck]
+    const checks = [databaseCheck, externalServicesCheck]
     const hasFailures = checks.some(check => check.status === 'fail')
     const hasWarnings = checks.some(check => check.status === 'warn')
 
@@ -165,25 +148,20 @@ class HealthChecker {
       environment: process.env.NODE_ENV || 'development',
       checks: {
         database: databaseCheck,
-        redis: redisCheck,
         externalServices: externalServicesCheck
       }
     }
   }
 
   async getReadinessStatus(): Promise<{ ready: boolean; checks: Record<string, HealthCheck> }> {
-    const [databaseCheck, redisCheck] = await Promise.all([
-      this.checkDatabase(),
-      this.checkRedis()
-    ])
+    const databaseCheck = await this.checkDatabase()
 
     const checks = {
-      database: databaseCheck,
-      redis: redisCheck
+      database: databaseCheck
     }
 
     // Service is ready if critical services are healthy
-    const ready = databaseCheck.status === 'pass' && redisCheck.status === 'pass'
+    const ready = databaseCheck.status === 'pass'
 
     return { ready, checks }
   }
@@ -199,7 +177,7 @@ export const healthRouter = router({
         const healthStatus = await healthChecker.getHealthStatus()
         return healthStatus
       } catch (error) {
-        logger.error('Health check failed', { error })
+        logger.error('Health check failed', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Health check failed'
@@ -214,7 +192,7 @@ export const healthRouter = router({
         const readinessStatus = await healthChecker.getReadinessStatus()
         return readinessStatus
       } catch (error) {
-        logger.error('Readiness check failed', { error })
+        logger.error('Readiness check failed', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Readiness check failed'
@@ -263,7 +241,7 @@ export const healthRouter = router({
           }
         }
       } catch (error) {
-        logger.error('Detailed health check failed', { error })
+        logger.error('Detailed health check failed', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Detailed health check failed'
@@ -278,7 +256,7 @@ export const healthRouter = router({
         const databaseCheck = await healthChecker.checkDatabase()
         return databaseCheck
       } catch (error) {
-        logger.error('Database health check failed', { error })
+        logger.error('Database health check failed', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Database health check failed'
@@ -286,18 +264,4 @@ export const healthRouter = router({
       }
     }),
 
-  // Redis-specific health check
-  redis: publicProcedure
-    .query(async () => {
-      try {
-        const redisCheck = await healthChecker.checkRedis()
-        return redisCheck
-      } catch (error) {
-        logger.error('Redis health check failed', { error })
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Redis health check failed'
-        })
-      }
-    })
 })

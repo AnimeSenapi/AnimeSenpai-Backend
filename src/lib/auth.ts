@@ -241,7 +241,7 @@ export async function verifyEmailToken(token: string): Promise<boolean> {
   })
 
   // Send welcome email
-  emailService.sendWelcomeEmail(user.email, user.name ?? undefined)
+  emailService.sendWelcomeEmail(user.email, user.username ?? undefined)
 
   return true
 }
@@ -266,7 +266,7 @@ export async function sendPasswordReset(email: string): Promise<boolean> {
     }
   })
 
-  return emailService.sendPasswordReset(email, token, user.name ?? undefined)
+  return emailService.sendPasswordReset(email, token, user.username ?? undefined)
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<boolean> {

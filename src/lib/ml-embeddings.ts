@@ -23,11 +23,6 @@ const STOP_WORDS = new Set([
   'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how'
 ])
 
-interface TextVector {
-  terms: Map<string, number> // term -> frequency
-  magnitude: number
-}
-
 interface AnimeVector {
   animeId: string
   descriptionVector: number[]
@@ -195,9 +190,9 @@ export function calculateVectorSimilarity(vec1: number[], vec2: number[]): numbe
   let magnitude2 = 0
   
   for (let i = 0; i < vec1.length; i++) {
-    dotProduct += vec1[i] * vec2[i]
-    magnitude1 += vec1[i] * vec1[i]
-    magnitude2 += vec2[i] * vec2[i]
+    dotProduct += (vec1[i] ?? 0) * (vec2[i] ?? 0)
+    magnitude1 += (vec1[i] ?? 0) * (vec1[i] ?? 0)
+    magnitude2 += (vec2[i] ?? 0) * (vec2[i] ?? 0)
   }
   
   if (magnitude1 === 0 || magnitude2 === 0) return 0
@@ -246,7 +241,7 @@ export async function getAnimeEmbedding(animeId: string): Promise<AnimeVector | 
   
   // Create embeddings
   const descriptionVector = await createDescriptionEmbedding(anime.description || '')
-  const genreIds = anime.genres.map(g => g.genre.id)
+  const genreIds = anime.genres.map((g: typeof anime.genres[0]) => g.genre.id)
   const genreVector = await createGenreEmbedding(genreIds)
   
   // Combine vectors (weighted combination)
@@ -480,7 +475,7 @@ async function getAnimeWithEmbeddings(): Promise<string[]> {
     select: { animeId: true }
   })
   
-  return embeddings.map(e => e.animeId)
+  return embeddings.map((e: typeof embeddings[0]) => e.animeId)
 }
 
 /**

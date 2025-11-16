@@ -45,7 +45,7 @@ export const activityRouter = router({
           }
         })
         
-        const friendIds = friendships.map(f => 
+        const friendIds = friendships.map((f: typeof friendships[0]) => 
           f.user1Id === ctx.user.id ? f.user2Id : f.user1Id
         )
         
@@ -100,7 +100,7 @@ export const activityRouter = router({
         }
         
         // Parse metadata JSON
-        const parsedActivities = activities.map(activity => ({
+        const parsedActivities = activities.map((activity: typeof activities[0]) => ({
           ...activity,
           metadata: activity.metadata ? JSON.parse(activity.metadata) : null
         }))
@@ -163,7 +163,7 @@ export const activityRouter = router({
         }
         
         // Parse metadata
-        const parsedActivities = activities.map(activity => ({
+        const parsedActivities = activities.map((activity: typeof activities[0]) => ({
           ...activity,
           metadata: activity.metadata ? JSON.parse(activity.metadata) : null
         }))
@@ -276,7 +276,7 @@ export const activityRouter = router({
         })
         
         // Group by activity type
-        const stats = activities.reduce((acc, activity) => {
+        const stats = activities.reduce((acc: Record<string, number>, activity: typeof activities[0]) => {
           const type = activity.activityType
           if (!acc[type]) {
             acc[type] = 0

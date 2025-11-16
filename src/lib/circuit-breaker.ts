@@ -43,7 +43,8 @@ class CircuitBreaker {
       this.onSuccess()
       return result
     } catch (error) {
-      this.onFailure(error)
+      const errorObj = error instanceof Error ? error : new Error(String(error))
+      this.onFailure(errorObj)
       throw error
     }
   }
@@ -164,7 +165,7 @@ export const externalApiBreaker = circuitBreakerManager.createBreaker('external-
 
 // Circuit breaker decorator
 export function withCircuitBreaker(breakerName: string, config?: CircuitBreakerConfig) {
-  return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
+  return function (_target: any, _propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value
     const breaker = config 
       ? circuitBreakerManager.createBreaker(breakerName, config)
@@ -182,7 +183,7 @@ export function withCircuitBreaker(breakerName: string, config?: CircuitBreakerC
 
 // Circuit breaker middleware for Express
 export function circuitBreakerMiddleware(breakerName: string) {
-  return (req: any, res: any, next: any) => {
+  return (_req: any, res: any, next: any) => {
     const breaker = circuitBreakerManager.getBreaker(breakerName)
     if (!breaker) {
       return next()

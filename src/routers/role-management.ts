@@ -37,7 +37,7 @@ export const roleManagementRouter = router({
         }
       })
 
-      return roles.map(role => ({
+      return roles.map((role: typeof roles[0]) => ({
         id: role.id,
         name: role.name,
         displayName: role.displayName,
@@ -47,8 +47,8 @@ export const roleManagementRouter = router({
         priority: role.priority,
         userCount: role._count.primaryUsers + role._count.additionalUsers,
         permissions: role.permissions
-          .filter(rp => rp.granted)
-          .map(rp => ({
+          .filter((rp: typeof role.permissions[0]) => rp.granted)
+          .map((rp: typeof role.permissions[0]) => ({
             id: rp.permission.id,
             key: rp.permission.key,
             name: rp.permission.name,
@@ -75,13 +75,14 @@ export const roleManagementRouter = router({
       })
 
       // Group by category
-      const grouped = permissions.reduce((acc, perm) => {
+      const grouped = permissions.reduce((acc: Record<string, typeof permissions[0][]>, perm: typeof permissions[0]) => {
         if (!acc[perm.category]) {
           acc[perm.category] = []
         }
-        acc[perm.category].push(perm)
+        const categoryArray = acc[perm.category]!
+        categoryArray.push(perm)
         return acc
-      }, {} as Record<string, typeof permissions>)
+      }, {} as Record<string, typeof permissions[0][]>)
 
       return grouped
     }),
@@ -127,8 +128,8 @@ export const roleManagementRouter = router({
         priority: role.priority,
         userCount: role._count.primaryUsers + role._count.additionalUsers,
         permissions: role.permissions
-          .filter(rp => rp.granted)
-          .map(rp => ({
+          .filter((rp: typeof role.permissions[0]) => rp.granted)
+          .map((rp: typeof role.permissions[0]) => ({
             id: rp.permission.id,
             key: rp.permission.key,
             name: rp.permission.name,

@@ -67,7 +67,7 @@ export const userRouter = router({
       console.log(`[DEBUG] User ${ctx.user.id} anime list: found ${animeLists.length} items (total: ${total}, limit: ${limit}, skip: ${skip})`)
 
       // Fetch full anime details
-      const animeIds = animeLists.map(item => item.animeId)
+      const animeIds = animeLists.map((item: typeof animeLists[0]) => item.animeId)
       const animeDetails = await db.anime.findMany({
         where: {
           id: { in: animeIds }
@@ -106,8 +106,8 @@ export const userRouter = router({
       })
 
       // Merge list data with anime details
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
-      const mergedData = animeLists.map(listItem => {
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
+      const mergedData = animeLists.map((listItem: typeof animeLists[0]) => {
         const anime = animeMap.get(listItem.animeId)
         return {
           listId: listItem.id,
@@ -129,7 +129,7 @@ export const userRouter = router({
             duration: anime.duration,
             season: anime.season,
             averageRating: anime.averageRating,
-            genres: anime.genres.map(g => g.genre)
+            genres: anime.genres.map((g: typeof anime.genres[0]) => g.genre)
           } : null,
           listStatus: listItem.status,
           isFavorite: listItem.isFavorite, // Include favorite flag
@@ -141,7 +141,7 @@ export const userRouter = router({
           createdAt: listItem.createdAt,
           updatedAt: listItem.updatedAt
         }
-      }).filter(item => item.anime !== null)
+      }).filter((item: typeof mergedData[0]) => item.anime !== null)
 
       return {
         items: mergedData,
@@ -454,7 +454,7 @@ export const userRouter = router({
       })
 
       return {
-        animeIds: favorites.map(f => f.animeId)
+        animeIds: favorites.map((f: typeof favorites[0]) => f.animeId)
       }
     }),
 
@@ -595,7 +595,7 @@ export const userRouter = router({
         }
       })
 
-      const totalEpisodes = watchedAnime.reduce((sum, item) => sum + item.progress, 0)
+      const totalEpisodes = watchedAnime.reduce((sum: number, item: typeof watchedAnime[0]) => sum + item.progress, 0)
 
       return {
         totalAnime,
@@ -643,7 +643,7 @@ export const userRouter = router({
       ])
 
       // Fetch anime details for recent activity
-      const animeIds = recentActivity.map(a => a.animeId)
+      const animeIds = recentActivity.map((a: typeof recentActivity[0]) => a.animeId)
       const animeDetails = await db.anime.findMany({
         where: { id: { in: animeIds } },
         select: {
@@ -654,8 +654,8 @@ export const userRouter = router({
         }
       })
 
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
-      const recentActivityWithAnime = recentActivity.map(activity => ({
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
+      const recentActivityWithAnime = recentActivity.map((activity: typeof recentActivity[0]) => ({
         anime: animeMap.get(activity.animeId),
         status: activity.status,
         progress: activity.progress,
@@ -666,7 +666,7 @@ export const userRouter = router({
         user: {
           id: ctx.user.id,
           email: ctx.user.email,
-          name: ctx.user.name,
+          username: ctx.user.username,
           avatar: ctx.user.avatar,
           bio: ctx.user.bio,
           emailVerified: ctx.user.emailVerified,
@@ -712,7 +712,7 @@ export const userRouter = router({
       ])
 
       // Fetch anime details
-      const animeIds = reviews.map(r => r.animeId)
+      const animeIds = reviews.map((r: typeof reviews[0]) => r.animeId)
       const animeDetails = await db.anime.findMany({
         where: { id: { in: animeIds } },
         select: {
@@ -723,8 +723,8 @@ export const userRouter = router({
         }
       })
 
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
-      const reviewsWithAnime = reviews.map(review => ({
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
+      const reviewsWithAnime = reviews.map((review: typeof reviews[0]) => ({
         id: review.id,
         anime: animeMap.get(review.animeId),
         title: review.title,
@@ -858,7 +858,6 @@ export const userRouter = router({
         select: {
           id: true,
           username: true,
-          name: true,
           avatar: true,
           bio: true,
           role: true,
@@ -886,7 +885,6 @@ export const userRouter = router({
           select: {
             id: true,
             username: true,
-            name: true,
             avatar: true,
             bio: true,
             role: true,
@@ -946,7 +944,6 @@ export const userRouter = router({
       return {
         id: user.id,
         username: user.username,
-        name: user.name,
         avatar: user.avatar,
         bio: user.bio,
         role: user.role,
@@ -1110,7 +1107,7 @@ export const userRouter = router({
       })
 
       // Fetch anime details
-      const animeIds = animeList.map(item => item.animeId)
+      const animeIds = animeList.map((item: typeof animeList[0]) => item.animeId)
       const animeDetails = await db.anime.findMany({
         where: { id: { in: animeIds } },
         select: {
@@ -1139,8 +1136,8 @@ export const userRouter = router({
       })
 
       // Merge data
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
-      const items = animeList.map(listItem => {
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
+      const items = animeList.map((listItem: typeof animeList[0]) => {
         const anime = animeMap.get(listItem.animeId)
         if (!anime) return null
         
@@ -1155,7 +1152,7 @@ export const userRouter = router({
           type: anime.type,
           episodes: anime.episodes,
           duration: anime.duration,
-          genres: anime.genres.map(g => g.genre),
+          genres: anime.genres.map((g: typeof anime.genres[0]) => g.genre),
           tags: [],
           listStatus: listItem.status,
           userScore: listItem.score

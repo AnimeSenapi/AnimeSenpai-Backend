@@ -33,7 +33,7 @@ export function generateCSRFToken(userId?: string): string {
   // Store token
   tokenStore.set(token, {
     expires: timestamp + TOKEN_EXPIRY,
-    userId,
+    ...(userId !== undefined && { userId }),
   })
   
   return token
@@ -166,6 +166,6 @@ export function generateDoubleSubmitToken(): string {
 }
 
 export function verifyDoubleSubmitToken(cookieToken: string, headerToken: string): boolean {
-  return cookieToken && headerToken && cookieToken === headerToken
+  return Boolean(cookieToken && headerToken && cookieToken === headerToken)
 }
 

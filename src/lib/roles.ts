@@ -190,7 +190,7 @@ export async function getUserFeatures(userRole: string): Promise<string[]> {
   })
 
   return flags
-    .filter(flag => {
+    .filter((flag: typeof flags[0]) => {
       // No role restrictions = everyone has access
       if (!flag.roles || flag.roles.length === 0) {
         return true
@@ -198,7 +198,7 @@ export async function getUserFeatures(userRole: string): Promise<string[]> {
       // Check if user's role has access
       return flag.roles.includes(userRole)
     })
-    .map(flag => flag.key)
+    .map((flag: typeof flags[0]) => flag.key)
 }
 
 /**
@@ -272,7 +272,7 @@ export async function promoteToTester(userId: string) {
     select: {
       id: true,
       email: true,
-      name: true,
+      username: true,
       primaryRole: true,
     }
   })
@@ -280,7 +280,7 @@ export async function promoteToTester(userId: string) {
   return {
     id: user.id,
     email: user.email,
-    name: user.name,
+    username: user.username,
     role: user.primaryRole?.name || 'user',
   }
 }
@@ -307,7 +307,7 @@ export async function demoteToUser(userId: string) {
     select: {
       id: true,
       email: true,
-      name: true,
+      username: true,
       primaryRole: true,
     }
   })
@@ -315,7 +315,7 @@ export async function demoteToUser(userId: string) {
   return {
     id: user.id,
     email: user.email,
-    name: user.name,
+    username: user.username,
     role: user.primaryRole?.name || 'user',
   }
 }
@@ -342,7 +342,7 @@ export async function promoteToAdmin(userId: string) {
     select: {
       id: true,
       email: true,
-      name: true,
+      username: true,
       primaryRole: true,
     }
   })
@@ -350,7 +350,7 @@ export async function promoteToAdmin(userId: string) {
   return {
     id: user.id,
     email: user.email,
-    name: user.name,
+    username: user.username,
     role: user.primaryRole?.name || 'user',
   }
 }

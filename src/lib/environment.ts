@@ -11,11 +11,6 @@ const environmentSchema = z.object({
   // Database
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   
-  // Redis
-  REDIS_URL: z.string().default('redis://localhost:6379'),
-  REDIS_PASSWORD: z.string().optional(),
-  REDIS_DB: z.string().transform(Number).default('0'),
-  
   // Authentication
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
@@ -78,7 +73,10 @@ class EnvironmentManager {
         version: this.config.APP_VERSION
       })
     } catch (error) {
-      logger.error('Environment validation failed', { error })
+      logger.error(
+        'Environment validation failed',
+        error instanceof Error ? error : new Error('Unknown error')
+      )
       throw new Error('Invalid environment configuration')
     }
   }
@@ -109,17 +107,6 @@ class EnvironmentManager {
       connectionTimeoutMillis: this.isProduction ? 10000 : 5000,
       idleTimeoutMillis: this.isProduction ? 30000 : 10000,
       max: this.isProduction ? 20 : 5
-    }
-  }
-
-  getRedisConfig() {
-    return {
-      url: this.config.REDIS_URL,
-      password: this.config.REDIS_PASSWORD,
-      db: this.config.REDIS_DB,
-      retryDelayOnFailover: this.isProduction ? 100 : 50,
-      maxRetriesPerRequest: this.isProduction ? 3 : 1,
-      lazyConnect: true
     }
   }
 
@@ -268,10 +255,6 @@ class EnvironmentManager {
       database: {
         connected: !!this.config.DATABASE_URL,
         ssl: this.isProduction
-      },
-      redis: {
-        connected: !!this.config.REDIS_URL,
-        db: this.config.REDIS_DB
       },
       features: this.getFeatureFlags(),
       security: {

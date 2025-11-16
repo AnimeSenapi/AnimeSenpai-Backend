@@ -496,7 +496,7 @@ export const adminRouter = router({
         }
       })
 
-      return users.map((user) => ({
+      return users.map((user: any) => ({
         ...user,
         name: null,
         role: user.primaryRole?.name || 'user'
@@ -1011,7 +1011,7 @@ export const adminRouter = router({
           friends: friendsCount,
           followers: followersCount,
         },
-        recentActivity: securityLogs.map((log) => ({
+        recentActivity: securityLogs.map((log: any) => ({
           id: log.id,
           eventType: log.event,
           createdAt: log.timestamp,
@@ -1851,7 +1851,7 @@ export const adminRouter = router({
         totalUnlocks,
         categoryStats,
         tierStats,
-        recentUnlocks: recentUnlocks.map((unlock) => ({
+        recentUnlocks: recentUnlocks.map((unlock: any) => ({
           ...unlock,
           user: unlock.user ? { ...unlock.user, name: null } : null,
         }))

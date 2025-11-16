@@ -5,6 +5,7 @@
       "runtime": "@vercel/node@3.2.29"
     }
   },
+  "outputDirectory": ".",
   "rewrites": [
     {
       "source": "/api/trpc/:path*",

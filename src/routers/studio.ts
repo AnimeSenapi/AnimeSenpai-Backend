@@ -6,10 +6,9 @@
 
 import { z } from 'zod'
 import { router, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { db, getCacheStrategy } from '../lib/db'
 import { TRPCError } from '@trpc/server'
 import { logger, extractLogContext } from '../lib/logger'
-import { cache } from '../lib/cache'
 
 export const studioRouter = router({
   /**
@@ -29,12 +28,6 @@ export const studioRouter = router({
       const skip = (page - 1) * limit
       
       try {
-        const cacheKey = `studio:${slug}:page:${page}:limit:${limit}:sort:${sortBy}:${order}`
-        const cached = cache.get(cacheKey)
-        if (cached) {
-          return cached
-        }
-        
         // Decode slug (studios may have spaces)
         const studioName = slug.replace(/-/g, ' ')
         
@@ -109,9 +102,13 @@ export const studioRouter = router({
                   }
                 }
               }
-            }
+            },
+            ...getCacheStrategy(300) // 5 minutes - studio listings
           }),
-          db.anime.count({ where })
+          db.anime.count({ 
+            where,
+            ...getCacheStrategy(300) // 5 minutes - count queries
+          })
         ])
         
         if (anime.length === 0) {
@@ -134,9 +131,9 @@ export const studioRouter = router({
         
         const result = {
           studio: studioInfo,
-          anime: anime.map(a => ({
+          anime: anime.map((a: typeof anime[0]) => ({
             ...a,
-            genres: a.genres.map((g: any) => g.genre)
+            genres: a.genres.map((g: typeof a.genres[0]) => g.genre)
           })),
           pagination: {
             page,
@@ -147,7 +144,7 @@ export const studioRouter = router({
           }
         }
         
-        cache.set(cacheKey, result, 300000) // 5 minutes
+        // Result is already cached by Prisma Accelerate
         
         logger.info('Studio page loaded', logContext, {
           studio: studioName,
@@ -187,24 +184,19 @@ export const studioRouter = router({
       const { search, minAnimeCount = 1, limit = 50 } = input
       
       try {
-        const cacheKey = `studios:all:search:${search || 'none'}:min:${minAnimeCount}:limit:${limit}`
-        const cached = cache.get(cacheKey)
-        if (cached) {
-          return cached
-        }
-        
         // Get all unique studios from anime
         const allAnime = await db.anime.findMany({
           select: {
             studios: true,
             studio: true
-          }
+          },
+          ...getCacheStrategy(600) // 10 minutes - studio list doesn't change often
         })
         
         // Count occurrences of each studio
         const studioCount = new Map<string, number>()
         
-        allAnime.forEach(anime => {
+        allAnime.forEach((anime: typeof allAnime[0]) => {
           // Count from studios array
           anime.studios.forEach((studio: string) => {
             if (studio) {
@@ -246,7 +238,7 @@ export const studioRouter = router({
           total: studios.length
         }
         
-        cache.set(cacheKey, result, 600000) // 10 minutes
+        // Result is already cached by Prisma Accelerate (anime query)
         
         return result
         

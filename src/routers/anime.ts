@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { router, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { cache, cacheKeys, cacheTTL } from '../lib/cache'
+import { db, getCacheStrategy } from '../lib/db'
 import { Prisma } from '@prisma/client'
 import { createSeriesEntries } from '../lib/series-grouping'
 
@@ -56,7 +55,7 @@ export const animeRouter = router({
       maxRating: z.number().min(0).max(10).optional(),
       sortBy: z.enum(['title', 'year', 'averageRating', 'viewCount', 'createdAt', 'episodes', 'popularity']).default('averageRating'),
       sortOrder: z.enum(['asc', 'desc']).default('desc')
-    }).optional())
+    }))
     .query(async ({ input = {} }) => {
       const {
         page = 1,
@@ -177,19 +176,13 @@ export const animeRouter = router({
         }
       }
 
-      // Use cache for common queries
-      const cacheKey = `anime:getAll:${JSON.stringify(input)}`
-      const cached = cache.get(cacheKey)
-      if (cached) {
-        return cached
-      }
-
       const [anime, total] = await Promise.all([
         db.anime.findMany({
           where,
           skip,
           take: limit,
           orderBy: { [sortBy]: sortOrder },
+          ...getCacheStrategy(300), // 5 minutes - use Prisma Accelerate caching
           select: {
             id: true,
             slug: true,
@@ -223,11 +216,14 @@ export const animeRouter = router({
             }
           }
         }),
-        db.anime.count({ where })
+        db.anime.count({ 
+          where,
+          ...getCacheStrategy(300) // 5 minutes - use Prisma Accelerate caching
+        })
       ])
 
       const result = {
-        anime: anime.map(item => ({
+        anime: anime.map((item: typeof anime[0]) => ({
           id: item.id,
           slug: item.slug,
           title: item.title,
@@ -244,7 +240,7 @@ export const animeRouter = router({
           coverImage: item.coverImage,
           bannerImage: item.bannerImage,
           trailerUrl: item.trailerUrl,
-          genres: item.genres?.map(g => g.genre) || [],
+          genres: item.genres?.map((g: typeof item.genres[0]) => g.genre) || [],
           stats: {
             viewCount: item.viewCount,
             ratingCount: item.ratingCount,
@@ -259,9 +255,7 @@ export const animeRouter = router({
         }
       }
 
-      // Cache for 5 minutes
-      cache.set(cacheKey, result, cacheTTL.MEDIUM)
-      
+      // Result is already cached by Prisma Accelerate
       return result
     }),
 
@@ -288,6 +282,7 @@ export const animeRouter = router({
           { averageRating: 'desc' },
           { viewCount: 'desc' }
         ],
+        ...getCacheStrategy(180), // 3 minutes - search results change frequently
         select: {
           id: true,
           slug: true,
@@ -314,7 +309,7 @@ export const animeRouter = router({
         }
       })
 
-      return anime.map(item => ({
+      return anime.map((item: typeof anime[0]) => ({
         id: item.id,
         slug: item.slug,
         title: item.title,
@@ -325,7 +320,7 @@ export const animeRouter = router({
         type: item.type,
         status: item.status,
         averageRating: item.averageRating,
-        genres: item.genres.map(g => g.genre)
+        genres: item.genres.map((g: typeof item.genres[0]) => g.genre)
       }))
     }),
 
@@ -384,7 +379,8 @@ export const animeRouter = router({
               }
             }
           }
-        }
+        },
+        ...getCacheStrategy(600) // 10 minutes - anime metadata doesn't change frequently
       })
 
       if (!anime) {
@@ -453,7 +449,8 @@ export const animeRouter = router({
           id: true,
           title: true,
           titleEnglish: true
-        }
+        },
+        ...getCacheStrategy(600) // 10 minutes - basic anime info
       })
 
       if (!anime) {
@@ -489,11 +486,12 @@ export const animeRouter = router({
           averageRating: true,
           status: true
         },
-        take: 50 // Limit to prevent performance issues
+        take: 50, // Limit to prevent performance issues
+        ...getCacheStrategy(600) // 10 minutes - series relationships don't change often
       })
       
       // Filter to only exact series matches (second pass - strict filter)
-      const relatedAnime = candidateAnime.filter(a => {
+      const relatedAnime = candidateAnime.filter((a: typeof candidateAnime[0]) => {
         const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
         // Must have exact same series name (case-insensitive)
         const aSeriesClean = aInfo.seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
@@ -502,7 +500,7 @@ export const animeRouter = router({
       })
       
       // Sort by year and season number
-      const sortedSeasons = relatedAnime.sort((a, b) => {
+      const sortedSeasons = relatedAnime.sort((a: typeof relatedAnime[0], b: typeof relatedAnime[0]) => {
         const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
         const bInfo = extractSeriesInfo(b.title, b.titleEnglish)
         
@@ -516,7 +514,7 @@ export const animeRouter = router({
       })
 
       // Format as seasons
-      const seasons = sortedSeasons.map(s => {
+      const seasons = sortedSeasons.map((s: typeof sortedSeasons[0]) => {
         const info = extractSeriesInfo(s.title, s.titleEnglish)
         return {
           seasonNumber: info.seasonNumber,
@@ -545,11 +543,8 @@ export const animeRouter = router({
     .query(async () => {
       const limit = 10
       
-      // Try to get from cache first (5 minute TTL)
-      return cache.getOrSet(
-        cacheKeys.key('anime', 'trending'),
-        async () => {
-          const anime = await db.anime.findMany({
+      // Use Prisma Accelerate caching
+      const anime = await db.anime.findMany({
         where: {
           ...getContentFilter()
         },
@@ -591,10 +586,11 @@ export const animeRouter = router({
               }
             }
           }
-        }
+        },
+        ...getCacheStrategy(300) // 5 minutes - trending changes more frequently
       })
 
-          return anime.map(item => ({
+      return anime.map((item: typeof anime[0]) => ({
             id: item.id,
             slug: item.slug,
             title: item.title,
@@ -612,16 +608,13 @@ export const animeRouter = router({
             coverImage: item.coverImage,
             bannerImage: item.bannerImage,
             trailerUrl: item.trailerUrl,
-            genres: item.genres?.map((g: any) => g.genre) || [],
+            genres: item.genres?.map((g: typeof item.genres[0]) => g.genre) || [],
             stats: {
               viewCount: item.viewCount,
               ratingCount: item.ratingCount,
               averageRating: item.averageRating
             }
           }))
-        },
-        cacheTTL.MEDIUM // 5 minutes
-      )
     }),
 
   // Get all anime grouped by series (Crunchyroll-style)
@@ -633,8 +626,8 @@ export const animeRouter = router({
       genre: z.string().optional(),
       sortBy: z.enum(['rating', 'year', 'title']).default('rating'),
       sortOrder: z.enum(['asc', 'desc']).default('desc')
-    }).optional())
-    .query(async ({ input = {} }) => {
+    }))
+    .query(async ({ input }) => {
       const {
         page = 1,
         limit = 20,
@@ -643,14 +636,6 @@ export const animeRouter = router({
         sortBy = 'rating',
         sortOrder = 'desc'
       } = input
-      
-      // Cache key for common requests (no search/genre filter)
-      const cacheKey = !search && !genre ? `series:${sortBy}:${sortOrder}:${page}:${limit}` : null
-      
-      if (cacheKey) {
-        const cached = cache.get(cacheKey)
-        if (cached) return cached
-      }
       
       // First, get all matching anime (not grouped yet)
       const where: any = {
@@ -682,6 +667,7 @@ export const animeRouter = router({
         where,
         take: 500, // Reduced from 1000 for better performance
         orderBy: { averageRating: 'desc' },
+        ...getCacheStrategy(600), // 10 minutes - series grouping doesn't change often
         select: {
           id: true,
           slug: true,
@@ -705,10 +691,10 @@ export const animeRouter = router({
       })
 
       // Group into series
-      const series = createSeriesEntries(allAnime.map(item => ({
+      const series = createSeriesEntries(allAnime.map((item: typeof allAnime[0]) => ({
         ...item,
         rating: item.averageRating,
-        genres: item.genres?.map(g => g.genre) || []
+        genres: item.genres?.map((g: typeof item.genres[0]) => g.genre) || []
       })))
 
       // Sort series
@@ -738,36 +724,27 @@ export const animeRouter = router({
         }
       }
       
-      // Cache common requests for 5 minutes
-      if (cacheKey) {
-        cache.set(cacheKey, result, cacheTTL.MEDIUM)
-      }
-      
+      // Result is already cached by Prisma Accelerate
       return result
     }),
 
-  // Get genres (select only needed fields) - cached for 15 minutes
+  // Get genres (select only needed fields) - cached via Prisma Accelerate
   getGenres: publicProcedure
     .query(async () => {
-      return cache.getOrSet(
-        cacheKeys.key('genres', 'all'),
-        async () => {
-          const genres = await db.genre.findMany({
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              color: true,
-            },
-            orderBy: {
-              name: 'asc'
-            }
-          })
-
-          return genres
+      const genres = await db.genre.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          color: true,
         },
-        cacheTTL.LONG // 15 minutes - genres rarely change
-      )
+        orderBy: {
+          name: 'asc'
+        },
+        ...getCacheStrategy(3600) // 1 hour - genres rarely change
+      })
+
+      return genres
     }),
 
 })

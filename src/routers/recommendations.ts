@@ -374,7 +374,7 @@ export const recommendationsRouter = router({
         })
         
         if (sourceAnime) {
-          const genreIds = sourceAnime.genres.map(g => g.genreId)
+          const genreIds = sourceAnime.genres.map((g: typeof sourceAnime.genres[0]) => g.genreId)
           
           // Find anime with similar genres
           const candidateAnime = await db.anime.findMany({
@@ -400,9 +400,9 @@ export const recommendationsRouter = router({
           })
           
           // Score by genre overlap
-          similar = candidateAnime.map(anime => {
-            const animeGenres = anime.genres.map(g => g.genreId)
-            const overlap = genreIds.filter(g => animeGenres.includes(g)).length
+          similar = candidateAnime.map((anime: typeof candidateAnime[0]) => {
+            const animeGenres = anime.genres.map((g: typeof anime.genres[0]) => g.genreId)
+            const overlap = genreIds.filter((g: typeof genreIds[0]) => animeGenres.includes(g)).length
             const union = new Set([...genreIds, ...animeGenres]).size
             const similarity = overlap / union
             
@@ -411,7 +411,7 @@ export const recommendationsRouter = router({
               similarity
             }
           })
-          .sort((a, b) => b.similarity - a.similarity)
+          .sort((a: { animeId: string; similarity: number }, b: { animeId: string; similarity: number }) => b.similarity - a.similarity)
           .slice(0, input.limit)
         }
       }
@@ -429,7 +429,7 @@ export const recommendationsRouter = router({
         }
       })
       
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
       
       return {
         recommendations: similar.map(s => {
@@ -446,7 +446,7 @@ export const recommendationsRouter = router({
               coverImage: anime.coverImage,
               year: anime.year,
               averageRating: anime.averageRating,
-              genres: anime.genres.map(g => ({
+              genres: anime.genres.map((g: typeof anime.genres[0]) => ({
                 id: g.genre.id,
                 name: g.genre.name
               }))
@@ -481,7 +481,7 @@ export const recommendationsRouter = router({
           }
         })
       
-      const animeMap = new Map(animeDetails.map(a => [a.id, a]))
+      const animeMap = new Map<string, typeof animeDetails[0]>(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
       
       return {
         results: results.map(r => {
@@ -497,7 +497,7 @@ export const recommendationsRouter = router({
               coverImage: anime.coverImage,
               year: anime.year,
               averageRating: anime.averageRating,
-              genres: anime.genres.map(g => ({
+              genres: anime.genres.map((g: typeof anime.genres[0]) => ({
                 id: g.genre.id,
                 name: g.genre.name
               }))
@@ -571,7 +571,7 @@ export const recommendationsRouter = router({
           }
         })
         
-        const friendIds = friendships.map(f => 
+        const friendIds = friendships.map((f: typeof friendships[0]) => 
           f.user1Id === ctx.user.id ? f.user2Id : f.user1Id
         )
         
@@ -591,7 +591,7 @@ export const recommendationsRouter = router({
           }
         })
         
-        const friendsWhoLikedIds = friendsWhoLiked.map(f => f.userId)
+        const friendsWhoLikedIds = friendsWhoLiked.map((f: typeof friendsWhoLiked[0]) => f.userId)
         
         if (friendsWhoLikedIds.length === 0) {
           return { recommendations: [] }
@@ -612,7 +612,7 @@ export const recommendationsRouter = router({
         })
         
         // Count how many friends liked each anime
-        const animeCounts = otherAnime.reduce((acc, item) => {
+        const animeCounts = otherAnime.reduce((acc: Record<string, { count: number; totalScore: number; friendIds: string[] }>, item: typeof otherAnime[0]) => {
           if (!acc[item.animeId]) {
             acc[item.animeId] = {
               count: 0,
@@ -620,14 +620,15 @@ export const recommendationsRouter = router({
               friendIds: []
             }
           }
-          acc[item.animeId].count++
-          acc[item.animeId].totalScore += item.score || 0
-          acc[item.animeId].friendIds.push(item.userId)
+          const animeEntry = acc[item.animeId]!
+          animeEntry.count++
+          animeEntry.totalScore += item.score || 0
+          animeEntry.friendIds.push(item.userId)
           return acc
         }, {} as Record<string, { count: number; totalScore: number; friendIds: string[] }>)
         
         // Sort by number of friends who liked it, then by average score
-        const sortedAnimeIds = Object.entries(animeCounts)
+        const sortedAnimeIds = (Object.entries(animeCounts) as [string, { count: number; totalScore: number; friendIds: string[] }][])
           .sort((a, b) => {
             if (b[1].count !== a[1].count) {
               return b[1].count - a[1].count
@@ -653,7 +654,7 @@ export const recommendationsRouter = router({
         
         // Sort recommendations to match the sorted order
         const sortedRecommendations = sortedAnimeIds
-          .map(id => recommendations.find(a => a.id === id))
+          .map(id => recommendations.find((a: typeof recommendations[0]) => a.id === id))
           .filter(Boolean)
           .map(anime => ({
             anime: {
@@ -666,7 +667,7 @@ export const recommendationsRouter = router({
               coverImage: anime!.coverImage,
               year: anime!.year,
               averageRating: anime!.averageRating,
-              genres: anime!.genres.map(g => ({
+              genres: anime!.genres.map((g: typeof recommendations[0]['genres'][0]) => ({
                 id: g.genre.id,
                 name: g.genre.name
               }))

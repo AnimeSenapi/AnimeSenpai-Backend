@@ -4,7 +4,6 @@
  * Achievement/badge system for user milestones with tiered progression
  */
 
-import { z } from 'zod'
 import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { logger, extractLogContext } from '../lib/logger'
@@ -66,19 +65,22 @@ export const achievementsRouter = router({
         // Calculate progress for each achievement type
         const progress = await calculateUserProgress(ctx.user.id)
         
-        const achievementsWithProgress = allAchievements.map(achievement => {
+        type AchievementWithTiers = typeof allAchievements[0]
+        type UserAchievementWithRelations = typeof userAchievements[0]
+        
+        const achievementsWithProgress = allAchievements.map((achievement: AchievementWithTiers) => {
           const unlockedTiers = userAchievements
-            .filter(ua => ua.achievementId === achievement.id)
-            .map(ua => ua.tier.tier)
-            .sort((a, b) => a - b)
+            .filter((ua: UserAchievementWithRelations) => ua.achievementId === achievement.id)
+            .map((ua: UserAchievementWithRelations) => ua.tier.tier)
+            .sort((a: number, b: number) => a - b)
           
           const currentProgress = progress[achievement.key] || 0
-          const nextTier = achievement.tiers.find(tier => 
+          const nextTier = achievement.tiers.find((tier: typeof achievement.tiers[0]) => 
             !unlockedTiers.includes(tier.tier) && currentProgress >= tier.requirement
           )
           
           const highestUnlockedTier = unlockedTiers.length > 0 ? Math.max(...unlockedTiers) : 0
-          const nextTierRequirement = achievement.tiers.find(tier => tier.tier === highestUnlockedTier + 1)?.requirement || 0
+          const nextTierRequirement = achievement.tiers.find((tier: typeof achievement.tiers[0]) => tier.tier === highestUnlockedTier + 1)?.requirement || 0
           
           return {
             ...achievement,
@@ -94,7 +96,7 @@ export const achievementsRouter = router({
         })
         
         // Group by category
-        const byCategory = achievementsWithProgress.reduce((acc, achievement) => {
+        const byCategory = achievementsWithProgress.reduce((acc: Record<string, typeof achievementsWithProgress>, achievement: typeof achievementsWithProgress[0]) => {
           if (!acc[achievement.category]) {
             acc[achievement.category] = []
           }
@@ -102,14 +104,14 @@ export const achievementsRouter = router({
           return acc
         }, {} as Record<string, typeof achievementsWithProgress>)
         
-        const totalPoints = userAchievements.reduce((sum, ua) => sum + ua.tier.points, 0)
+        const totalPoints = userAchievements.reduce((sum: number, ua: UserAchievementWithRelations) => sum + ua.tier.points, 0)
         const totalTiersUnlocked = userAchievements.length
         
         return {
           achievements: achievementsWithProgress,
           byCategory,
           unlockedCount: totalTiersUnlocked,
-          totalCount: allAchievements.reduce((sum, a) => sum + a.tiers.length, 0),
+          totalCount: allAchievements.reduce((sum: number, a: AchievementWithTiers) => sum + a.tiers.length, 0),
           totalPoints
         }
         
@@ -142,7 +144,7 @@ export const achievementsRouter = router({
           select: { tierId: true }
         })
         
-        const unlockedTierIds = new Set(userAchievements.map(ua => ua.tierId))
+        const unlockedTierIds = new Set(userAchievements.map((ua: { tierId: string }) => ua.tierId))
         const newlyUnlocked: any[] = []
         
         // Check each achievement type
@@ -150,7 +152,7 @@ export const achievementsRouter = router({
           const currentProgress = progress[achievement.key] || 0
           
           // Find tiers that can be unlocked
-          const unlockableTiers = achievement.tiers.filter(tier => 
+          const unlockableTiers = achievement.tiers.filter((tier: typeof achievement.tiers[0]) => 
             !unlockedTierIds.has(tier.id) && currentProgress >= tier.requirement
           )
           
@@ -230,7 +232,8 @@ export const achievementsRouter = router({
           })
         ])
         
-        const totalPoints = userAchievements.reduce((sum, ua) => sum + ua.tier.points, 0)
+        type UserAchievementWithTier = typeof userAchievements[0]
+        const totalPoints = userAchievements.reduce((sum: number, ua: UserAchievementWithTier) => sum + ua.tier.points, 0)
         const userUnlockedTiers = userAchievements.length
         
         return {
@@ -313,7 +316,7 @@ async function calculateUserProgress(userId: string): Promise<Record<string, num
   
   let genreCount = 0
   if (listItems.length > 0) {
-    const animeIds = listItems.map(item => item.animeId)
+    const animeIds = listItems.map((item: { animeId: string }) => item.animeId)
     const animes = await db.anime.findMany({
       where: { id: { in: animeIds } },
       select: {
@@ -331,8 +334,8 @@ async function calculateUserProgress(userId: string): Promise<Record<string, num
   
   // Calculate unique genres
     const uniqueGenres = new Set<string>()
-    animes.forEach(anime => {
-      anime.genres.forEach(g => {
+    animes.forEach((anime: typeof animes[0]) => {
+      anime.genres.forEach((g: typeof anime.genres[0]) => {
         uniqueGenres.add(g.genre.slug)
     })
   })

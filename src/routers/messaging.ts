@@ -156,8 +156,8 @@ export const messagingRouter = router({
         })
         
         const userIds = [
-          ...sentTo.map(m => m.receiverId),
-          ...receivedFrom.map(m => m.senderId)
+          ...sentTo.map((m: typeof sentTo[0]) => m.receiverId),
+          ...receivedFrom.map((m: typeof receivedFrom[0]) => m.senderId)
         ]
         const uniqueUserIds = [...new Set(userIds)]
         

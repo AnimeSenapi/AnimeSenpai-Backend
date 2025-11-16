@@ -26,7 +26,7 @@ export const listToolsRouter = router({
       const logContext = extractLogContext(ctx.req, ctx.user.id)
       
       try {
-        // Get both users' lists
+        // Get both users' lists - cached by Prisma Accelerate
         const [myList, friendList] = await Promise.all([
           db.userAnimeList.findMany({
             where: { userId: ctx.user.id },
@@ -34,7 +34,8 @@ export const listToolsRouter = router({
               animeId: true,
               status: true,
               score: true
-            }
+            },
+            ...getCacheStrategy(300) // 5 minutes
           }),
           db.userAnimeList.findMany({
             where: { userId: input.friendId },
@@ -42,12 +43,13 @@ export const listToolsRouter = router({
               animeId: true,
               status: true,
               score: true
-            }
+            },
+            ...getCacheStrategy(300) // 5 minutes
           })
         ])
         
-        // Get anime details for common and recommended anime
-        const allAnimeIds = [...new Set([...myList.map(a => a.animeId), ...friendList.map(a => a.animeId)])]
+        // Get anime details for common and recommended anime - cached by Prisma Accelerate
+        const allAnimeIds = [...new Set([...myList.map((a: typeof myList[0]) => a.animeId), ...friendList.map((a: typeof friendList[0]) => a.animeId)])]
         const animeDetails = await db.anime.findMany({
           where: { id: { in: allAnimeIds } },
           select: {
@@ -56,20 +58,21 @@ export const listToolsRouter = router({
             title: true,
             titleEnglish: true,
             coverImage: true
-          }
+          },
+          ...getCacheStrategy(300) // 5 minutes
         })
         
-        const animeMap = new Map(animeDetails.map(a => [a.id, a]))
+        const animeMap = new Map(animeDetails.map((a: typeof animeDetails[0]) => [a.id, a]))
         
-        const myAnimeIds = new Set(myList.map(a => a.animeId))
-        const friendAnimeIds = new Set(friendList.map(a => a.animeId))
+        const myAnimeIds = new Set(myList.map((a: typeof myList[0]) => a.animeId))
+        const friendAnimeIds = new Set(friendList.map((a: typeof friendList[0]) => a.animeId))
         
         // Find common anime
         const commonAnimeIds = [...myAnimeIds].filter(id => friendAnimeIds.has(id))
         const commonAnime = myList
-          .filter(a => commonAnimeIds.includes(a.animeId))
-          .map(item => {
-            const friendItem = friendList.find(f => f.animeId === item.animeId)
+          .filter((a: typeof myList[0]) => commonAnimeIds.includes(a.animeId))
+          .map((item: typeof myList[0]) => {
+            const friendItem = friendList.find((f: typeof friendList[0]) => f.animeId === item.animeId)
             const anime = animeMap.get(item.animeId)
             return {
               anime,
@@ -82,12 +85,12 @@ export const listToolsRouter = router({
                 : null
             }
           })
-          .filter(item => item.anime) // Filter out any missing anime
+          .filter((item: { anime: typeof animeMap extends Map<any, infer V> ? V : any }) => item.anime) // Filter out any missing anime
         
         // Find what friend has that you don't
         const friendHasButYouDont = friendList
-          .filter(a => !myAnimeIds.has(a.animeId))
-          .map(item => {
+          .filter((a: typeof friendList[0]) => !myAnimeIds.has(a.animeId))
+          .map((item: typeof friendList[0]) => {
             const anime = animeMap.get(item.animeId)
             return {
               anime,
@@ -95,12 +98,12 @@ export const listToolsRouter = router({
               friendScore: item.score
             }
           })
-          .filter(item => item.anime)
+          .filter((item: { anime: typeof animeMap extends Map<any, infer V> ? V : any }) => item.anime)
         
         // Find what you have that friend doesn't
         const youHaveButFriendDoesnt = myList
-          .filter(a => !friendAnimeIds.has(a.animeId))
-          .map(item => {
+          .filter((a: typeof myList[0]) => !friendAnimeIds.has(a.animeId))
+          .map((item: typeof myList[0]) => {
             const anime = animeMap.get(item.animeId)
             return {
               anime,
@@ -108,7 +111,7 @@ export const listToolsRouter = router({
               myScore: item.score
             }
           })
-          .filter(item => item.anime)
+          .filter((item: { anime: typeof animeMap extends Map<any, infer V> ? V : any }) => item.anime)
         
         // Calculate compatibility score
         const totalUnique = myAnimeIds.size + friendAnimeIds.size - commonAnimeIds.length
@@ -117,9 +120,10 @@ export const listToolsRouter = router({
           : 0
         
         // Find taste similarity (based on ratings of common anime)
-        const ratedCommon = commonAnime.filter(a => a.myScore && a.friendScore)
+        type CommonAnimeItem = typeof commonAnime[0]
+        const ratedCommon = commonAnime.filter((a: CommonAnimeItem) => a.myScore && a.friendScore)
         const averageDifference = ratedCommon.length > 0
-          ? ratedCommon.reduce((sum, a) => sum + (a.scoreDifference || 0), 0) / ratedCommon.length
+          ? ratedCommon.reduce((sum: number, a: CommonAnimeItem) => sum + (a.scoreDifference || 0), 0) / ratedCommon.length
           : 0
         const tasteSimilarity = Math.max(0, 100 - (averageDifference * 10))
         
@@ -174,7 +178,8 @@ export const listToolsRouter = router({
               }
             }
           },
-          orderBy: { updatedAt: 'desc' }
+          orderBy: { updatedAt: 'desc' },
+          ...getCacheStrategy(300) // 5 minutes
         })
         
         return {
@@ -202,7 +207,7 @@ export const listToolsRouter = router({
       const logContext = extractLogContext(ctx.req, ctx.user.id)
       
       try {
-        // Verify all collaborators are friends
+        // Verify all collaborators are friends - cached by Prisma Accelerate
         if (input.collaborators.length > 0) {
           const friendships = await db.friendship.findMany({
             where: {
@@ -210,10 +215,11 @@ export const listToolsRouter = router({
                 { user1Id: ctx.user.id, user2Id: { in: input.collaborators }, status: 'accepted' },
                 { user1Id: { in: input.collaborators }, user2Id: ctx.user.id, status: 'accepted' }
               ]
-            }
+            },
+            ...getCacheStrategy(300) // 5 minutes
           })
           
-          const friendIds = friendships.map(f => 
+          const friendIds = friendships.map((f: typeof friendships[0]) => 
             f.user1Id === ctx.user.id ? f.user2Id : f.user1Id
           )
           
@@ -270,9 +276,10 @@ export const listToolsRouter = router({
       const logContext = extractLogContext(ctx.req, ctx.user.id)
       
       try {
-        // Check ownership or collaborator status
+        // Check ownership or collaborator status - cached by Prisma Accelerate
         const list = await db.sharedList.findUnique({
-          where: { id: input.listId }
+          where: { id: input.listId },
+          ...getCacheStrategy(300) // 5 minutes
         })
         
         if (!list) {

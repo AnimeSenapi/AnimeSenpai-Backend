@@ -36,7 +36,6 @@ export const gdprRouter = router({
               id: true,
               email: true,
               username: true,
-              name: true,
               avatar: true,
               bio: true,
               role: true,
@@ -104,7 +103,6 @@ export const gdprRouter = router({
           personalInformation: {
             email: user.email,
             username: user.username,
-            name: user.name,
             bio: user.bio,
             avatar: user.avatar,
             role: user.role,
@@ -125,7 +123,7 @@ export const gdprRouter = router({
             addedAt: item.createdAt,
             updatedAt: item.updatedAt,
           })),
-          reviews: reviews.map(review => ({
+          reviews: reviews.map((review: typeof reviews[0]) => ({
             reviewId: review.id,
             animeTitle: review.anime?.titleEnglish || review.anime?.title,
             title: review.title,
@@ -232,7 +230,7 @@ export const gdprRouter = router({
         // Send confirmation email
         // TODO: Add public method in EmailService for account deletion emails
         // const { emailService } = await import('../lib/email')
-        // await emailService.sendAccountDeletionEmail(user.email, deletionDate, user.name || user.username)
+        // await emailService.sendAccountDeletionEmail(user.email, deletionDate, user.username)
         
         logger.security('GDPR account deletion scheduled', logContext, {
           userId: ctx.user.id,
@@ -291,7 +289,7 @@ export const gdprRouter = router({
    * Returns information about how user data is processed
    */
   getDataProcessingInfo: protectedProcedure
-    .query(async ({ ctx }) => {
+    .query(async ({ ctx: _ctx }) => {
       return {
         dataController: {
           name: 'AnimeSenpai',

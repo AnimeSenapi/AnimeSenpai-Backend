@@ -52,7 +52,8 @@ export const onboardingRouter = router({
       const genres = await db.genre.findMany({
         where: {
           id: { in: input.genreIds }
-        }
+        },
+        ...getCacheStrategy(3600) // 1 hour - genres rarely change
       })
       
       if (genres.length !== input.genreIds.length) {
@@ -254,11 +255,12 @@ export const onboardingRouter = router({
           { viewCount: 'desc' },
           { averageRating: 'desc' }
         ],
-        take: limit
+        take: limit,
+        ...getCacheStrategy(600) // 10 minutes - popular anime for onboarding
       })
       
       return {
-        anime: popular.map(a => ({
+        anime: popular.map((a: typeof popular[0]) => ({
           id: a.id,
           slug: a.slug,
           title: a.title,
@@ -266,7 +268,7 @@ export const onboardingRouter = router({
           year: a.year,
           type: a.type,
           averageRating: a.averageRating,
-          genres: a.genres.map(g => ({
+          genres: a.genres.map((g: typeof a.genres[0]) => ({
             id: g.genre.id,
             name: g.genre.name,
             slug: g.genre.slug

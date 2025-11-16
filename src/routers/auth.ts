@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { router, publicProcedure, protectedProcedure, validateWithSchema } from '../lib/trpc'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { 
   hashPassword, 
@@ -132,10 +132,13 @@ export const authRouter = router({
         })
 
         // Create session
+        const sessionUserAgent = ctx.req?.headers.get('user-agent') || undefined
+        const sessionIpAddress = ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+        const sessionDeviceInfo = ctx.req?.headers.get('user-agent') || undefined
         const sessionInfo: SessionInfo = {
-          userAgent: ctx.req?.headers.get('user-agent') || undefined,
-          ipAddress: ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
-          deviceInfo: ctx.req?.headers.get('user-agent') || undefined
+          ...(sessionUserAgent !== undefined && { userAgent: sessionUserAgent }),
+          ...(sessionIpAddress !== undefined && { ipAddress: sessionIpAddress }),
+          ...(sessionDeviceInfo !== undefined && { deviceInfo: sessionDeviceInfo })
         }
 
         const tokens = await createSession(user.id, sessionInfo)
@@ -159,7 +162,6 @@ export const authRouter = router({
             id: user.id,
             email: user.email,
             username: user.username,
-            name: user.name,
             avatar: user.avatar,
             bio: user.bio,
             role: user.primaryRole?.name || 'user',
@@ -258,10 +260,13 @@ export const authRouter = router({
       await resetLoginAttempts(user.id)
 
       // Create session
+      const sessionUserAgent = ctx.req?.headers.get('user-agent') || undefined
+      const sessionIpAddress = ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined
+      const sessionDeviceInfo = ctx.req?.headers.get('user-agent') || undefined
       const sessionInfo: SessionInfo = {
-        userAgent: ctx.req?.headers.get('user-agent') || undefined,
-        ipAddress: ctx.req?.headers.get('x-forwarded-for') || ctx.req?.headers.get('x-real-ip') || undefined,
-        deviceInfo: ctx.req?.headers.get('user-agent') || undefined
+        ...(sessionUserAgent !== undefined && { userAgent: sessionUserAgent }),
+        ...(sessionIpAddress !== undefined && { ipAddress: sessionIpAddress }),
+        ...(sessionDeviceInfo !== undefined && { deviceInfo: sessionDeviceInfo })
       }
 
       const tokens = await createSession(user.id, sessionInfo)
@@ -280,7 +285,6 @@ export const authRouter = router({
           id: user.id,
           email: user.email,
           username: user.username,
-          name: user.name,
           avatar: user.avatar,
           bio: user.bio,
           role: user.primaryRole?.name || 'user',
@@ -317,7 +321,6 @@ export const authRouter = router({
         id: user.id,
         email: user.email,
         username: user.username,
-        name: user.name,
         avatar: user.avatar,
         bio: user.bio,
         role: user.primaryRole?.name || 'user',
@@ -331,7 +334,6 @@ export const authRouter = router({
   updateProfile: protectedProcedure
     .input(z.object({
       username: z.string().min(2).max(50).regex(/^[a-z0-9_-]+$/, 'Username must be lowercase and can only contain letters, numbers, underscores, and hyphens').toLowerCase().trim().optional(),
-      name: z.string().min(2).optional(),
       bio: z.string().max(200).optional(),
       avatar: z.string().url().optional()
     }))
@@ -381,7 +383,6 @@ export const authRouter = router({
         id: user.id,
         email: user.email,
         username: user.username,
-        name: user.name,
         avatar: user.avatar,
         bio: user.bio,
         role: user.role,

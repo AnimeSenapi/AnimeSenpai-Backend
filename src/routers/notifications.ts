@@ -10,7 +10,6 @@
 import { z } from 'zod'
 import { router, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
-import { TRPCError } from '@trpc/server'
 import { logger, extractLogContext } from '../lib/logger'
 
 export const notificationsRouter = router({
@@ -124,7 +123,7 @@ export const notificationsRouter = router({
         })
         
         return {
-          subscriptions: subscriptions.map(sub => ({
+          subscriptions: subscriptions.map((sub: typeof subscriptions[0]) => ({
             id: sub.id,
             endpoint: sub.endpoint,
             userAgent: sub.userAgent,

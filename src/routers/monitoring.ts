@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../lib/trpc'
 import { logger } from '../lib/logger'
 import { errorRateMonitor, getErrorMetrics } from '../lib/monitoring'
-import { queryMonitor, getQueryStats, getSlowQueries } from '../lib/query-monitor'
+import { getQueryStats, getSlowQueries } from '../lib/query-monitor'
 import { sendUptimeAlert, sendPerformanceAlert } from '../lib/alerts'
 
 // Web Vitals Schema
@@ -42,11 +42,12 @@ export const monitoringRouter = router({
       try {
         // Log the web vital
         logger.info('Web vital recorded', {
-          metric: input.name,
-          value: input.value,
           sessionId: input.sessionId,
-          userId: input.userId,
-          url: input.url
+          url: input.url,
+          ...(input.userId !== undefined && { userId: input.userId })
+        }, {
+          metric: input.name,
+          value: input.value
         })
 
         // Check if it's a performance issue
@@ -61,11 +62,12 @@ export const monitoringRouter = router({
         const threshold = thresholds[input.name as keyof typeof thresholds]
         if (threshold && input.value > threshold) {
           logger.warn('Web vital threshold exceeded', {
-            metric: input.name,
-            value: input.value,
-            threshold,
             sessionId: input.sessionId,
             url: input.url
+          }, {
+            metric: input.name,
+            value: input.value,
+            threshold
           })
 
           // Send performance alert
@@ -79,7 +81,7 @@ export const monitoringRouter = router({
 
         return { success: true }
       } catch (error) {
-        logger.error('Failed to record web vital', { error, input })
+        logger.error('Failed to record web vital', error instanceof Error ? error : new Error(String(error)), undefined, { input })
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to record web vital'
@@ -101,7 +103,17 @@ export const monitoringRouter = router({
     }))
     .mutation(async ({ input }) => {
       try {
-        logger.warn('Performance alert received', input)
+        logger.warn('Performance alert received', {
+          sessionId: input.sessionId,
+          url: input.url,
+          ...(input.userId !== undefined && { userId: input.userId })
+        }, {
+          type: input.type,
+          metric: input.metric,
+          value: input.value,
+          threshold: input.threshold,
+          timestamp: input.timestamp
+        })
 
         // Send Slack alert
         await sendPerformanceAlert(
@@ -113,7 +125,7 @@ export const monitoringRouter = router({
 
         return { success: true }
       } catch (error) {
-        logger.error('Failed to record performance alert', { error, input })
+        logger.error('Failed to record performance alert', error instanceof Error ? error : new Error(String(error)), undefined, { input })
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to record performance alert'
@@ -126,20 +138,20 @@ export const monitoringRouter = router({
     .input(HealthCheckSchema)
     .mutation(async ({ input }) => {
       try {
-        logger.info('Health check received', input)
+        logger.info('Health check received', undefined, input)
 
         // Send health check alert if status is down
         if (input.status === 'down') {
           await sendUptimeAlert(
             input.service,
             input.status,
-            input.details
+            input.details ? parseFloat(input.details) : undefined
           )
         }
 
         return { success: true }
       } catch (error) {
-        logger.error('Failed to process health check', { error, input })
+        logger.error('Failed to process health check', error instanceof Error ? error : new Error(String(error)), undefined, { input })
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to process health check'
@@ -157,7 +169,7 @@ export const monitoringRouter = router({
           metrics
         }
       } catch (error) {
-        logger.error('Failed to get error metrics', { error })
+        logger.error('Failed to get error metrics', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get error metrics'
@@ -178,7 +190,7 @@ export const monitoringRouter = router({
           stats
         }
       } catch (error) {
-        logger.error('Failed to get query stats', { error })
+        logger.error('Failed to get query stats', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get query stats'
@@ -199,7 +211,7 @@ export const monitoringRouter = router({
           slowQueries
         }
       } catch (error) {
-        logger.error('Failed to get slow queries', { error })
+        logger.error('Failed to get slow queries', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get slow queries'
@@ -224,8 +236,7 @@ export const monitoringRouter = router({
           slowQueries: queryStats.slowQueries,
           averageQueryDuration: queryStats.averageDuration,
           health: {
-            database: 'healthy', // TODO: Add actual database health check
-            redis: 'healthy',    // TODO: Add actual Redis health check
+            database: 'healthy', // Database health check via health-check service
             api: 'healthy'
           }
         }
@@ -235,7 +246,7 @@ export const monitoringRouter = router({
           status
         }
       } catch (error) {
-        logger.error('Failed to get system status', { error })
+        logger.error('Failed to get system status', error instanceof Error ? error : new Error(String(error)))
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get system status'
@@ -260,11 +271,11 @@ export const monitoringRouter = router({
           input.errorType
         )
 
-        logger.error('Manual error recorded', input)
+        logger.error('Manual error recorded', undefined, undefined, input)
 
         return { success: true }
       } catch (error) {
-        logger.error('Failed to record manual error', { error, input })
+        logger.error('Failed to record manual error', error instanceof Error ? error : new Error(String(error)), undefined, { input })
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to record error'

@@ -46,7 +46,7 @@ export const analyticsRouter = router({
 
         // Process and store events
         for (const event of events) {
-          await processAnalyticsEvent(event, session)
+          await processAnalyticsEvent(event)
         }
 
         // Update session data
@@ -54,7 +54,12 @@ export const analyticsRouter = router({
 
         return { success: true, processed: events.length }
       } catch (error) {
-        logger.error('Failed to process analytics events', { error, eventCount: input.events.length })
+        logger.error(
+          'Failed to process analytics events',
+          error instanceof Error ? error : new Error(String(error)),
+          undefined,
+          { eventCount: input.events.length }
+        )
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to process analytics events'
@@ -96,7 +101,12 @@ export const analyticsRouter = router({
           }
         }
       } catch (error) {
-        logger.error('Failed to get user analytics', { error, userId: input.userId })
+        logger.error(
+          'Failed to get user analytics',
+          error instanceof Error ? error : new Error(String(error)),
+          undefined,
+          { userId: input.userId }
+        )
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get user analytics'
@@ -137,7 +147,10 @@ export const analyticsRouter = router({
           }
         }
       } catch (error) {
-        logger.error('Failed to get content analytics', { error })
+        logger.error(
+          'Failed to get content analytics',
+          error instanceof Error ? error : new Error(String(error))
+        )
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get content analytics'
@@ -174,7 +187,10 @@ export const analyticsRouter = router({
           }
         }
       } catch (error) {
-        logger.error('Failed to get growth metrics', { error })
+        logger.error(
+          'Failed to get growth metrics',
+          error instanceof Error ? error : new Error(String(error))
+        )
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get growth metrics'
@@ -184,7 +200,7 @@ export const analyticsRouter = router({
 })
 
 // Helper functions
-async function processAnalyticsEvent(event: any, session: any) {
+async function processAnalyticsEvent(event: any) {
   // Store event in database
   await db.analyticsEvent.create({
     data: {
@@ -342,7 +358,7 @@ async function getUserActivitySummary(userId: string, startTime: number) {
     }
   })
 
-  const eventCounts = events.reduce((acc, event) => {
+  const eventCounts = events.reduce((acc: Record<string, number>, event: typeof events[0]) => {
     acc[event.event] = (acc[event.event] || 0) + 1
     return acc
   }, {} as Record<string, number>)
@@ -350,7 +366,7 @@ async function getUserActivitySummary(userId: string, startTime: number) {
   return {
     totalEvents: events.length,
     eventTypes: eventCounts,
-    lastActivity: events.length > 0 ? Math.max(...events.map(e => e.timestamp.getTime())) : null
+    lastActivity: events.length > 0 ? Math.max(...events.map((e: typeof events[0]) => e.timestamp.getTime())) : null
   }
 }
 
@@ -366,7 +382,7 @@ async function getFeatureUsage(userId: string, startTime: number) {
     }
   })
 
-  const featureCounts = featureEvents.reduce((acc, event) => {
+  const featureCounts = featureEvents.reduce((acc: Record<string, number>, event: typeof featureEvents[0]) => {
     const feature = event.properties?.feature
     if (feature) {
       acc[feature] = (acc[feature] || 0) + 1
@@ -391,8 +407,8 @@ async function getSearchAnalytics(userId: string, startTime: number) {
 
   return {
     totalSearches: searchEvents.length,
-    uniqueQueries: new Set(searchEvents.map(e => e.properties?.query).filter(Boolean)).size,
-    averageResults: searchEvents.reduce((sum, e) => sum + (e.properties?.results || 0), 0) / searchEvents.length || 0
+    uniqueQueries: new Set(searchEvents.map((e: typeof searchEvents[0]) => e.properties?.query).filter(Boolean)).size,
+    averageResults: searchEvents.reduce((sum: number, e: typeof searchEvents[0]) => sum + (e.properties?.results || 0), 0) / searchEvents.length || 0
   }
 }
 
@@ -408,7 +424,7 @@ async function getAnimeAnalytics(userId: string, startTime: number) {
     }
   })
 
-  const actionCounts = animeEvents.reduce((acc, event) => {
+  const actionCounts = animeEvents.reduce((acc: Record<string, number>, event: typeof animeEvents[0]) => {
     const action = event.properties?.action
     if (action) {
       acc[action] = (acc[action] || 0) + 1
@@ -418,7 +434,7 @@ async function getAnimeAnalytics(userId: string, startTime: number) {
 
   return {
     totalInteractions: animeEvents.length,
-    uniqueAnime: new Set(animeEvents.map(e => e.properties?.animeId).filter(Boolean)).size,
+    uniqueAnime: new Set(animeEvents.map((e: typeof animeEvents[0]) => e.properties?.animeId).filter(Boolean)).size,
     actions: actionCounts
   }
 }
@@ -444,20 +460,165 @@ async function getPopularAnime(startTime: number) {
 }
 
 async function getGenreAnalytics(startTime: number) {
-  // This would require joining with anime data to get genres
-  // For now, return placeholder data
+  // Get top genres by view count and interaction
+  const topGenres = await db.animeGenre.groupBy({
+    by: ['genreId'],
+    _count: {
+      animeId: true
+    },
+    where: {
+      anime: {
+        viewCount: { gt: 0 },
+        OR: [
+          { updatedAt: { gte: new Date(startTime) } },
+          { createdAt: { gte: new Date(startTime) } }
+        ]
+      }
+    },
+    orderBy: {
+      _count: {
+        animeId: 'desc'
+      }
+    },
+    take: 10
+  })
+
+  // Get genre details
+  const genreIds = topGenres.map((g: { genreId: string; _count: { animeId: number } }) => g.genreId)
+  const genres = await db.genre.findMany({
+    where: { id: { in: genreIds } },
+    select: {
+      id: true,
+      name: true,
+      slug: true
+    },
+    ...getCacheStrategy(3600) // 1 hour - genres don't change often
+  })
+
+  const genreMap = new Map(genres.map((g: { id: string; name: string; slug: string }) => [g.id, g]))
+  
+  const topGenresData = topGenres.map((g: { genreId: string; _count: { animeId: number } }) => ({
+    genre: genreMap.get(g.genreId),
+    animeCount: g._count.animeId
+  })).filter((g: { genre?: { id: string; name: string; slug: string }; animeCount: number }) => g.genre !== undefined)
+
+  // Get genre trends (anime added in time period)
+  const genreTrends = await db.animeGenre.groupBy({
+    by: ['genreId'],
+    _count: {
+      animeId: true
+    },
+    where: {
+      anime: {
+        createdAt: { gte: new Date(startTime) }
+      }
+    },
+    orderBy: {
+      _count: {
+        animeId: 'desc'
+      }
+    },
+    take: 5
+  })
+
+  const trendGenreIds = genreTrends.map((g: { genreId: string; _count: { animeId: number } }) => g.genreId)
+  const trendGenres = await db.genre.findMany({
+    where: { id: { in: trendGenreIds } },
+    select: {
+      id: true,
+      name: true,
+      slug: true
+    },
+    ...getCacheStrategy(3600)
+  })
+
+  const trendGenreMap = new Map(trendGenres.map((g: { id: string; name: string; slug: string }) => [g.id, g]))
+  
+  const genreTrendsData = genreTrends.map((g: { genreId: string; _count: { animeId: number } }) => ({
+    genre: trendGenreMap.get(g.genreId),
+    newAnimeCount: g._count.animeId
+  })).filter((g: { genre?: { id: string; name: string; slug: string }; newAnimeCount: number }) => g.genre !== undefined)
+
   return {
-    topGenres: [],
-    genreTrends: []
+    topGenres: topGenresData,
+    genreTrends: genreTrendsData
   }
 }
 
 async function getStudioAnalytics(startTime: number) {
-  // This would require joining with anime data to get studios
-  // For now, return placeholder data
+  // Get all anime with studios in the time period
+  const animeWithStudios = await db.anime.findMany({
+    where: {
+      OR: [
+        { updatedAt: { gte: new Date(startTime) } },
+        { createdAt: { gte: new Date(startTime) } }
+      ],
+      studios: { isEmpty: false }
+    },
+    select: {
+      studios: true,
+      viewCount: true,
+      averageRating: true,
+      createdAt: true
+    },
+    ...getCacheStrategy(600) // 10 minutes
+  })
+
+  // Count studios by popularity
+  const studioCounts = new Map<string, { count: number; totalViews: number; avgRating: number }>()
+  
+  for (const anime of animeWithStudios) {
+    for (const studio of anime.studios) {
+      if (!studio) continue
+      
+      const existing = studioCounts.get(studio) || { count: 0, totalViews: 0, avgRating: 0 }
+      studioCounts.set(studio, {
+        count: existing.count + 1,
+        totalViews: existing.totalViews + anime.viewCount,
+        avgRating: existing.avgRating + (anime.averageRating || 0)
+      })
+    }
+  }
+
+  // Convert to array and sort
+  const topStudios = Array.from(studioCounts.entries())
+    .map(([name, data]) => ({
+      name,
+      animeCount: data.count,
+      totalViews: data.totalViews,
+      averageRating: data.count > 0 ? data.avgRating / data.count : 0
+    }))
+    .sort((a, b) => b.totalViews - a.totalViews)
+    .slice(0, 10)
+
+  // Get studio trends (new anime in time period)
+  const newAnime = await db.anime.findMany({
+    where: {
+      createdAt: { gte: new Date(startTime) },
+      studios: { isEmpty: false }
+    },
+    select: {
+      studios: true
+    },
+    ...getCacheStrategy(600)
+  })
+
+  const studioTrends = new Map<string, number>()
+  for (const anime of newAnime) {
+    for (const studio of anime.studios) {
+      if (!studio) continue
+      studioTrends.set(studio, (studioTrends.get(studio) || 0) + 1)
+    }
+  }
+
+  const studioTrendsData = Array.from(studioTrends.entries())
+    .map(([name, count]) => ({ name, newAnimeCount: count }))
+    .sort((a, b) => b.newAnimeCount - a.newAnimeCount)
+    .slice(0, 5)
+
   return {
-    topStudios: [],
-    studioTrends: []
+    topStudios,
+    studioTrends: studioTrendsData
   }
 }
 
@@ -516,14 +677,59 @@ async function getEngagementMetrics(startTime: number) {
   }
 }
 
-async function getRetentionMetrics(startTime: number) {
-  // This would require more complex cohort analysis
-  // For now, return placeholder data
+async function getRetentionMetrics(_startTime: number) {
+  const now = Date.now()
+  const dayMs = 24 * 60 * 60 * 1000
+  const weekMs = 7 * dayMs
+  const monthMs = 30 * dayMs
+
+  const dayStart = now - dayMs
+  const weekStart = now - weekMs
+  const monthStart = now - monthMs
+
+  // Get active users for each period
+  const [dailyActiveUsers, weeklyActiveUsers, monthlyActiveUsers] = await Promise.all([
+    db.userSession.count({
+      where: {
+        lastActivity: { gte: new Date(dayStart) }
+      },
+      ...getCacheStrategy(300) // 5 minutes
+    }),
+    db.userSession.count({
+      where: {
+        lastActivity: { gte: new Date(weekStart) }
+      },
+      ...getCacheStrategy(300)
+    }),
+    db.userSession.count({
+      where: {
+        lastActivity: { gte: new Date(monthStart) }
+      },
+      ...getCacheStrategy(300)
+    })
+  ])
+
+  // Calculate retention rates (simplified - compare this week vs last week)
+  const lastWeekStart = weekStart - weekMs
+  const lastWeekActive = await db.userSession.count({
+    where: {
+      lastActivity: { gte: new Date(lastWeekStart), lt: new Date(weekStart) }
+    },
+    ...getCacheStrategy(300)
+  })
+
+  const thisWeekActive = weeklyActiveUsers
+  const retentionRate = lastWeekActive > 0 
+    ? ((thisWeekActive / lastWeekActive) * 100) 
+    : 100
+
   return {
-    dailyActiveUsers: 0,
-    weeklyActiveUsers: 0,
-    monthlyActiveUsers: 0,
-    retentionRates: {}
+    dailyActiveUsers,
+    weeklyActiveUsers,
+    monthlyActiveUsers,
+    retentionRates: {
+      weekly: Math.round(retentionRate * 100) / 100
+    }
   }
 }
 

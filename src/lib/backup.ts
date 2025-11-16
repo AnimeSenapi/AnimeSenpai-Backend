@@ -92,7 +92,7 @@ class DatabaseBackup {
       )
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
       return {
         success: false,
         filename,

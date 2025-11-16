@@ -144,18 +144,18 @@ export function checkIPWhitelist(ipAddress: string): boolean {
     // No whitelist configured - allow all IPs
     return true
   }
-
+  
   const whitelist = whitelistEnv.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0)
   if (whitelist.length === 0) {
     return true
   }
-
+  
   // Check if IP is in whitelist
   const isAllowed = whitelist.includes(ipAddress)
   
   if (!isAllowed) {
     logger.warn('IP address not in admin whitelist', { ipAddress }, {
-      ipAddress,
+    ipAddress,
       whitelist: whitelist.length > 0 ? 'configured' : 'none'
     })
   }

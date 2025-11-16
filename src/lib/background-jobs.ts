@@ -144,10 +144,10 @@ class BackgroundJobQueue {
         error instanceof Error ? error : new Error(String(error)),
         {},
         {
-          jobId: job.id,
-          duration,
-          retries: job.retries,
-          maxRetries: job.maxRetries,
+        jobId: job.id,
+        duration,
+        retries: job.retries,
+        maxRetries: job.maxRetries,
         }
       )
       
@@ -173,7 +173,7 @@ class BackgroundJobQueue {
             error instanceof Error ? error : new Error(String(error)),
             {},
             {
-              jobId: job.id,
+            jobId: job.id,
             }
           )
           this.jobs.delete(job.id)

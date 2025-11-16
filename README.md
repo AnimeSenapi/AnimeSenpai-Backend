@@ -855,6 +855,18 @@ const stats = cache.stats()
 # Database
 DATABASE_URL="postgresql://user:pass@host:5432/animesenpai"
 
+# Prisma Accelerate (optional - for connection pooling and global database access)
+# Option 1: Use Accelerate connection string (automatically detected)
+# DATABASE_URL="prisma://accelerate.prisma-data.net/?api_key=YOUR_API_KEY"
+# Option 2: Use dedicated Accelerate URL
+# PRISMA_ACCELERATE_URL="prisma://accelerate.prisma-data.net/?api_key=YOUR_API_KEY"
+# Option 3: Enable Accelerate with direct connection
+# ENABLE_ACCELERATE="true"
+
+# Prisma Optimize (optional - for query analysis and optimization)
+# Get your API key from: https://console.prisma.io/optimize
+# OPTIMIZE_API_KEY="your-optimize-api-key-here"
+
 # JWT Authentication
 JWT_SECRET=your-256-bit-secret-key
 JWT_REFRESH_SECRET=your-256-bit-refresh-secret

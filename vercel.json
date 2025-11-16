@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "prisma generate",
-  "installCommand": "npm install",
   "functions": {
     "api/index.ts": {
       "runtime": "@vercel/node@3.2.29"

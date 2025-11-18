@@ -377,6 +377,36 @@ export function scheduleTokenCleanup() {
 
 
 /**
+ * Sync calendar data for airing anime (run daily)
+ * Also runs immediately on startup to fetch initial data
+ */
+export function scheduleCalendarSync() {
+  const syncHandler = async () => {
+    try {
+      const { syncAiringAnimeCalendarData } = await import('./calendar-sync')
+      await syncAiringAnimeCalendarData()
+    } catch (error) {
+      logger.error('Calendar sync job failed', error as Error, {}, {})
+    }
+  }
+
+  // Run immediately on startup (first fetch) after a short delay to ensure server is ready
+  setTimeout(() => {
+    logger.system('Starting initial calendar sync...', {}, {})
+    syncHandler().catch((error) => {
+      logger.error('Initial calendar sync failed', error as Error, {}, {})
+    })
+  }, 5000) // Wait 5 seconds for server to fully initialize
+
+  // Schedule daily runs
+  jobQueue.schedule(
+    'calendar-sync',
+    syncHandler,
+    24 * 60 * 60 * 1000, // Daily
+  )
+}
+
+/**
  * Initialize all scheduled jobs
  */
 export function initializeBackgroundJobs() {
@@ -385,6 +415,7 @@ export function initializeBackgroundJobs() {
   scheduleSessionCleanup()
   scheduleTrendingUpdate()
   scheduleTokenCleanup()
+  scheduleCalendarSync()
   
   logger.system('Background jobs initialized', {}, {
     jobs: jobQueue.getStats(),

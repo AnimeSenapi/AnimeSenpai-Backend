@@ -130,6 +130,8 @@ async function getUserRatingVector(userId: string): Promise<UserRatingVector | n
  * 
  * Security: Only considers users who opted-in to data sharing
  * Performance: Limits to top 1000 users, caches results
+ * 
+ * Now includes genre-based filtering: only considers users with similar genre preferences
  */
 export async function findSimilarUsers(
   userId: string,
@@ -143,6 +145,13 @@ export async function findSimilarUsers(
   const userVector = await getUserRatingVector(userId)
   if (!userVector) return []
 
+  // Get current user's favorite genres for genre-based filtering
+  const currentUser = await db.user.findUnique({
+    where: { id: userId },
+    include: { preferences: true }
+  })
+  const currentUserFavoriteGenres = currentUser?.preferences?.favoriteGenres || []
+
   // Get all users who have ratings and consent to sharing
   // Security: Only users with shareDataForRecommendations = true
   const eligibleUsers = await db.user.findMany({
@@ -153,13 +162,29 @@ export async function findSimilarUsers(
         useRatings: true
       }
     },
-    select: {
-      id: true
+    include: {
+      preferences: {
+        select: {
+          favoriteGenres: true
+        }
+      }
     },
     take: 1000 // Limit for performance
   })
 
-  const eligibleUserIds = eligibleUsers.map((u: typeof eligibleUsers[0]) => u.id)
+  // Filter users by genre overlap if current user has favorite genres
+  let filteredUsers = eligibleUsers
+  if (currentUserFavoriteGenres.length > 0) {
+    filteredUsers = eligibleUsers.filter((u: typeof eligibleUsers[0]) => {
+      const otherUserGenres = u.preferences?.favoriteGenres || []
+      // Count genre overlap
+      const overlap = currentUserFavoriteGenres.filter(g => otherUserGenres.includes(g)).length
+      // Require at least 2 shared genres for genre-focused users
+      return overlap >= 2
+    })
+  }
+
+  const eligibleUserIds = filteredUsers.map((u: typeof filteredUsers[0]) => u.id)
 
   // Get ratings for all eligible users
   const allRatings = await db.userAnimeList.findMany({
@@ -192,7 +217,21 @@ export async function findSimilarUsers(
     // Need at least 5 ratings for meaningful comparison
     if (otherRatings.size < 5) continue
 
-    const similarity = calculateCosineSimilarity(userVector.ratings, otherRatings)
+    let similarity = calculateCosineSimilarity(userVector.ratings, otherRatings)
+    
+    // Boost similarity score based on genre overlap
+    if (currentUserFavoriteGenres.length > 0) {
+      const otherUser = filteredUsers.find((u: typeof filteredUsers[0]) => u.id === otherUserId)
+      const otherUserGenres = otherUser?.preferences?.favoriteGenres || []
+      const genreOverlap = currentUserFavoriteGenres.filter(g => otherUserGenres.includes(g)).length
+      const maxGenres = Math.max(currentUserFavoriteGenres.length, otherUserGenres.length)
+      
+      if (maxGenres > 0) {
+        const genreSimilarity = genreOverlap / maxGenres
+        // Weight: 70% rating similarity, 30% genre similarity
+        similarity = similarity * 0.7 + genreSimilarity * 0.3
+      }
+    }
     
     // Only keep users with meaningful similarity (>0.3)
     if (similarity > 0.3) {

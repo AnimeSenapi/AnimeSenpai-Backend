@@ -1,4 +1,5 @@
 import './lib/tracing'
+import './lib/env'
 import { serve } from 'bun'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from './routers'
@@ -11,7 +12,7 @@ import { promisify } from 'util'
 
 const gzipAsync = promisify(gzip)
 
-const port = parseInt(process.env.API_PORT || '3001')
+const port = parseInt(process.env.API_PORT || '3005')
 
 // Performance metrics storage (in-memory, no Redis needed)
 const performanceMetrics = {
@@ -22,23 +23,7 @@ const performanceMetrics = {
   endpoints: new Map<string, {count: number, avgTime: number, errors: number}>()
 }
 
-// Function to find available port
-async function findAvailablePort(startPort: number): Promise<number> {
-  for (let port = startPort; port < startPort + 100; port++) {
-    try {
-      const server = Bun.serve({
-        port,
-        fetch: () => new Response('test'),
-      })
-      server.stop()
-      return port
-    } catch (error) {
-      // Port is in use, try next one
-      continue
-    }
-  }
-  throw new Error('No available ports found')
-}
+// Note: Bind to the configured port directly to avoid mismatches with frontend proxy
 
 // Start server
 ;(async () => {
@@ -63,32 +48,66 @@ async function findAvailablePort(startPort: number): Promise<number> {
   const { initializeBackgroundJobs } = await import('./lib/background-jobs')
   initializeBackgroundJobs()
   
-  const availablePort = await findAvailablePort(port)
-
   serve({
-    port: availablePort,
+    port,
     async fetch(request) {
       const startTime = Date.now()
       const requestId = request.headers.get('x-request-id') || generateRequestId()
+      const clientTraceId = request.headers.get('x-client-trace-id') || undefined
       const url = new URL(request.url)
       const logContext = extractLogContext(request)
       
-      // Handle CORS with specific origin (required for credentials: 'include')
+      // Handle CORS with strict allowlist
       const origin = request.headers.get('origin') || ''
-      const allowedOrigins = [
+      const allowedOrigins = new Set<string>([
         'http://localhost:3000',
-        'http://localhost:3001', 
-        'http://localhost:3002',
-        'http://localhost:3004',
-        'http://localhost:3005',
-        'http://localhost:3006',
         'https://animesenpai.app',
-        'https://www.animesenpai.app'
-      ]
-      
-      // Allow Vercel preview deployments (*.vercel.app)
+        'https://www.animesenpai.app',
+      ])
       const isVercelPreview = origin.endsWith('.vercel.app')
-      const corsOrigin = allowedOrigins.includes(origin) || isVercelPreview ? origin : allowedOrigins[0]!
+      const isAllowedOrigin = allowedOrigins.has(origin) || isVercelPreview
+      const corsOrigin = isAllowedOrigin ? origin : ''
+
+      // Build common security headers
+      const requestNonce = Math.random().toString(36).slice(2)
+      const imgSrc = [
+        "'self'",
+        "https:",
+        "cdn.myanimelist.net",
+        "i.ytimg.com",
+        "animesenpai.app",
+        "www.animesenpai.app",
+      ].join(' ')
+      const connectSrc = [
+        "'self'",
+        'http://localhost:3005',
+        'https://*.sentry.io',
+        'https://*.ingest.sentry.io',
+      ].join(' ')
+      const csp = [
+        `default-src 'self'`,
+        `base-uri 'self'`,
+        `object-src 'none'`,
+        `script-src 'self' 'nonce-${requestNonce}' https: 'strict-dynamic'`,
+        `style-src 'self'`,
+        `img-src ${imgSrc} data: blob:`,
+        `font-src 'self' https: data:`,
+        `media-src 'self' https:`,
+        `connect-src ${connectSrc}`,
+        `frame-ancestors 'none'`,
+      ].join('; ')
+
+      const baseHeaders: Record<string, string> = {
+        'X-Request-ID': requestId,
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Resource-Policy': 'same-site',
+        'X-Frame-Options': 'DENY',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+        'Content-Security-Policy': csp,
+        'Vary': 'Origin',
+      }
       
       try {
         // Security analysis
@@ -106,9 +125,10 @@ async function findAvailablePort(startPort: number): Promise<number> {
           }), {
             status: 403,
             headers: {
+              ...baseHeaders,
               'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': corsOrigin,
-              'X-Request-ID': requestId,
+              ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
+              'Access-Control-Allow-Credentials': 'true',
             } as Record<string, string>,
           })
         }
@@ -124,11 +144,11 @@ async function findAvailablePort(startPort: number): Promise<number> {
         return new Response(null, {
           status: 200,
           headers: {
-            'Access-Control-Allow-Origin': corsOrigin,
+            ...baseHeaders,
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-trpc-source',
             'Access-Control-Allow-Credentials': 'true',
-            'X-Request-ID': requestId,
           } as Record<string, string>,
         })
       }
@@ -143,8 +163,51 @@ async function findAvailablePort(startPort: number): Promise<number> {
         return new Response(JSON.stringify(healthStatus, null, 2), {
           status: healthStatus.status === 'unhealthy' ? 503 : 200,
           headers: {
+            ...baseHeaders,
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': corsOrigin,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
+            'Access-Control-Allow-Credentials': 'true',
+            'X-Request-ID': requestId,
+            ...(clientTraceId ? { 'X-Client-Trace-Id': clientTraceId } : {}),
+          } as Record<string, string>,
+        })
+      }
+
+      // Readiness probe endpoint (for Kubernetes/load balancers)
+      if (url.pathname === '/ready') {
+        const { healthChecker } = await import('./lib/health-check')
+        const readinessStatus = await healthChecker.getReadinessStatus()
+        const isReady = readinessStatus.ready
+        
+        logger.api('Readiness check requested', logContext, { readinessStatus })
+        
+        return new Response(JSON.stringify(readinessStatus, null, 2), {
+          status: isReady ? 200 : 503,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
+            'Access-Control-Allow-Credentials': 'true',
+            'X-Request-ID': requestId,
+          } as Record<string, string>,
+        })
+      }
+
+      // Liveness probe endpoint (for Kubernetes)
+      if (url.pathname === '/live') {
+        return new Response(JSON.stringify({
+          status: 'alive',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+        }), {
+          status: 200,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
             'Access-Control-Allow-Credentials': 'true',
             'X-Request-ID': requestId,
           } as Record<string, string>,
@@ -212,10 +275,10 @@ async function findAvailablePort(startPort: number): Promise<number> {
         return new Response(JSON.stringify(metricsResponse, null, 2), {
           status: 200,
           headers: {
+            ...baseHeaders,
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': corsOrigin,
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
             'Access-Control-Allow-Credentials': 'true',
-            'X-Request-ID': requestId,
           } as Record<string, string>,
         })
       }
@@ -251,8 +314,10 @@ async function findAvailablePort(startPort: number): Promise<number> {
         return new Response('Not found', {
           status: 404,
           headers: {
-            'Access-Control-Allow-Origin': corsOrigin,
+            ...baseHeaders,
+            ...(corsOrigin && { 'Access-Control-Allow-Origin': corsOrigin }),
             'X-Request-ID': requestId,
+            ...(clientTraceId ? { 'X-Client-Trace-Id': clientTraceId } : {}),
           },
         })
       }
@@ -340,6 +405,7 @@ async function findAvailablePort(startPort: number): Promise<number> {
       finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
       finalResponse.headers.set('Access-Control-Allow-Credentials', 'true')
       finalResponse.headers.set('X-Request-ID', requestId)
+      if (clientTraceId) finalResponse.headers.set('X-Client-Trace-Id', clientTraceId)
       
       // Security Headers (OWASP recommendations)
       finalResponse.headers.set('X-Content-Type-Options', 'nosniff')
@@ -430,11 +496,105 @@ async function findAvailablePort(startPort: number): Promise<number> {
             contentLength: finalResponse.headers.get('content-length'),
             contentType: finalResponse.headers.get('content-type'),
             compressed: finalResponse.headers.has('Content-Encoding'),
+            clientTraceId,
+            requestId,
           }
         )
       }
 
-      return finalResponse
+      // Intercept auth responses to set httpOnly cookies (tokens also remain in response body for frontend)
+      try {
+        const isSignin = url.pathname.includes('/api/trpc/auth.signin')
+        const isSignup = url.pathname.includes('/api/trpc/auth.signup')
+        const isRefresh = url.pathname.includes('/api/trpc/auth.refreshToken')
+        if (isSignin || isSignup || isRefresh) {
+          const text = await responseClone.text()
+          if (text) {
+            const json = JSON.parse(text)
+            if (json && json.result && json.result.data) {
+              const data = json.result.data
+              const accessToken = data.accessToken
+              const refreshToken = data.refreshToken
+              const user = data.user
+              if (accessToken && refreshToken) {
+                // Build cookies
+                const isProd = process.env.NODE_ENV === 'production'
+                const cookieBase = `Path=/; HttpOnly; SameSite=Lax${isProd ? '; Secure' : ''}`
+                const accessMaxAge = 60 * 15 // 15 minutes
+                const refreshMaxAge = 60 * 60 * 24 * 30 // 30 days
+                const setCookies = [
+                  `access_token=${accessToken}; Max-Age=${accessMaxAge}; ${cookieBase}`,
+                  `refresh_token=${refreshToken}; Max-Age=${refreshMaxAge}; ${cookieBase}`,
+                  // CSRF double-submit cookie seed
+                  `csrf_token_seed=1; Path=/; SameSite=Lax${isProd ? '; Secure' : ''}`,
+                ]
+                // Keep tokens in response body (frontend needs them for localStorage/sessionStorage)
+                // Also set httpOnly cookies as a backup/alternative auth method
+                const sanitized = {
+                  ...json,
+                  result: {
+                    ...json.result,
+                    data: {
+                      user,
+                      accessToken,
+                      refreshToken,
+                      expiresAt: data.expiresAt,
+                    },
+                  },
+                }
+                finalResponse = new Response(JSON.stringify(sanitized), {
+                  status: response.status,
+                  headers: {
+                    ...Object.fromEntries(response.headers.entries()),
+                    'Set-Cookie': setCookies.join(', '),
+                    'Content-Type': 'application/json',
+                  },
+                })
+              }
+            }
+          }
+        }
+      } catch {}
+
+      // Enforce CORS denial for disallowed origins on credentialed requests
+      if (!isAllowedOrigin && request.headers.get('cookie')) {
+        return new Response(JSON.stringify({ error: 'CORS origin not allowed' }), {
+          status: 403,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
+      // Set security/CORS headers on final response
+      const mergedHeaders = new Headers(finalResponse.headers)
+      Object.entries(baseHeaders).forEach(([k, v]) => mergedHeaders.set(k, v))
+      if (corsOrigin) {
+        mergedHeaders.set('Access-Control-Allow-Origin', corsOrigin)
+        mergedHeaders.set('Access-Control-Allow-Credentials', 'true')
+      }
+      // Add basic rate-limit headers (IP-based)
+      try {
+        const ipAddr = logContext.ipAddress || ''
+        if (ipAddr) {
+          const { getRateLimitHeaders } = await import('./lib/rate-limiter')
+          const rlHeaders = getRateLimitHeaders(ipAddr, 'public', url.pathname)
+          Object.entries(rlHeaders).forEach(([k, v]) => mergedHeaders.set(k, v))
+        }
+      } catch {}
+
+      // X-Robots-Tag on sensitive paths
+      if (
+        /^\/api\/(auth|admin|user|gdpr|privacy|messaging|notifications|roleManagement)/.test(url.pathname)
+      ) {
+        mergedHeaders.set('X-Robots-Tag', 'noindex, nofollow')
+      }
+
+      return new Response(finalResponse.body, {
+        status: finalResponse.status,
+        headers: mergedHeaders,
+      })
     } catch (error) {
       const duration = Date.now() - startTime
       const errorLogContext = extractLogContext(request)
@@ -477,7 +637,9 @@ async function findAvailablePort(startPort: number): Promise<number> {
     },
   })
 
-  console.log(`🚀 AnimeSenpai API Server running on port ${availablePort}`)
-  console.log(`📡 tRPC endpoint: http://localhost:${availablePort}/api/trpc`)
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
+  logger.info('AnimeSenpai API Server started', {
+    port,
+    trpcEndpoint: `http://localhost:${port}/api/trpc`,
+    environment: process.env.NODE_ENV || 'development'
+  })
 })()

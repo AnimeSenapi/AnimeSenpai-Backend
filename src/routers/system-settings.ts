@@ -3,6 +3,7 @@ import { router, protectedProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { requireAdmin } from '../lib/roles'
 import { TRPCError } from '@trpc/server'
+import { logger } from '../lib/logger'
 
 export const systemSettingsRouter = router({
   /**
@@ -90,7 +91,7 @@ export const systemSettingsRouter = router({
         })
       }
 
-      console.log(`[ADMIN] System settings updated by ${ctx.user.username}:`, input)
+      logger.info('System settings updated', { username: ctx.user.username, settings: input })
 
       return settings
     }),
@@ -130,7 +131,7 @@ export const systemSettingsRouter = router({
         }
       })
 
-      console.log(`[ADMIN] System settings reset to defaults by ${ctx.user.username}`)
+      logger.info('System settings reset to defaults', { username: ctx.user.username })
 
       return resetSettings
     })

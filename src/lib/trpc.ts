@@ -109,6 +109,40 @@ const rateLimitMiddleware = t.middleware(async ({ next, ctx, path }) => {
   }
 })
 
+// CSRF middleware for mutating requests
+const csrfProtect = t.middleware(async ({ next, ctx }) => {
+  const method = ctx.req.method || 'GET'
+  const isMutation = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
+  if (!isMutation) return next({ ctx })
+
+  const origin = ctx.req.headers.get('origin') || ''
+  const referer = ctx.req.headers.get('referer') || ''
+  const allowedOrigins = new Set<string>([
+    'https://animesenpai.app',
+    'https://www.animesenpai.app',
+    'http://localhost:3000',
+  ])
+  const isVercelPreview = origin.endsWith('.vercel.app')
+  const isAllowedOrigin = allowedOrigins.has(origin) || isVercelPreview
+  if (origin && !isAllowedOrigin) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Invalid request origin' })
+  }
+  if (referer && !(referer.startsWith('https://animesenpai.app') || referer.startsWith('https://www.animesenpai.app') || referer.startsWith('http://localhost:3000') || referer.includes('.vercel.app'))) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Invalid referrer' })
+  }
+
+  // Double submit cookie validation
+  const cookie = ctx.req.headers.get('cookie') || ''
+  const headerToken = ctx.req.headers.get('x-csrf-token') || ''
+  const cookieToken = cookie.split(';').map(s => s.trim()).find(s => s.startsWith('csrf_token='))?.split('=')[1] || ''
+  const { verifyDoubleSubmitToken } = await import('./csrf')
+  if (!verifyDoubleSubmitToken(cookieToken, headerToken)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'CSRF validation failed' })
+  }
+
+  return next({ ctx })
+})
+
 // Middleware for authentication
 const isAuthed = t.middleware(async ({ next, ctx, path }) => {
   const logContext = extractLogContext(ctx.req)
@@ -190,9 +224,10 @@ const isAuthed = t.middleware(async ({ next, ctx, path }) => {
   }
 })
 
-// Protected procedure with validation and rate limiting
+// Protected procedure with validation, CSRF, and rate limiting
 export const protectedProcedure = t.procedure
   .use(validateInputMiddleware)
+  .use(csrfProtect)
   .use(rateLimitMiddleware)
   .use(isAuthed)
 

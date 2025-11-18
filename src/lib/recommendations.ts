@@ -79,6 +79,10 @@ interface UserProfile {
     animeId: string
     status: string
   }>
+  favoritedAnime: string[] // Anime IDs the user has favorited
+  planToWatchAnime: string[] // Anime IDs in plan-to-watch list
+  currentlyWatchingAnime: string[] // Anime IDs currently being watched
+  completedAnime: string[] // Anime IDs user has completed
 }
 
 interface RecommendationScore {
@@ -192,6 +196,81 @@ async function getEmbeddingBasedRecommendations(
 }
 
 /**
+ * Calculate favorite genres from user's watch history and ratings
+ * Analyzes all watched/rated anime and returns top genres weighted by ratings
+ */
+async function calculateFavoriteGenresFromHistory(
+  userId: string,
+  watchList: Array<{ animeId: string; status: string }>,
+  ratings: Array<{ animeId: string; score: number }>
+): Promise<string[]> {
+  if (watchList.length === 0) return []
+  
+  // Get all anime IDs the user has interacted with
+  const animeIds = new Set<string>()
+  watchList.forEach(item => animeIds.add(item.animeId))
+  ratings.forEach(r => animeIds.add(r.animeId))
+  
+  if (animeIds.size === 0) return []
+  
+  // Get anime with their genres - cached by Prisma Accelerate
+  const animeWithGenres = await db.anime.findMany({
+    where: {
+      id: { in: Array.from(animeIds) }
+    },
+    include: {
+      genres: {
+        include: {
+          genre: true
+        }
+      }
+    },
+    ...getCacheStrategy(300) // 5 minutes
+  })
+  
+  // Create rating map for quick lookup
+  const ratingMap = new Map<string, number>()
+  ratings.forEach(r => {
+    ratingMap.set(r.animeId, r.score)
+  })
+  
+  // Count genre frequency weighted by ratings
+  const genreScores = new Map<string, number>()
+  
+  for (const anime of animeWithGenres) {
+    const userRating = ratingMap.get(anime.id)
+    // Weight: rated anime get rating/10, unrated get 0.5 (neutral)
+    const weight = userRating ? userRating / 10 : 0.5
+    
+    // Also weight by watch status: completed > watching > plan-to-watch
+    let statusWeight = 1.0
+    const watchItem = watchList.find(w => w.animeId === anime.id)
+    if (watchItem) {
+      if (watchItem.status === 'completed') statusWeight = 1.2
+      else if (watchItem.status === 'watching') statusWeight = 1.0
+      else if (watchItem.status === 'plan-to-watch') statusWeight = 0.7
+    }
+    
+    const finalWeight = weight * statusWeight
+    
+    // Add score for each genre
+    anime.genres.forEach(g => {
+      const genreId = g.genre.id
+      const currentScore = genreScores.get(genreId) || 0
+      genreScores.set(genreId, currentScore + finalWeight)
+    })
+  }
+  
+  // Sort genres by score and return top 5
+  const sortedGenres = Array.from(genreScores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([genreId]) => genreId)
+  
+  return sortedGenres
+}
+
+/**
  * Get user's preference profile from their watch history and ratings
  */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -224,21 +303,49 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     where: { userId },
     select: {
       animeId: true,
-      status: true
+      status: true,
+      isFavorite: true
     },
     ...getCacheStrategy(300) // 5 minutes
   })
   
+  // Auto-calculate favoriteGenres if not set or empty
+  let favoriteGenres = user.preferences?.favoriteGenres || []
+  if (favoriteGenres.length === 0 && watchList.length > 0) {
+    favoriteGenres = await calculateFavoriteGenresFromHistory(userId, watchList, ratings)
+  }
+  
+  // Extract favorited anime, plan-to-watch, currently watching, and completed
+  const favoritedAnime = watchList
+    .filter(item => item.isFavorite)
+    .map(item => item.animeId)
+  
+  const planToWatchAnime = watchList
+    .filter(item => item.status === 'plan-to-watch')
+    .map(item => item.animeId)
+  
+  const currentlyWatchingAnime = watchList
+    .filter(item => item.status === 'watching')
+    .map(item => item.animeId)
+  
+  const completedAnime = watchList
+    .filter(item => item.status === 'completed')
+    .map(item => item.animeId)
+  
   const profile: UserProfile = {
     id: userId,
-    favoriteGenres: user.preferences?.favoriteGenres || [],
+    favoriteGenres,
     favoriteTags: user.preferences?.favoriteTags || [],
     discoveryMode: user.preferences?.discoveryMode || 'balanced',
     ratedAnime: ratings.map((r: typeof ratings[0]) => ({
       animeId: r.animeId,
       score: r.score || 5
     })),
-    watchedAnime: watchList
+    watchedAnime: watchList,
+    favoritedAnime,
+    planToWatchAnime,
+    currentlyWatchingAnime,
+    completedAnime
   }
   
   // Database queries are cached by Prisma Accelerate, no need for in-memory cache
@@ -300,13 +407,85 @@ export async function getForYouRecommendations(
     profile.ratedAnime
   )
   
-  // Get all anime that user hasn't seen - cached by Prisma Accelerate
-  const candidateAnime = await db.anime.findMany({
-    where: {
-      id: {
-        notIn: [...seenAnime, ...dismissedAnime]
+  // Calculate user's average year preference (for recency bias)
+  let userAverageYear: number | null = null
+  if (profile.completedAnime.length > 0) {
+    const completedAnimeDetails = await db.anime.findMany({
+      where: {
+        id: { in: profile.completedAnime.slice(0, 50) }
+      },
+      select: { year: true },
+      ...getCacheStrategy(300)
+    })
+    const years = completedAnimeDetails.filter(a => a.year).map(a => a.year!)
+    if (years.length > 0) {
+      userAverageYear = years.reduce((a, b) => a + b, 0) / years.length
+    }
+  }
+  
+  // Build candidate filter - prioritize genre filtering if user has favorite genres
+  const candidateWhere: any = {
+    id: {
+      notIn: [...seenAnime, ...dismissedAnime]
+    }
+  }
+  
+  // Filter by favorite genres if available
+  if (profile.favoriteGenres.length > 0) {
+    candidateWhere.genres = {
+      some: {
+        genreId: {
+          in: profile.favoriteGenres
+        }
       }
-    },
+    }
+  }
+  
+  // Adaptive quality filters - avoid obscure anime but not too strict
+  // Check if user watches older/obscure anime
+  const userWatchesOldAnime = userAverageYear && userAverageYear < 2010
+  
+  // Check if user watches obscure anime (low view count)
+  let userWatchesObscureAnime = false
+  if (profile.completedAnime.length > 0) {
+    const completedAnimeDetails = await db.anime.findMany({
+      where: {
+        id: { in: profile.completedAnime.slice(0, 50) }
+      },
+      select: { viewCount: true },
+      ...getCacheStrategy(300)
+    })
+    const avgViewCount = completedAnimeDetails.reduce((sum, a) => sum + (a.viewCount || 0), 0) / completedAnimeDetails.length
+    userWatchesObscureAnime = avgViewCount < 1000 // User watches anime with low popularity
+  }
+  
+  // Quality filter: at least one of these must be true
+  const qualityFilters: any[] = []
+  
+  if (!userWatchesObscureAnime && !userWatchesOldAnime) {
+    // For users who prefer popular/recent anime, require quality indicators
+    qualityFilters.push(
+      { averageRating: { gte: 6.5 } }, // At least decent rating
+      { viewCount: { gte: 500 } }, // Or some popularity
+      { year: { gte: 2015 } } // Or relatively recent (last 10 years)
+    )
+  } else {
+    // For users who watch diverse/obscure/old anime, be more lenient
+    qualityFilters.push(
+      { averageRating: { gte: 6.0 } }, // Lower threshold
+      { viewCount: { gte: 100 } }, // Lower popularity threshold
+      { year: { gte: 2000 } } // Older anime allowed
+    )
+  }
+  
+  if (qualityFilters.length > 0) {
+    candidateWhere.OR = qualityFilters
+  }
+  
+  // Get candidate anime - cached by Prisma Accelerate
+  // Increased pool size to compensate for filtering
+  let candidateAnime = await db.anime.findMany({
+    where: candidateWhere,
     include: {
       genres: {
         include: {
@@ -314,9 +493,74 @@ export async function getForYouRecommendations(
         }
       }
     },
-    take: 200, // Limit candidates for performance
+    orderBy: [
+      { averageRating: 'desc' }, // Prioritize higher rated
+      { viewCount: 'desc' } // Then more popular
+    ],
+    take: 500, // Increased from 200 to compensate for filtering
     ...getCacheStrategy(300) // 5 minutes
   })
+  
+  // Fallback: If filtered pool is too small, relax to include secondary genres
+  if (candidateAnime.length < 50 && profile.favoriteGenres.length > 0) {
+    // Get secondary genres (genres that appear with favorite genres)
+    const favoriteAnime = await db.anime.findMany({
+      where: {
+        genres: {
+          some: {
+            genreId: {
+              in: profile.favoriteGenres
+            }
+          }
+        }
+      },
+      select: {
+        genres: {
+          select: {
+            genreId: true
+          }
+        }
+      },
+      take: 100,
+      ...getCacheStrategy(300)
+    })
+    
+    const secondaryGenres = new Set<string>()
+    favoriteAnime.forEach(anime => {
+      anime.genres.forEach(g => {
+        if (!profile.favoriteGenres.includes(g.genreId)) {
+          secondaryGenres.add(g.genreId)
+        }
+      })
+    })
+    
+    // Relax filter to include secondary genres
+    if (secondaryGenres.size > 0) {
+      candidateAnime = await db.anime.findMany({
+        where: {
+          id: {
+            notIn: [...seenAnime, ...dismissedAnime]
+          },
+          genres: {
+            some: {
+              genreId: {
+                in: [...profile.favoriteGenres, ...Array.from(secondaryGenres)]
+              }
+            }
+          }
+        },
+        include: {
+          genres: {
+            include: {
+              genre: true
+            }
+          }
+        },
+        take: 500,
+        ...getCacheStrategy(300)
+      })
+    }
+  }
   
   // Wait for collaborative and embedding results (parallel execution)
   const [collaborativeRecs, embeddingScores] = await Promise.all([
@@ -328,6 +572,67 @@ export async function getForYouRecommendations(
     collaborativeRecs.map(rec => [rec.animeId, rec.predictedScore])
   )
   
+  // Pre-fetch genre IDs for romance-specific enhancements (optimization)
+  const romanceGenre = await db.genre.findUnique({
+    where: { slug: 'romance' },
+    select: { id: true },
+    ...getCacheStrategy(3600) // 1 hour - genres rarely change
+  })
+  
+  const sliceOfLifeGenre = await db.genre.findUnique({
+    where: { slug: 'slice-of-life' },
+    select: { id: true },
+    ...getCacheStrategy(3600)
+  })
+  
+  const actionGenre = await db.genre.findUnique({
+    where: { slug: 'action' },
+    select: { id: true },
+    ...getCacheStrategy(3600)
+  })
+  
+  const shounenGenre = await db.genre.findUnique({
+    where: { slug: 'shounen' },
+    select: { id: true },
+    ...getCacheStrategy(3600)
+  })
+  
+  // Calculate romance anime count if romance is a favorite genre
+  let romanceAnimeCount = 0
+  if (romanceGenre && profile.favoriteGenres.includes(romanceGenre.id)) {
+    const watchedAnimeIds = profile.watchedAnime.map(w => w.animeId)
+    romanceAnimeCount = await db.anime.count({
+      where: {
+        id: { in: watchedAnimeIds },
+        genres: {
+          some: {
+            genreId: romanceGenre.id
+          }
+        }
+      },
+      ...getCacheStrategy(300)
+    })
+  }
+  
+  // Pre-fetch favorited, plan-to-watch, and currently watching anime for similarity calculations
+  const favoritedAnimeDetails = profile.favoritedAnime.length > 0 ? await db.anime.findMany({
+    where: { id: { in: profile.favoritedAnime.slice(0, 10) } },
+    include: { genres: { include: { genre: true } } },
+    ...getCacheStrategy(300)
+  }) : []
+  
+  const planToWatchAnimeDetails = profile.planToWatchAnime.length > 0 ? await db.anime.findMany({
+    where: { id: { in: profile.planToWatchAnime.slice(0, 20) } },
+    include: { genres: { include: { genre: true } } },
+    ...getCacheStrategy(300)
+  }) : []
+  
+  const currentlyWatchingAnimeDetails = profile.currentlyWatchingAnime.length > 0 ? await db.anime.findMany({
+    where: { id: { in: profile.currentlyWatchingAnime.slice(0, 10) } },
+    include: { genres: { include: { genre: true } } },
+    ...getCacheStrategy(300)
+  }) : []
+  
   // Score each anime using TRIPLE hybrid approach
   const scored: RecommendationScore[] = []
   
@@ -338,7 +643,8 @@ export async function getForYouRecommendations(
     // 1. CONTENT-BASED SCORING (Traditional)
     const animeGenreIds = anime.genres.map((g: typeof anime.genres[0]) => g.genre.id)
     const genreMatch = jaccardSimilarity(animeGenreIds, profile.favoriteGenres)
-    contentBasedScore += genreMatch * 0.4
+    // Increased genre weight from 0.4 to 0.6 for stronger genre preference influence
+    contentBasedScore += genreMatch * 0.6
     
     if (genreMatch > 0.5) {
       const matchedGenres = anime.genres
@@ -348,14 +654,15 @@ export async function getForYouRecommendations(
     }
     
     const tagMatch = jaccardSimilarity(anime.tags, profile.favoriteTags)
-    contentBasedScore += tagMatch * 0.3
+    // Reduced tag weight from 0.3 to 0.2 to compensate for increased genre weight
+    contentBasedScore += tagMatch * 0.2
     
     if (anime.averageRating) {
-      contentBasedScore += (anime.averageRating / 10) * 0.2
+      contentBasedScore += (anime.averageRating / 10) * 0.15
     }
     
     const popularityScore = Math.min(anime.viewCount / 10000, 1)
-    contentBasedScore += popularityScore * 0.1
+    contentBasedScore += popularityScore * 0.05
     
     // Check similarity to highly rated anime (traditional method)
     if (profile.ratedAnime.length > 0) {
@@ -385,6 +692,51 @@ export async function getForYouRecommendations(
       }
     }
     
+    // Similarity to favorited anime (strong signal - user explicitly marked as favorite)
+    if (favoritedAnimeDetails.length > 0) {
+      let maxFavoriteSimilarity = 0
+      for (const favorite of favoritedAnimeDetails) {
+        const similarity = calculateAnimeSimilarity(anime, favorite)
+        maxFavoriteSimilarity = Math.max(maxFavoriteSimilarity, similarity)
+      }
+      // Strong boost for similarity to favorites
+      contentBasedScore += maxFavoriteSimilarity * 0.4
+      
+      if (maxFavoriteSimilarity > 0.6 && !reason) {
+        reason = 'Similar to your favorites'
+      }
+    }
+    
+    // Similarity to plan-to-watch anime (user has shown interest)
+    if (planToWatchAnimeDetails.length > 0) {
+      let maxPlanToWatchSimilarity = 0
+      for (const planned of planToWatchAnimeDetails) {
+        const similarity = calculateAnimeSimilarity(anime, planned)
+        maxPlanToWatchSimilarity = Math.max(maxPlanToWatchSimilarity, similarity)
+      }
+      // Moderate boost for similarity to plan-to-watch
+      contentBasedScore += maxPlanToWatchSimilarity * 0.25
+      
+      if (maxPlanToWatchSimilarity > 0.6 && !reason && favoritedAnimeDetails.length === 0) {
+        reason = 'Similar to anime you plan to watch'
+      }
+    }
+    
+    // Similarity to currently watching anime (user is actively engaged)
+    if (currentlyWatchingAnimeDetails.length > 0) {
+      let maxWatchingSimilarity = 0
+      for (const watching of currentlyWatchingAnimeDetails) {
+        const similarity = calculateAnimeSimilarity(anime, watching)
+        maxWatchingSimilarity = Math.max(maxWatchingSimilarity, similarity)
+      }
+      // Boost for similarity to currently watching
+      contentBasedScore += maxWatchingSimilarity * 0.3
+      
+      if (maxWatchingSimilarity > 0.6 && !reason && favoritedAnimeDetails.length === 0) {
+        reason = 'Similar to what you\'re watching'
+      }
+    }
+    
     // 2. COLLABORATIVE SCORE (User similarity)
     const collaborativeScore = collaborativeScores.get(anime.id)
     const normalizedCollaborative = collaborativeScore ? collaborativeScore / 10 : 0
@@ -393,11 +745,80 @@ export async function getForYouRecommendations(
     const embeddingScore = embeddingScores.get(anime.id) || 0
     
     // TRIPLE HYBRID SCORING (Phase 3!)
-    // Weights: 40% content, 35% collaborative, 25% embeddings
-    const finalScore = 
-      contentBasedScore * 0.40 +
-      normalizedCollaborative * 0.35 +
-      embeddingScore * 0.25
+    // Updated weights: 50% content (increased from 40%), 30% collaborative (reduced from 35%), 20% embeddings (reduced from 25%)
+    // This gives genre preferences stronger influence in final recommendations
+    let finalScore = 
+      contentBasedScore * 0.50 +
+      normalizedCollaborative * 0.30 +
+      embeddingScore * 0.20
+    
+    // Recency bias - prefer recent anime unless user watches old stuff
+    if (anime.year && userAverageYear) {
+      const currentYear = new Date().getFullYear()
+      const animeAge = currentYear - anime.year
+      const userPrefersRecent = userAverageYear >= 2015
+      
+      if (userPrefersRecent && animeAge <= 5) {
+        // Boost recent anime for users who prefer recent content
+        finalScore *= 1.15
+      } else if (userPrefersRecent && animeAge > 10) {
+        // Slight penalty for very old anime if user prefers recent
+        finalScore *= 0.9
+      } else if (!userPrefersRecent && animeAge <= 5) {
+        // Users who watch old anime might still appreciate recent, but less boost
+        finalScore *= 1.05
+      }
+    } else if (anime.year && anime.year >= 2015) {
+      // Default: slight boost for recent anime if no user preference data
+      finalScore *= 1.1
+    }
+    
+    // Popularity boost within favorite genres (well-known anime in user's preferred genres)
+    if (profile.favoriteGenres.length > 0 && genreMatch > 0.3) {
+      const popularityBoost = Math.min(anime.viewCount / 5000, 1) // Normalize to 0-1
+      // Boost popular anime within favorite genres
+      finalScore *= (1 + popularityBoost * 0.15) // Up to 15% boost for very popular anime
+    }
+    
+    // Genre match requirement threshold - enforce genre preferences
+    if (profile.favoriteGenres.length > 0) {
+      if (genreMatch > 0.2) {
+        // Boost score for good genre matches (at least 20% overlap)
+        finalScore *= (1 + genreMatch * 0.2) // Up to 20% boost for perfect matches
+      } else {
+        // Penalize anime with no genre match (less than 20% overlap)
+        finalScore *= 0.5 // Reduce score by 50% if no meaningful genre match
+      }
+    }
+    
+    // Romance-specific enhancements
+    // Apply if romance is a favorite genre and user has significant romance watch history
+    if (romanceGenre && profile.favoriteGenres.includes(romanceGenre.id) && romanceAnimeCount > 5) {
+      const hasRomance = animeGenreIds.includes(romanceGenre.id)
+      const hasSliceOfLife = sliceOfLifeGenre && animeGenreIds.includes(sliceOfLifeGenre.id)
+      const hasAction = actionGenre && animeGenreIds.includes(actionGenre.id)
+      const hasShounen = shounenGenre && animeGenreIds.includes(shounenGenre.id)
+      
+      // Boost romance anime scores by 20%
+      if (hasRomance) {
+        finalScore *= 1.2
+      }
+      
+      // Extra boost for romance + slice-of-life combinations
+      if (hasRomance && hasSliceOfLife) {
+        finalScore *= 1.15 // Additional 15% boost for ideal combination
+      }
+      
+      // Filter out action/shonen unless explicitly rated highly
+      // Only penalize if it's primarily action/shonen without romance
+      if ((hasAction || hasShounen) && !hasRomance) {
+        // Check if user has rated this anime highly - if so, don't penalize
+        const userRating = profile.ratedAnime.find(r => r.animeId === anime.id)
+        if (!userRating || userRating.score < 8) {
+          finalScore *= 0.3 // Heavy penalty for action/shonen without romance
+        }
+      }
+    }
     
     // Update reason based on strongest signal
     if (!reason) {
@@ -420,12 +841,121 @@ export async function getForYouRecommendations(
   // Sort by hybrid score
   scored.sort((a, b) => b.score - a.score)
   
-  // Apply diversity based on discovery mode
-  const diversitySettings = DIVERSITY[profile.discoveryMode as keyof typeof DIVERSITY] || DIVERSITY.balanced
+  // Adaptive discovery mode based on user watch count and genre diversity
+  let effectiveDiscoveryMode = profile.discoveryMode
+  const watchCount = profile.watchedAnime.length
+  
+  if (watchCount < 10) {
+    // New users: Use balanced mode for exploration
+    effectiveDiscoveryMode = 'balanced'
+  } else if (watchCount >= 10 && watchCount <= 50) {
+    // Growing users: Use focused mode
+    effectiveDiscoveryMode = 'focused'
+  } else if (watchCount > 50) {
+    // Experienced users: Check genre diversity
+    // Calculate unique genres from watched anime
+    const watchedAnimeIds = profile.watchedAnime.map(w => w.animeId)
+    const watchedAnime = await db.anime.findMany({
+      where: {
+        id: { in: watchedAnimeIds }
+      },
+      select: {
+        genres: {
+          select: {
+            genreId: true
+          }
+        }
+      },
+      take: 100,
+      ...getCacheStrategy(300)
+    })
+    
+    const uniqueGenres = new Set<string>()
+    watchedAnime.forEach(anime => {
+      anime.genres.forEach(g => uniqueGenres.add(g.genreId))
+    })
+    
+    const genreDiversity = uniqueGenres.size
+    
+    if (genreDiversity < 3) {
+      // Focused users: Use focused mode with minimal discovery (5%)
+      effectiveDiscoveryMode = 'focused'
+    } else if (genreDiversity >= 5) {
+      // Very diverse users: Use exploratory mode for more variety
+      effectiveDiscoveryMode = 'exploratory'
+    } else {
+      // Moderately diverse users: Use balanced mode
+      effectiveDiscoveryMode = 'balanced'
+    }
+  }
+  
+  // Apply diversity based on effective discovery mode
+  let diversitySettings = DIVERSITY[effectiveDiscoveryMode as keyof typeof DIVERSITY] || DIVERSITY.balanced
+  
+  // For focused users with low genre diversity, reduce discovery even more
+  if (effectiveDiscoveryMode === 'focused' && watchCount > 50) {
+    diversitySettings = { mainGenre: 0.95, discovery: 0.05 }
+  }
+  
   const mainCount = Math.floor(limit * diversitySettings.mainGenre)
   const discoveryCount = limit - mainCount
   
-  // Take top scores for main recommendations
+  // For diverse users, balance recommendations across their favorite genres
+  if (profile.favoriteGenres.length >= 3 && effectiveDiscoveryMode !== 'focused') {
+    // Distribute recommendations across favorite genres for diverse users
+    const genreDistribution = new Map<string, RecommendationScore[]>()
+    const genreLimits = Math.ceil(mainCount / profile.favoriteGenres.length)
+    
+    // Group recommendations by favorite genres
+    for (const rec of scored) {
+      const animeGenreIds = rec.anime.genres.map(g => g.genre.id)
+      for (const favGenreId of profile.favoriteGenres) {
+        if (animeGenreIds.includes(favGenreId)) {
+          if (!genreDistribution.has(favGenreId)) {
+            genreDistribution.set(favGenreId, [])
+          }
+          const genreRecs = genreDistribution.get(favGenreId)!
+          if (genreRecs.length < genreLimits) {
+            genreRecs.push(rec)
+            break // Only add to first matching genre
+          }
+        }
+      }
+    }
+    
+    // Combine recommendations from all genres
+    const balancedRecommendations: RecommendationScore[] = []
+    for (const favGenreId of profile.favoriteGenres) {
+      const genreRecs = genreDistribution.get(favGenreId) || []
+      balancedRecommendations.push(...genreRecs.slice(0, genreLimits))
+    }
+    
+    // Fill remaining slots with top-scored recommendations
+    const usedIds = new Set(balancedRecommendations.map(r => r.anime.id))
+    const remaining = scored
+      .filter(r => !usedIds.has(r.anime.id))
+      .slice(0, mainCount - balancedRecommendations.length)
+    
+    const mainRecommendations = [...balancedRecommendations, ...remaining].slice(0, mainCount)
+    
+    // Take some from different genres for discovery
+    const usedGenres = new Set<string>()
+    mainRecommendations.forEach(rec => {
+      rec.anime.genres.forEach(g => usedGenres.add(g.genre.id))
+    })
+    
+    const discoveryRecommendations = scored
+      .slice(mainCount)
+      .filter(rec => {
+        const hasNewGenre = rec.anime.genres.some(g => !usedGenres.has(g.genre.id))
+        return hasNewGenre && !usedIds.has(rec.anime.id)
+      })
+      .slice(0, discoveryCount)
+    
+    return [...mainRecommendations, ...discoveryRecommendations].slice(0, limit)
+  }
+  
+  // Standard approach for focused users
   const mainRecommendations = scored.slice(0, mainCount)
   
   // Take some from different genres for discovery

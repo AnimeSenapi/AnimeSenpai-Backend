@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { withOptimize } from '@prisma/extension-optimize'
+import { logger } from './logger'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: any | undefined
@@ -55,11 +56,12 @@ function createPrismaClient() {
   const enableOptimize = process.env.ENABLE_PRISMA_OPTIMIZE === 'true'
 
   if (optimizeApiKey && enableOptimize) {
-    console.log('✅ Prisma Optimize: ENABLED - Query analysis active')
-    console.log('   Dashboard: https://optimize.prisma.io')
-    console.log(`   API Key: ${optimizeApiKey.substring(0, 10)}...${optimizeApiKey.substring(optimizeApiKey.length - 4)}`)
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`)
-    console.log('   ⚠️  IMPORTANT: Make sure tracing instrumentation is initialized before queries (see src/lib/tracing.ts)')
+    logger.info('Prisma Optimize enabled', {
+      dashboard: 'https://optimize.prisma.io',
+      apiKeyPreview: `${optimizeApiKey.substring(0, 10)}...${optimizeApiKey.substring(optimizeApiKey.length - 4)}`,
+      environment: process.env.NODE_ENV || 'development',
+      note: 'Make sure tracing instrumentation is initialized before queries (see src/lib/tracing.ts)'
+    })
     
     try {
       const optimizeConfig: any = {

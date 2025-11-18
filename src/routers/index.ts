@@ -24,6 +24,7 @@ import { systemSettingsRouter } from './system-settings'
 import { monitoringRouter } from './monitoring'
 import { analyticsRouter } from './analytics'
 import { appStatusRouter } from './app-status'
+import { calendarRouter } from './calendar'
 
 export const appRouter = router({
   auth: authRouter,
@@ -51,6 +52,7 @@ export const appRouter = router({
   monitoring: monitoringRouter,
   analytics: analyticsRouter,
   appStatus: appStatusRouter,
+  calendar: calendarRouter,
 })
 
 export type AppRouter = typeof appRouter

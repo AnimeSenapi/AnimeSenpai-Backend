@@ -5,6 +5,7 @@ import { getUserFeatures, hasFeatureAccess } from '../lib/roles'
 import { invalidateUserCaches } from '../lib/recommendations'
 import { createActivity } from '../lib/social'
 import { TRPCError } from '@trpc/server'
+import { logger } from '../lib/logger'
 
 export const userRouter = router({
   // Get user's anime list with full anime details
@@ -26,7 +27,7 @@ export const userRouter = router({
       const limit = Math.min(requestedLimit, maxLimit) // Cap at system max
       const skip = (page - 1) * limit
       
-      console.log(`[DEBUG] getAnimeList called - user: ${ctx.user.id}, status: ${status}, page: ${page}, limit: ${limit}, maxLimit: ${maxLimit}, skip: ${skip}`)
+      logger.debug('getAnimeList called', { userId: ctx.user.id, status, page, limit, maxLimit, skip })
 
       const where: any = {
         userId: ctx.user.id
@@ -64,7 +65,7 @@ export const userRouter = router({
         db.userAnimeList.count({ where })
       ])
 
-      console.log(`[DEBUG] User ${ctx.user.id} anime list: found ${animeLists.length} items (total: ${total}, limit: ${limit}, skip: ${skip})`)
+      logger.debug('User anime list query completed', { userId: ctx.user.id, itemsFound: animeLists.length, total, limit, skip })
 
       // Fetch full anime details
       const animeIds = animeLists.map((item: typeof animeLists[0]) => item.animeId)
@@ -241,7 +242,7 @@ export const userRouter = router({
         }
       })
 
-      console.log(`[DEBUG] Added/Updated anime ${animeId} for user ${ctx.user.id}: status=${actualStatus}, isFavorite=${actualIsFavorite}`)
+      logger.debug('Anime added/updated to user list', { userId: ctx.user.id, animeId, status: actualStatus, isFavorite: actualIsFavorite })
 
       // Create activity if favorited
       if (actualIsFavorite) {

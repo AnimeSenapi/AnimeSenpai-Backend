@@ -79,7 +79,8 @@ export function checkRateLimit(
   customKey?: string
 ): void {
   const config = RATE_LIMITS[type]
-  const key = customKey ? `${customKey}:${identifier}` : `${type}:${identifier}`
+  // Use composite key to reduce shared bucket collisions
+  const key = customKey ? `${type}:${customKey}:${identifier}` : `${type}:${identifier}`
   const now = Date.now()
   
   // Get or create rate limit entry
@@ -138,7 +139,7 @@ export function getRateLimitStatus(
   resetIn: number
 } {
   const config = RATE_LIMITS[type]
-  const key = customKey ? `${customKey}:${identifier}` : `${type}:${identifier}`
+  const key = customKey ? `${type}:${customKey}:${identifier}` : `${type}:${identifier}`
   const now = Date.now()
   const entry = rateLimitStore.get(key)
   
@@ -159,6 +160,25 @@ export function getRateLimitStatus(
     resetAt: entry.resetAt,
     resetIn: Math.ceil((entry.resetAt - now) / 1000)
   }
+}
+
+/**
+ * Compute recommended rate-limit headers for a request
+ */
+export function getRateLimitHeaders(
+  identifier: string,
+  type: RateLimitType,
+  customKey?: string
+): Record<string, string> {
+  const status = getRateLimitStatus(identifier, type, customKey)
+  const headers: Record<string, string> = {
+    'X-RateLimit-Limit': String(status.limit),
+    'X-RateLimit-Remaining': String(status.remaining),
+  }
+  if (status.remaining <= 0) {
+    headers['Retry-After'] = String(status.resetIn)
+  }
+  return headers
 }
 
 /**

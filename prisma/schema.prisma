@@ -9,62 +9,63 @@ datasource db {
 }
 
 model User {
-  id                       String           @id @default(cuid())
-  email                    String           @unique
-  username                 String           @unique
+  id                       String               @id @default(cuid())
+  email                    String               @unique
+  username                 String               @unique
+  name                     String?
   avatar                   String?
   bio                      String?
   primaryRoleId            String
-  primaryRole              Role             @relation("UserPrimaryRole", fields: [primaryRoleId], references: [id])
-  additionalRoles          UserRole[]
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
   password                 String
-  emailVerified            Boolean          @default(false)
+  emailVerified            Boolean              @default(false)
   emailVerifiedAt          DateTime?
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
   passwordResetToken       String?
   passwordResetExpires     DateTime?
-  twoFactorEnabled         Boolean          @default(false)
+  twoFactorEnabled         Boolean              @default(false)
   twoFactorSecret          String?
   lastLoginAt              DateTime?
-  loginAttempts            Int              @default(0)
+  loginAttempts            Int                  @default(0)
   lockedUntil              DateTime?
-  gdprConsent              Boolean          @default(false)
+  gdprConsent              Boolean              @default(false)
   gdprConsentAt            DateTime?
-  marketingConsent         Boolean          @default(false)
+  marketingConsent         Boolean              @default(false)
   marketingConsentAt       DateTime?
-  dataProcessingConsent    Boolean          @default(false)
+  dataProcessingConsent    Boolean              @default(false)
   dataProcessingConsentAt  DateTime?
-  followers                Follow[]         @relation("UserFollowers")
-  following                Follow[]         @relation("UserFollowing")
-  sentFriendRequests       FriendRequest[]  @relation("SentFriendRequests")
-  receivedFriendRequests   FriendRequest[]  @relation("ReceivedFriendRequests")
-  friendships1             Friendship[]     @relation("User1Friendships")
-  friendships2             Friendship[]     @relation("User2Friendships")
-  privacySettings          UserPrivacySettings?
-  sharedLists              SharedList[]
+  followers                Follow[]             @relation("UserFollowers")
+  following                Follow[]             @relation("UserFollowing")
+  receivedFriendRequests   FriendRequest[]      @relation("ReceivedFriendRequests")
+  sentFriendRequests       FriendRequest[]      @relation("SentFriendRequests")
+  friendships1             Friendship[]         @relation("User1Friendships")
+  friendships2             Friendship[]         @relation("User2Friendships")
   securityEvents           SecurityEvent[]
-  preferences              UserPreferences?
-  sessions                 UserSession[]
-  reviewLikes              ReviewLike[]
-  reviewComments           ReviewComment[]
-  taggedInReviews          ReviewTag[]              @relation("TaggedInReviews")
-  taggedUsers              ReviewTag[]              @relation("TaggedUsers")
-  pushSubscriptions        PushSubscription[]
-  reviews                  UserAnimeReview[]
-  activities               ActivityFeed[]           @relation("UserActivities")
-  targetActivities         ActivityFeed[]           @relation("TargetUserActivities")
-  sentMessages             Message[]                @relation("SentMessages")
-  receivedMessages         Message[]                @relation("ReceivedMessages")
-  achievements             UserAchievement[]
-  blockedUsers             BlockedUser[]            @relation("BlockedUsers")
-  blockedByUsers           BlockedUser[]            @relation("BlockedByUsers")
-  reportsSubmitted         UserReport[]             @relation("ReportsSubmitted")
-  reportsReceived          UserReport[]             @relation("ReportsReceived")
-  reportsReviewed          UserReport[]             @relation("ReportsReviewed")
   twoFactorCodes           TwoFactorCode[]
+  preferences              UserPreferences?
+  additionalRoles          UserRole[]
+  sessions                 UserSession[]
+  primaryRole              Role                 @relation("UserPrimaryRole", fields: [primaryRoleId], references: [id])
+  targetActivities         ActivityFeed[]       @relation("TargetUserActivities")
+  activities               ActivityFeed[]       @relation("UserActivities")
+  blockedByUsers           BlockedUser[]        @relation("BlockedByUsers")
+  blockedUsers             BlockedUser[]        @relation("BlockedUsers")
+  receivedMessages         Message[]            @relation("ReceivedMessages")
+  sentMessages             Message[]            @relation("SentMessages")
+  pushSubscriptions        PushSubscription[]
+  reviewComments           ReviewComment[]
+  reviewLikes              ReviewLike[]
+  taggedUsers              ReviewTag[]          @relation("TaggedUsers")
+  taggedInReviews          ReviewTag[]          @relation("TaggedInReviews")
+  sharedLists              SharedList[]
+  achievements             UserAchievement[]
+  reviews                  UserAnimeReview[]
+  privacySettings          UserPrivacySettings?
+  reportsReceived          UserReport[]         @relation("ReportsReceived")
+  reportsSubmitted         UserReport[]         @relation("ReportsSubmitted")
+  reportsReviewed          UserReport[]         @relation("ReportsReviewed")
 
   @@index([email])
   @@index([username])
@@ -78,45 +79,40 @@ model User {
 }
 
 model UserPreferences {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  theme              String   @default("dark")
-  language           String   @default("en")
-  timezone           String   @default("UTC")
-  emailNotifications Boolean  @default(true)
-  pushNotifications  Boolean  @default(true)
-  weeklyDigest       Boolean  @default(true)
-  profileVisibility  String   @default("public")
-  showWatchHistory   Boolean  @default(true)
-  showFavorites      Boolean  @default(true)
-  showRatings        Boolean  @default(true)
-  autoplay           Boolean  @default(true)
-  quality            String   @default("auto")
-  subtitles          Boolean  @default(true)
-  subtitleLanguage   String   @default("en")
-  
-  // Recommendation preferences
-  onboardingCompleted      Boolean  @default(false)
-  favoriteGenres           String[] @default([])
-  favoriteTags             String[] @default([])
-  discoveryMode            String   @default("balanced") // focused, balanced, exploratory
-  useWatchHistory          Boolean  @default(true)
-  useRatings               Boolean  @default(true)
-  useSearchHistory         Boolean  @default(true)
-  useBrowsingPatterns      Boolean  @default(true)
-  shareDataForRecommendations Boolean @default(true)
-  
-  // Social preferences
-  showActivityFeed         Boolean  @default(true)
-  showFollowersCount       Boolean  @default(true)
-  allowFollowers           Boolean  @default(true)
-  activityPrivacy          String   @default("friends") // public, friends, private
-  notifyOnFollow           Boolean  @default(true)
-  notifyOnFriendActivity   Boolean  @default(true)
-  
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                          String   @id @default(cuid())
+  userId                      String   @unique
+  theme                       String   @default("dark")
+  language                    String   @default("en")
+  timezone                    String   @default("UTC")
+  emailNotifications          Boolean  @default(true)
+  pushNotifications           Boolean  @default(true)
+  weeklyDigest                Boolean  @default(true)
+  profileVisibility           String   @default("public")
+  showWatchHistory            Boolean  @default(true)
+  showFavorites               Boolean  @default(true)
+  showRatings                 Boolean  @default(true)
+  autoplay                    Boolean  @default(true)
+  quality                     String   @default("auto")
+  subtitles                   Boolean  @default(true)
+  subtitleLanguage            String   @default("en")
+  onboardingCompleted         Boolean  @default(false)
+  favoriteGenres              String[] @default([])
+  favoriteTags                String[] @default([])
+  discoveryMode               String   @default("balanced")
+  useWatchHistory             Boolean  @default(true)
+  useRatings                  Boolean  @default(true)
+  useSearchHistory            Boolean  @default(true)
+  useBrowsingPatterns         Boolean  @default(true)
+  shareDataForRecommendations Boolean  @default(true)
+  showActivityFeed            Boolean  @default(true)
+  showFollowersCount          Boolean  @default(true)
+  allowFollowers              Boolean  @default(true)
+  activityPrivacy             String   @default("friends")
+  notifyOnFollow              Boolean  @default(true)
+  notifyOnFriendActivity      Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
   @@schema("auth")
@@ -164,7 +160,7 @@ model TwoFactorCode {
   id        String   @id @default(cuid())
   userId    String
   code      String
-  type      String   // SETUP, LOGIN
+  type      String
   used      Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -192,14 +188,14 @@ model Follow {
 }
 
 model FriendRequest {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   senderId    String
   receiverId  String
-  status      String   @default("pending") // pending, accepted, declined
-  createdAt   DateTime @default(now())
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
   respondedAt DateTime?
-  sender      User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiver    User      @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender      User      @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
   @@index([receiverId, status])
@@ -209,13 +205,13 @@ model FriendRequest {
 }
 
 model Friendship {
-  id          String   @id @default(cuid())
-  user1Id     String
-  user2Id     String
-  status      String   @default("accepted") // For Phase 2/3 compatibility (always accepted)
-  createdAt   DateTime @default(now())
-  user1       User     @relation("User1Friendships", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2       User     @relation("User2Friendships", fields: [user2Id], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  status    String   @default("accepted")
+  createdAt DateTime @default(now())
+  user1     User     @relation("User1Friendships", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("User2Friendships", fields: [user2Id], references: [id], onDelete: Cascade)
 
   @@unique([user1Id, user2Id])
   @@index([user1Id])
@@ -227,17 +223,17 @@ model Friendship {
 model UserPrivacySettings {
   id                  String   @id @default(cuid())
   userId              String   @unique
-  profileVisibility   String   @default("public") // public, friends, private
-  listVisibility      String   @default("public") // public, friends, private
-  activityVisibility  String   @default("public") // public, friends, private
-  friendsVisibility   String   @default("public") // public, friends, private
-  reviewsVisibility   String   @default("public") // public, friends, private
-  hiddenAnimeIds      String[] @default([]) // Specific anime to hide (guilty pleasures)
-  showAnimeList       Boolean  @default(true) // Phase 2: Boolean toggles
+  profileVisibility   String   @default("public")
+  listVisibility      String   @default("public")
+  activityVisibility  String   @default("public")
+  friendsVisibility   String   @default("public")
+  reviewsVisibility   String   @default("public")
+  hiddenAnimeIds      String[] @default([])
+  showAnimeList       Boolean  @default(true)
   showReviews         Boolean  @default(true)
   showActivity        Boolean  @default(true)
   showFriends         Boolean  @default(true)
-  allowMessages       Boolean  @default(true) // Phase 3: Messaging
+  allowMessages       Boolean  @default(true)
   allowFriendRequests Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -252,9 +248,9 @@ model SharedList {
   name          String
   description   String?
   ownerId       String
-  memberIds     String[] @default([]) // Legacy field
-  collaborators String[] @default([]) // Phase 3: Array of user IDs who can edit
-  animeIds      String[] @default([]) // Array of anime IDs in the list
+  memberIds     String[] @default([])
+  collaborators String[] @default([])
+  animeIds      String[] @default([])
   isPublic      Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -267,20 +263,18 @@ model SharedList {
 }
 
 model ActivityFeed {
-  id          String   @id @default(cuid())
-  userId      String
-  activityType String  // 'rated_anime', 'completed_anime', 'added_to_list', 'started_watching', 'followed_user', 'reviewed_anime'
-  animeId     String?
-  targetUserId String? // For follow activities
-  metadata    String?  // JSON for additional data (rating score, etc.)
-  isPublic    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  
-  // Relations
-  user       User   @relation("UserActivities", fields: [userId], references: [id], onDelete: Cascade)
-  anime      Anime? @relation(fields: [animeId], references: [id], onDelete: Cascade)
-  targetUser User?  @relation("TargetUserActivities", fields: [targetUserId], references: [id], onDelete: Cascade)
-  
+  id           String   @id @default(cuid())
+  userId       String
+  activityType String
+  animeId      String?
+  targetUserId String?
+  metadata     String?
+  isPublic     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  anime        Anime?   @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  targetUser   User?    @relation("TargetUserActivities", fields: [targetUserId], references: [id], onDelete: Cascade)
+  user         User     @relation("UserActivities", fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, createdAt(sort: Desc)])
   @@index([activityType, createdAt(sort: Desc)])
   @@index([isPublic, createdAt(sort: Desc)])
@@ -289,17 +283,17 @@ model ActivityFeed {
 }
 
 model Notification {
-  id            String   @id @default(cuid())
-  userId        String   // Who receives the notification
-  fromUserId    String?  // Who triggered it
-  type          String   // 'new_follower', 'friend_request', 'friend_accepted', 'friend_started_watching', 'review_liked', 'review_commented', 'anime_recommended', 'anime_shared'
-  animeId       String?
-  relatedId     String?  // Friend request ID, review ID, etc.
-  message       String
-  actionUrl     String?  // URL to navigate to when clicked
-  isRead        Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  
+  id         String   @id @default(cuid())
+  userId     String
+  fromUserId String?
+  type       String
+  animeId    String?
+  relatedId  String?
+  message    String
+  actionUrl  String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
   @@index([userId, isRead, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([type, createdAt(sort: Desc)])
@@ -309,11 +303,11 @@ model Notification {
 
 model FeatureFlag {
   id          String   @id @default(cuid())
-  key         String   @unique // e.g., "new-player", "advanced-search"
-  name        String   // Display name
-  description String?  // What this feature does
-  enabled     Boolean  @default(false) // Global feature toggle
-  roles       String[] @default([]) // Roles that have access: ["tester", "admin"]
+  key         String   @unique
+  name        String
+  description String?
+  enabled     Boolean  @default(false)
+  roles       String[] @default([])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -324,17 +318,17 @@ model FeatureFlag {
 }
 
 model SecurityLog {
-  id          String   @id @default(cuid())
-  event       String   // Event type (LOGIN, LOGOUT, PASSWORD_CHANGE, etc.)
-  userId      String?  // User who performed the action
-  username    String?  // Username for easier querying
-  ipAddress   String?  // IP address of request
-  userAgent   String?  // User agent string
-  severity    String   @default("INFO") // INFO, WARNING, ERROR, CRITICAL
-  result      String   @default("SUCCESS") // SUCCESS, FAILURE
-  metadata    Json?    // Additional event-specific data
-  timestamp   DateTime @default(now())
-  
+  id        String   @id @default(cuid())
+  event     String
+  userId    String?
+  username  String?
+  ipAddress String?
+  userAgent String?
+  severity  String   @default("INFO")
+  result    String   @default("SUCCESS")
+  metadata  Json?
+  timestamp DateTime @default(now())
+
   @@index([userId, timestamp(sort: Desc)])
   @@index([event, timestamp(sort: Desc)])
   @@index([severity, timestamp(sort: Desc)])
@@ -344,94 +338,63 @@ model SecurityLog {
 }
 
 model Anime {
-  id            String       @id @default(cuid())
-  
-  // Basic Information
-  title         String
-  titleEnglish  String?
-  titleJapanese String?
-  titleSynonyms String[]     @default([])
-  slug          String       @unique
-  
-  // Type & Status
-  type          String       // TV, Movie, OVA, Special, ONA, Music
-  source        String?      // Manga, Light Novel, Original, etc.
-  status        String       // Finished Airing, Currently Airing, Not yet aired
-  airing        Boolean      @default(false)
-  
-  // Episodes & Duration
-  episodes      Int?
-  duration      String?      // "24 min per ep" from Jikan
-  
-  // Dates
-  aired         String?      // "Apr 3, 2007 to Jun 27, 2007" format
-  startDate     DateTime?
-  endDate       DateTime?
-  season        String?      // winter, spring, summer, fall
-  year          Int?
-  broadcast     String?      // "Tuesdays at 01:29 (JST)"
-  
-  // Rating & Classification
-  rating        String?      // PG-13, R, G, etc.
-  
-  // Scores & Rankings
-  averageRating Float?       @default(0)
-  scoredBy      Int          @default(0)
-  rank          Int?         // MyAnimeList rank
-  popularity    Int?         // MyAnimeList popularity rank
-  members       Int          @default(0) // MAL members count
-  favorites     Int          @default(0) // MAL favorites count
-  viewCount     Int          @default(0) // AnimeSenpai views
-  ratingCount   Int          @default(0) // AnimeSenpai ratings
-  
-  // Content
-  synopsis      String?
-  background    String?      // Additional background info from MAL
-  
-  // Production
-  producers     String[]     @default([])
-  licensors     String[]     @default([])
-  studios       String[]     @default([])
-  
-  // Classification
-  themes        String[]     @default([]) // Themes from MAL
-  demographics  String[]     @default([]) // Shounen, Seinen, Josei, Shoujo, Kids
-  
-  // For recommendations (AnimeSenpai specific)
-  tags          String[]     @default([]) // dark, wholesome, action-packed, etc.
-  studio        String?      // Deprecated: use studios[] instead
-  
-  // Media
-  coverImage    String?
-  bannerImage   String?
-  trailer       String?      // YouTube trailer URL
-  trailerUrl    String?      // Deprecated: use trailer
-  
-  // External Links
-  externalLinks Json?        // Array of {name, url} objects
-  
-  // External IDs
-  malId         Int?         @unique
-  anilistId     Int?         @unique
-  kitsuId       Int?         @unique
-  
-  // Metadata
-  approved      Boolean      @default(false) // MAL approval status
-  description   String?      // Deprecated: use synopsis
-  
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  
-  // Relations
-  genres        AnimeGenre[]
+  id                 String                   @id @default(cuid())
+  title              String
+  titleEnglish       String?
+  titleJapanese      String?
+  titleSynonyms      String[]                 @default([])
+  slug               String                   @unique
+  type               String
+  source             String?
+  status             String
+  airing             Boolean                  @default(false)
+  episodes           Int?
+  duration           String?
+  aired              String?
+  startDate          DateTime?
+  endDate            DateTime?
+  season             String?
+  year               Int?
+  broadcast          String?
+  rating             String?
+  averageRating      Float?                   @default(0)
+  scoredBy           Int                      @default(0)
+  rank               Int?
+  popularity         Int?
+  members            Int                      @default(0)
+  favorites          Int                      @default(0)
+  viewCount          Int                      @default(0)
+  ratingCount        Int                      @default(0)
+  synopsis           String?
+  background         String?
+  producers          String[]                 @default([])
+  licensors          String[]                 @default([])
+  studios            String[]                 @default([])
+  themes             String[]                 @default([])
+  demographics       String[]                 @default([])
+  tags               String[]                 @default([])
+  studio             String?
+  coverImage         String?
+  bannerImage        String?
+  trailer            String?
+  trailerUrl         String?
+  externalLinks      Json?
+  malId              Int?                     @unique
+  anilistId          Int?                     @unique
+  kitsuId            Int?                     @unique
+  approved           Boolean                  @default(false)
+  description        String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  characters         AnimeCharacter[]
+  genres             AnimeGenre[]
   streamingPlatforms AnimeStreamingPlatform[]
-  reviews       UserAnimeReview[]
-  activities    ActivityFeed[]
-  characters    AnimeCharacter[]
-  relatedAnime  RelatedAnime[] @relation("RelatedTo")
-  relatedFrom   RelatedAnime[] @relation("RelatedFrom")
-  themesData    AnimeTheme[]
-  messages      Message[]
+  themesData         AnimeTheme[]
+  relatedFrom        RelatedAnime[]           @relation("RelatedFrom")
+  relatedAnime       RelatedAnime[]           @relation("RelatedTo")
+  activities         ActivityFeed[]
+  messages           Message[]
+  reviews            UserAnimeReview[]
 
   @@index([slug])
   @@index([status, type])
@@ -448,10 +411,9 @@ model Anime {
   @@index([airing])
   @@index([status, averageRating(sort: Desc)])
   @@index([type, averageRating(sort: Desc)])
-  // Composite indexes for dashboard queries
-  @@index([viewCount(sort: Desc), averageRating(sort: Desc)]) // Trending
-  @@index([year(sort: Desc), averageRating(sort: Desc)]) // Recently Added
-  @@index([status, year(sort: Desc)]) // Currently Airing + Recent
+  @@index([viewCount(sort: Desc), averageRating(sort: Desc)])
+  @@index([year(sort: Desc), averageRating(sort: Desc)])
+  @@index([status, year(sort: Desc)])
   @@map("anime")
   @@schema("content")
 }
@@ -480,54 +442,50 @@ model AnimeGenre {
   @@schema("content")
 }
 
-// Character and Voice Actor models
 model Character {
-  id          String   @id @default(cuid())
-  malId       Int      @unique
+  id          String           @id @default(cuid())
+  malId       Int              @unique
   name        String
   nameKanji   String?
   imageUrl    String?
   description String?
-  favorites   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  favorites   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   anime       AnimeCharacter[]
-  
+
   @@index([malId])
   @@map("characters")
   @@schema("content")
 }
 
 model VoiceActor {
-  id          String   @id @default(cuid())
-  malId       Int      @unique
-  name        String
-  imageUrl    String?
-  language    String   @default("Japanese")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  characters  CharacterVoiceActor[]
-  
+  id         String                @id @default(cuid())
+  malId      Int                   @unique
+  name       String
+  imageUrl   String?
+  language   String                @default("Japanese")
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  characters CharacterVoiceActor[]
+
   @@index([malId])
   @@map("voice_actors")
   @@schema("content")
 }
 
 model AnimeCharacter {
-  id          String   @id @default(cuid())
+  id          String                @id @default(cuid())
   animeId     String
   characterId String
-  role        String   // "Main", "Supporting", "Background"
-  favorites   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  anime       Anime      @relation(fields: [animeId], references: [id], onDelete: Cascade)
-  character   Character  @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  role        String
+  favorites   Int                   @default(0)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  anime       Anime                 @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  character   Character             @relation(fields: [characterId], references: [id], onDelete: Cascade)
   voiceActors CharacterVoiceActor[]
-  
+
   @@index([animeId])
   @@index([characterId])
   @@map("anime_characters")
@@ -535,15 +493,14 @@ model AnimeCharacter {
 }
 
 model CharacterVoiceActor {
-  id                String   @id @default(cuid())
-  animeCharacterId  String
-  voiceActorId      String
-  language          String   @default("Japanese")
-  createdAt         DateTime @default(now())
-  
-  animeCharacter    AnimeCharacter @relation(fields: [animeCharacterId], references: [id], onDelete: Cascade)
-  voiceActor        VoiceActor     @relation(fields: [voiceActorId], references: [id], onDelete: Cascade)
-  
+  id               String         @id @default(cuid())
+  animeCharacterId String
+  voiceActorId     String
+  language         String         @default("Japanese")
+  createdAt        DateTime       @default(now())
+  animeCharacter   AnimeCharacter @relation(fields: [animeCharacterId], references: [id], onDelete: Cascade)
+  voiceActor       VoiceActor     @relation(fields: [voiceActorId], references: [id], onDelete: Cascade)
+
   @@unique([animeCharacterId, voiceActorId, language])
   @@index([voiceActorId])
   @@index([animeCharacterId])
@@ -551,51 +508,47 @@ model CharacterVoiceActor {
   @@schema("content")
 }
 
-// Related Anime model
 model RelatedAnime {
-  id          String   @id @default(cuid())
-  animeId     String   // The anime this relationship belongs to
-  relatedId   String   // The related anime
-  relation    String   // "Sequel", "Prequel", "Alternative version", "Side story", "Character", "Summary", "Other"
-  createdAt   DateTime @default(now())
-  
-  anime       Anime    @relation("RelatedFrom", fields: [animeId], references: [id], onDelete: Cascade)
-  related     Anime    @relation("RelatedTo", fields: [relatedId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  animeId   String
+  relatedId String
+  relation  String
+  createdAt DateTime @default(now())
+  anime     Anime    @relation("RelatedFrom", fields: [animeId], references: [id], onDelete: Cascade)
+  related   Anime    @relation("RelatedTo", fields: [relatedId], references: [id], onDelete: Cascade)
+
   @@index([animeId])
   @@index([relatedId])
   @@map("related_anime")
   @@schema("content")
 }
 
-// Anime Theme (Opening/Ending) model
 model AnimeTheme {
-  id          String   @id @default(cuid())
-  animeId     String
-  type        String   // "Opening" or "Ending"
-  number      Int?     // OP1, OP2, ED1, ED2, etc.
-  name        String   // Song name
-  artist      String?  // Artist name
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  anime       Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  animeId   String
+  type      String
+  number    Int?
+  name      String
+  artist    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  anime     Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
   @@index([animeId])
   @@map("anime_themes")
   @@schema("content")
 }
 
 model StreamingPlatform {
-  id          String                   @id @default(cuid())
-  name        String                   @unique  // "Crunchyroll", "Netflix", "Hulu", etc.
-  slug        String                   @unique  // "crunchyroll", "netflix", "hulu"
-  logoUrl     String?                  // Platform logo
-  baseUrl     String?                  // "https://www.crunchyroll.com"
-  color       String?                  // Brand color for UI
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
-  anime       AnimeStreamingPlatform[]
+  id        String                   @id @default(cuid())
+  name      String                   @unique
+  slug      String                   @unique
+  logoUrl   String?
+  baseUrl   String?
+  color     String?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+  anime     AnimeStreamingPlatform[]
 
   @@map("streaming_platforms")
   @@schema("content")
@@ -604,11 +557,11 @@ model StreamingPlatform {
 model AnimeStreamingPlatform {
   animeId    String
   platformId String
-  url        String                   // Direct URL to anime on platform
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @updatedAt
-  anime      Anime                    @relation(fields: [animeId], references: [id], onDelete: Cascade)
-  platform   StreamingPlatform        @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  url        String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  anime      Anime             @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  platform   StreamingPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
 
   @@id([animeId, platformId])
   @@index([platformId, animeId])
@@ -620,8 +573,8 @@ model UserAnimeList {
   id          String    @id @default(cuid())
   userId      String
   animeId     String
-  status      String    // watching, completed, plan-to-watch, on-hold, dropped
-  isFavorite  Boolean   @default(false) // Can be favorite AND have a status
+  status      String
+  isFavorite  Boolean   @default(false)
   score       Int?
   progress    Int       @default(0)
   notes       String?
@@ -658,25 +611,23 @@ model UserAnimeRating {
 }
 
 model UserAnimeReview {
-  id        String   @id @default(cuid())
-  userId    String
-  animeId   String
-  title     String
-  content   String
-  score     Int
-  isSpoiler Boolean  @default(false)
-  likes     Int      @default(0)
-  dislikes  Int      @default(0)
-  isPublic  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  anime         Anime           @relation(fields: [animeId], references: [id], onDelete: Cascade)
-  reviewLikes   ReviewLike[]
-  comments      ReviewComment[]
-  tags          ReviewTag[]
+  id          String          @id @default(cuid())
+  userId      String
+  animeId     String
+  title       String
+  content     String
+  score       Int
+  isSpoiler   Boolean         @default(false)
+  likes       Int             @default(0)
+  dislikes    Int             @default(0)
+  isPublic    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  comments    ReviewComment[]
+  reviewLikes ReviewLike[]
+  tags        ReviewTag[]
+  anime       Anime           @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, animeId])
   @@index([userId, createdAt(sort: Desc)])
@@ -691,10 +642,10 @@ model RecommendationFeedback {
   id           String   @id @default(cuid())
   userId       String
   animeId      String
-  feedbackType String   // 'dismiss', 'hide', 'not_interested_genre'
+  feedbackType String
   reason       String?
   createdAt    DateTime @default(now())
-  
+
   @@unique([userId, animeId])
   @@index([userId])
   @@index([animeId])
@@ -707,11 +658,11 @@ model UserInteraction {
   id         String   @id @default(cuid())
   userId     String
   animeId    String?
-  actionType String   // 'view_page', 'search', 'click', 'hover', 'add_to_list'
-  metadata   String?  // JSON string for additional data
-  duration   Int?     // seconds spent (for views)
+  actionType String
+  metadata   String?
+  duration   Int?
   createdAt  DateTime @default(now())
-  
+
   @@index([userId, createdAt(sort: Desc)])
   @@index([animeId])
   @@index([actionType])
@@ -720,31 +671,28 @@ model UserInteraction {
 }
 
 model AnimeEmbedding {
-  id               String   @id @default(cuid())
-  animeId          String   @unique
-  descriptionVector String? // JSON array of floats for description embedding
-  genreVector      String?  // JSON array for genre-based embedding
-  combinedVector   String?  // Combined embedding for similarity search
-  version          String   @default("1.0") // Track embedding version for updates
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  
+  id                String   @id @default(cuid())
+  animeId           String   @unique
+  descriptionVector String?
+  genreVector       String?
+  combinedVector    String?
+  version           String   @default("1.0")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   @@index([animeId])
   @@map("anime_embeddings")
   @@schema("content")
 }
 
-// Phase 2 Social Features - Review Interactions
 model ReviewLike {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   userId    String
   reviewId  String
-  createdAt DateTime @default(now())
-  
-  // Relations
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  review UserAnimeReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  
+  createdAt DateTime        @default(now())
+  review    UserAnimeReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, reviewId])
   @@index([reviewId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -753,17 +701,15 @@ model ReviewLike {
 }
 
 model ReviewComment {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   userId    String
   reviewId  String
   content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relations
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  review UserAnimeReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  review    UserAnimeReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([reviewId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@map("review_comments")
@@ -771,17 +717,15 @@ model ReviewComment {
 }
 
 model ReviewTag {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   reviewId   String
-  userId     String   // User who was tagged
-  taggedBy   String   // User who did the tagging
-  createdAt  DateTime @default(now())
-  
-  // Relations
-  review       UserAnimeReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  taggedUser   User            @relation("TaggedInReviews", fields: [userId], references: [id], onDelete: Cascade)
-  tagger       User            @relation("TaggedUsers", fields: [taggedBy], references: [id], onDelete: Cascade)
-  
+  userId     String
+  taggedBy   String
+  createdAt  DateTime        @default(now())
+  review     UserAnimeReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  tagger     User            @relation("TaggedUsers", fields: [taggedBy], references: [id], onDelete: Cascade)
+  taggedUser User            @relation("TaggedInReviews", fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([reviewId, userId])
   @@index([userId, createdAt(sort: Desc)])
   @@index([reviewId])
@@ -789,40 +733,34 @@ model ReviewTag {
   @@schema("user_data")
 }
 
-// Push Notification Subscriptions (for browser notifications)
 model PushSubscription {
-  id         String   @id @default(cuid())
-  userId     String
-  endpoint   String   @unique
-  keys       String   // JSON: { p256dh, auth }
-  userAgent  String?
-  createdAt  DateTime @default(now())
-  lastUsed   DateTime @default(now())
-  
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  keys      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastUsed  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@map("push_subscriptions")
   @@schema("user_data")
 }
 
-// Phase 3 Social Features - Messaging
 model Message {
-  id           String   @id @default(cuid())
-  senderId     String
-  receiverId   String
-  content      String   // Message text
-  animeId      String?  // Optional: Anime recommendation
-  isRead       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
-  // Relations
-  sender   User  @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User  @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-  anime    Anime? @relation(fields: [animeId], references: [id], onDelete: SetNull)
-  
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  animeId    String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  anime      Anime?   @relation(fields: [animeId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
   @@index([senderId, receiverId, createdAt(sort: Desc)])
   @@index([receiverId, isRead])
   @@index([createdAt(sort: Desc)])
@@ -830,40 +768,35 @@ model Message {
   @@schema("user_data")
 }
 
-// Phase 3 Social Features - Achievements
 model Achievement {
-  id             String   @id @default(cuid())
-  key            String   @unique // e.g., 'anime_watched', 'reviews_written', 'followers_gained'
-  baseName       String   // Base name for the achievement type
-  baseDescription String  // Base description
-  icon           String   // Icon/emoji
-  category       String   // 'watching', 'rating', 'social', 'discovery', 'special'
-  maxTier        Int      @default(1) // Maximum tier available
-  createdAt      DateTime @default(now())
-  
-  // Relations
-  tiers          AchievementTier[]
+  id               String            @id @default(cuid())
+  key              String            @unique
+  baseName         String
+  baseDescription  String
+  icon             String
+  category         String
+  maxTier          Int               @default(1)
+  createdAt        DateTime          @default(now())
+  tiers            AchievementTier[]
   userAchievements UserAchievement[]
-  
+
   @@index([category])
   @@map("achievements")
   @@schema("user_data")
 }
 
 model AchievementTier {
-  id            String   @id @default(cuid())
-  achievementId String
-  tier          Int      // 1, 2, 3, 4, 5, etc.
-  requirement   Int      // Number needed to unlock this tier
-  points        Int      @default(10)
-  name          String   // Display name for this tier
-  description   String   // Description for this tier
-  createdAt     DateTime @default(now())
-  
-  // Relations
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  id               String            @id @default(cuid())
+  achievementId    String
+  tier             Int
+  requirement      Int
+  points           Int               @default(10)
+  name             String
+  description      String
+  createdAt        DateTime          @default(now())
+  achievement      Achievement       @relation(fields: [achievementId], references: [id], onDelete: Cascade)
   userAchievements UserAchievement[]
-  
+
   @@unique([achievementId, tier])
   @@index([achievementId])
   @@index([tier])
@@ -872,18 +805,16 @@ model AchievementTier {
 }
 
 model UserAchievement {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   userId        String
   achievementId String
-  tierId        String   // Reference to specific tier unlocked
-  unlockedAt    DateTime @default(now())
-  progress      Int      @default(0) // Current progress towards next tier
-  
-  // Relations
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievement Achievement     @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  tier        AchievementTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
-  
+  tierId        String
+  unlockedAt    DateTime        @default(now())
+  progress      Int             @default(0)
+  achievement   Achievement     @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  tier          AchievementTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, tierId])
   @@index([userId, unlockedAt(sort: Desc)])
   @@index([achievementId])
@@ -892,18 +823,15 @@ model UserAchievement {
   @@schema("user_data")
 }
 
-// Phase 3 Social Features - Safety
 model BlockedUser {
-  id         String   @id @default(cuid())
-  userId     String   // User who blocked
-  blockedId  String   // User who was blocked
-  reason     String?
-  createdAt  DateTime @default(now())
-  
-  // Relations
-  user    User @relation("BlockedUsers", fields: [userId], references: [id], onDelete: Cascade)
-  blocked User @relation("BlockedByUsers", fields: [blockedId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  userId    String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+  blocked   User     @relation("BlockedByUsers", fields: [blockedId], references: [id], onDelete: Cascade)
+  user      User     @relation("BlockedUsers", fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, blockedId])
   @@index([userId])
   @@index([blockedId])
@@ -912,21 +840,19 @@ model BlockedUser {
 }
 
 model UserReport {
-  id           String   @id @default(cuid())
-  reporterId   String   // User who reported
-  reportedId   String   // User who was reported
-  reason       String   // 'spam', 'harassment', 'inappropriate_content', 'other'
-  description  String?
-  status       String   @default("pending") // 'pending', 'reviewed', 'actioned', 'dismissed'
-  reviewedBy   String?  // Admin who reviewed
-  reviewedAt   DateTime?
-  createdAt    DateTime @default(now())
-  
-  // Relations
-  reporter User  @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
-  reported User  @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
-  reviewer User? @relation("ReportsReviewed", fields: [reviewedBy], references: [id], onDelete: SetNull)
-  
+  id          String    @id @default(cuid())
+  reporterId  String
+  reportedId  String
+  reason      String
+  description String?
+  status      String    @default("pending")
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  reported    User      @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  reporter    User      @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewer    User?     @relation("ReportsReviewed", fields: [reviewedBy], references: [id])
+
   @@index([reportedId, status])
   @@index([reporterId])
   @@index([status, createdAt(sort: Desc)])
@@ -942,33 +868,33 @@ model SystemSettings {
   maintenanceMessage        String?
   registrationEnabled       Boolean  @default(true)
   emailVerificationRequired Boolean  @default(true)
-  maxUploadSize             Int      @default(5242880) // 5MB in bytes
-  rateLimit                 Int      @default(100) // requests per minute
-  sessionTimeout            Int      @default(86400) // 24 hours in seconds
-  maxUserListItems          Int      @default(5000) // Max anime per user list
+  maxUploadSize             Int      @default(5242880)
+  rateLimit                 Int      @default(100)
+  sessionTimeout            Int      @default(86400)
+  maxUserListItems          Int      @default(5000)
   enableRecommendations     Boolean  @default(true)
   enableSocialFeatures      Boolean  @default(true)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
-  
+
   @@map("system_settings")
   @@schema("auth")
 }
 
 model Role {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  displayName String
-  description String?
-  isSystem    Boolean      @default(false) // System roles (user, tester, admin) cannot be deleted
-  isDefault   Boolean      @default(false) // Default role for new users
-  priority    Int          @default(0) // Higher priority = more permissions
-  permissions RolePermission[]
-  primaryUsers User[]      @relation("UserPrimaryRole")
+  id              String           @id @default(cuid())
+  name            String           @unique
+  displayName     String
+  description     String?
+  isSystem        Boolean          @default(false)
+  isDefault       Boolean          @default(false)
+  priority        Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  permissions     RolePermission[]
   additionalUsers UserRole[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  
+  primaryUsers    User[]           @relation("UserPrimaryRole")
+
   @@index([isSystem])
   @@index([priority])
   @@map("roles")
@@ -976,15 +902,15 @@ model Role {
 }
 
 model Permission {
-  id          String       @id @default(cuid())
-  key         String       @unique
+  id          String           @id @default(cuid())
+  key         String           @unique
   name        String
   description String?
-  category    String       @default("general") // admin, content, user, moderation, etc.
+  category    String           @default("general")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   roles       RolePermission[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  
+
   @@index([category])
   @@map("permissions")
   @@schema("auth")
@@ -994,10 +920,10 @@ model RolePermission {
   id           String     @id @default(cuid())
   roleId       String
   permissionId String
-  granted      Boolean    @default(true) // Can be false for explicit denial
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  granted      Boolean    @default(true)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
   @@unique([roleId, permissionId])
   @@index([roleId])
   @@index([permissionId])
@@ -1010,10 +936,9 @@ model UserRole {
   userId    String
   roleId    String
   createdAt DateTime @default(now())
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, roleId])
   @@index([userId])
   @@index([roleId])
@@ -1021,19 +946,18 @@ model UserRole {
   @@schema("auth")
 }
 
-// Analytics Models
 model AnalyticsEvent {
-  id        String   @id @default(cuid())
-  event     String
+  id         String   @id @default(cuid())
+  event      String
   properties Json?
-  userId    String?
-  sessionId String
-  timestamp DateTime
-  url       String
-  userAgent String
-  viewport  Json?
-  referrer  String?
-  
+  userId     String?
+  sessionId  String
+  timestamp  DateTime
+  url        String
+  userAgent  String
+  viewport   Json?
+  referrer   String?
+
   @@index([userId])
   @@index([sessionId])
   @@index([event])
@@ -1043,18 +967,18 @@ model AnalyticsEvent {
 }
 
 model AnalyticsSession {
-  id         String    @id @default(cuid())
-  sessionId  String    @unique
-  userId     String?
-  startTime  DateTime
+  id           String   @id @default(cuid())
+  sessionId    String   @unique
+  userId       String?
+  startTime    DateTime
   lastActivity DateTime
-  pageViews  Int       @default(0)
-  events     Int       @default(0)
-  referrer   String?
-  utmSource  String?
-  utmMedium  String?
-  utmCampaign String?
-  
+  pageViews    Int      @default(0)
+  events       Int      @default(0)
+  referrer     String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+
   @@index([userId])
   @@index([sessionId])
   @@index([lastActivity])
@@ -1063,14 +987,14 @@ model AnalyticsSession {
 }
 
 model SearchAnalytics {
-  id           String   @id @default(cuid())
-  query        String   @unique
-  count        Int      @default(0)
-  totalResults Int      @default(0)
+  id            String   @id @default(cuid())
+  query         String   @unique
+  count         Int      @default(0)
+  totalResults  Int      @default(0)
   firstSearched DateTime @default(now())
-  lastSearched DateTime @default(now())
-  filters      Json?
-  
+  lastSearched  DateTime @default(now())
+  filters       Json?
+
   @@index([query])
   @@index([count])
   @@index([lastSearched])
@@ -1079,16 +1003,16 @@ model SearchAnalytics {
 }
 
 model AnimeAnalytics {
-  id             String   @id @default(cuid())
-  animeId        String   @unique
-  views          Int      @default(0)
-  likes          Int      @default(0)
-  shares         Int      @default(0)
-  comments       Int      @default(0)
-  favorites      Int      @default(0)
+  id               String   @id @default(cuid())
+  animeId          String   @unique
+  views            Int      @default(0)
+  likes            Int      @default(0)
+  shares           Int      @default(0)
+  comments         Int      @default(0)
+  favorites        Int      @default(0)
   firstInteraction DateTime @default(now())
-  lastInteraction DateTime @default(now())
-  
+  lastInteraction  DateTime @default(now())
+
   @@index([animeId])
   @@index([views])
   @@index([likes])
@@ -1103,7 +1027,7 @@ model FeatureAnalytics {
   usageCount Int      @default(0)
   firstUsed  DateTime @default(now())
   lastUsed   DateTime @default(now())
-  
+
   @@index([feature])
   @@index([usageCount])
   @@index([lastUsed])
@@ -1112,13 +1036,13 @@ model FeatureAnalytics {
 }
 
 model UserActionAnalytics {
-  id         String   @id @default(cuid())
-  action     String   @unique
-  target     String?
-  count      Int      @default(0)
+  id          String   @id @default(cuid())
+  action      String   @unique
+  target      String?
+  count       Int      @default(0)
   firstAction DateTime @default(now())
-  lastAction DateTime @default(now())
-  
+  lastAction  DateTime @default(now())
+
   @@index([action])
   @@index([count])
   @@index([lastAction])

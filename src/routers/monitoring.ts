@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../lib/trpc'
 import { logger } from '../lib/logger'
-import { errorRateMonitor, getErrorMetrics } from '../lib/monitoring'
+import { errorRateMonitor, getErrorMetrics } from '../lib/monitoring-service'
 import { getQueryStats, getSlowQueries } from '../lib/query-monitor'
 import { sendUptimeAlert, sendPerformanceAlert } from '../lib/alerts'
 

@@ -204,6 +204,14 @@ class SecurityManager {
     const endpoint = new URL(request.url).pathname
     const method = request.method
 
+    // Always allow localhost/127.0.0.1 for development (proxy requests)
+    const isLocalhost = ip === '127.0.0.1' || ip === 'localhost' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.startsWith('127.') || ip.startsWith('::1')
+    
+    // Check IP whitelist (skip security checks for whitelisted IPs)
+    if (isLocalhost || this.config.ipWhitelist.includes(ip)) {
+      return { allowed: true }
+    }
+
     // Check IP blacklist
     if (this.blockedIPs.has(ip)) {
       return {

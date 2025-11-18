@@ -57,6 +57,7 @@
     "dev:clean": "bun run scripts/start-clean.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run dist/index.js",
+    "lint": "eslint . --ext .ts --max-warnings=0",
     "fmt": "bun fmt",
     "fmt:check": "bun fmt --check",
     "test": "bun test",
@@ -66,6 +67,7 @@
     "test:integration": "bun run scripts/run-tests.ts --integration-only",
     "test:load": "bun run scripts/run-tests.ts --load-only",
     "test:all": "bun run scripts/run-tests.ts",
+    "coverage:check": "bun scripts/check-coverage.mjs",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
@@ -80,15 +82,22 @@
     "db:clear:achievements": "bun run prisma/clear-achievements.ts",
     "type-check": "tsc --noEmit",
     "performance-test": "bun run src/scripts/performance-test.ts",
+    "load-test": "k6 run tests/load/api-load-test.js",
+    "load-test:recommendations": "k6 run tests/load/recommendations-load-test.js",
     "health-check": "curl -s http://localhost:3005/health | jq",
     "metrics": "curl -s http://localhost:3005/metrics | jq",
     "monitoring": "curl -s http://localhost:3005/monitoring | jq",
     "check:prisma": "bun run scripts/check-prisma-extensions.ts",
     "test:optimize": "bun run scripts/test-optimize.ts",
     "verify:optimize": "bun run scripts/verify-optimize.ts",
-    "email:preview": "bun run scripts/send-email-previews.ts"
+    "email:preview": "bun run scripts/send-email-previews.ts",
+    "validate:env": "bun run scripts/validate-env.ts"
   },
   "devDependencies": {
-    "@vercel/node": "4.0.0"
+    "@vercel/node": "4.0.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "eslint-plugin-eslint-comments": "^3.2.0"
   }
 }

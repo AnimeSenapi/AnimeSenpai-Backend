@@ -714,7 +714,7 @@ export const socialRouter = router({
         normalizedUsername = normalizedUsername.toLowerCase().trim()
         
         // Try exact match first
-        console.log('Searching for user with username:', normalizedUsername)
+        logger.debug('Searching for user by username', { username: normalizedUsername })
         let user = await db.user.findFirst({
           where: { 
             username: {
@@ -732,7 +732,7 @@ export const socialRouter = router({
             primaryRoleId: true,
           }
         })
-        console.log('Found user:', user)
+        logger.debug('User found by username', { userId: user.id, username: normalizedUsername })
         
         // If not found, try case-insensitive search for existing uppercase usernames
         if (!user) {
@@ -790,7 +790,7 @@ export const socialRouter = router({
         }
         
         // Get stats
-        console.log('Calculating stats for user:', user.id)
+        logger.debug('Calculating user stats', { userId: user.id })
         const [followersCount, followingCount, friendsCount, animeCount, reviewsCount] = await Promise.all([
           db.follow.count({ where: { followingId: user.id } }),
           db.follow.count({ where: { followerId: user.id } }),
@@ -805,7 +805,7 @@ export const socialRouter = router({
           db.userAnimeList.count({ where: { userId: user.id } }),
           db.userAnimeReview.count({ where: { userId: user.id, isPublic: true } })
         ])
-        console.log('Stats calculated:', { followersCount, followingCount, friendsCount, animeCount, reviewsCount })
+        logger.debug('User stats calculated', { userId: user.id, followersCount, followingCount, friendsCount, animeCount, reviewsCount })
         
         logger.info('User profile viewed', logContext, {
           username: input.username,

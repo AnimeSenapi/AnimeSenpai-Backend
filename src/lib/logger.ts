@@ -68,21 +68,42 @@ class Logger {
     return this.shouldLog(level) && shouldLogCategory(category, this.config)
   }
 
+  private scrubValue(value: any): any {
+    if (value == null) return value
+    if (typeof value === 'string') {
+      return value
+        .replace(/Bearer\s+[A-Za-z0-9\-\._]+/g, 'Bearer [REDACTED]')
+        .replace(/(access_token|refresh_token|token|password|authorization)=([^&\s]+)/gi, '$1=[REDACTED]')
+    }
+    if (typeof value === 'object') {
+      const clone: any = Array.isArray(value) ? [] : {}
+      for (const k of Object.keys(value)) {
+        if (/(token|password|cookie|authorization|email)/i.test(k)) {
+          clone[k] = '[REDACTED]'
+        } else {
+          clone[k] = this.scrubValue(value[k])
+        }
+      }
+      return clone
+    }
+    return value
+  }
+
   private formatLogEntry(level: LogLevel, message: string, context?: LogContext, error?: any, metadata?: any): LogEntry {
     return {
       level,
       message,
       timestamp: new Date().toISOString(),
-      ...(context !== undefined && { context }),
+      ...(context !== undefined && { context: this.scrubValue(context) }),
       ...(error && {
         error: {
           code: error.code || 'UNKNOWN_ERROR',
-          message: error.message || 'Unknown error',
+          message: this.scrubValue(error.message || 'Unknown error'),
           stack: error.stack,
-          details: error.details,
+          details: this.scrubValue(error.details),
         },
       }),
-      ...(metadata !== undefined && { metadata }),
+      ...(metadata !== undefined && { metadata: this.scrubValue(metadata) }),
     }
   }
 

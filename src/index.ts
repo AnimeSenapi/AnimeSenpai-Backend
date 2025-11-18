@@ -407,6 +407,12 @@ const performanceMetrics = {
       finalResponse.headers.set('X-Request-ID', requestId)
       if (clientTraceId) finalResponse.headers.set('X-Client-Trace-Id', clientTraceId)
       
+      // Prevent caching of API responses (especially important for error responses)
+      // This ensures that when Prisma or other services are down, error responses don't get cached
+      finalResponse.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      finalResponse.headers.set('Pragma', 'no-cache')
+      finalResponse.headers.set('Expires', '0')
+      
       // Security Headers (OWASP recommendations)
       finalResponse.headers.set('X-Content-Type-Options', 'nosniff')
       finalResponse.headers.set('X-Frame-Options', 'DENY')

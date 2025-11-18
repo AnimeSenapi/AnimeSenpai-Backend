@@ -92,12 +92,24 @@ export default async function handler(req: any, res: any) {
       res.setHeader(key, value)
     })
     
+    // Prevent caching of API responses (especially important for error responses)
+    // This ensures that when Prisma or other services are down, error responses don't get cached
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    
     // Ensure CORS headers are set
     res.setHeader('Access-Control-Allow-Origin', isAllowed ? (origin || '*') : (allowedOrigins[0] || '*'))
     
     res.status(response.status).send(data)
   } catch (error: any) {
     console.error('tRPC error:', error)
+    
+    // Prevent caching of error responses
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    
     res.status(500).json({ 
       error: { 
         message: error.message || 'Internal server error',

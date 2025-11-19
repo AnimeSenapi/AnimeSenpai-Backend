@@ -181,11 +181,7 @@ export const authRouter = router({
 
   // Sign in
   signin: publicProcedure
-    .input(z.object({
-      email: z.string().email(),
-      password: z.string(),
-      rememberMe: z.boolean().optional()
-    }))
+    .input(schemas.signin)
     .mutation(async ({ input, ctx }) => {
       const { email, password } = input
       const logContext = extractLogContext(ctx.req)
@@ -511,9 +507,7 @@ export const authRouter = router({
 
   // Forgot password
   forgotPassword: publicProcedure
-    .input(z.object({
-      email: z.string().email()
-    }))
+    .input(schemas.forgotPassword)
     .mutation(async ({ input, ctx }) => {
       const { email } = input
       const logContext = extractLogContext(ctx.req)

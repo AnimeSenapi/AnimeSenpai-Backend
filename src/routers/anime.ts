@@ -457,80 +457,105 @@ export const animeRouter = router({
         return { seasons: [], seriesName: '' }
       }
 
-      // Extract series name
-      const { extractSeriesInfo } = await import('../lib/series-grouping')
+      // Import grouping utilities
+      const { 
+        extractSeriesInfo, 
+        buildSeasonGraph, 
+        validateSeasonOrder,
+        mergeSeasonsFromSources
+      } = await import('../lib/series-grouping')
+
+      // PRIMARY: Try to get seasons from database relationships
+      let dbSeasons = await buildSeasonGraph(anime.id)
+
+      // FALLBACK: If database relationships are sparse, use title-based matching
+      let titleSeasons: typeof dbSeasons = []
+      
+      if (dbSeasons.length <= 1) {
+        // Extract series name for title-based fallback
+        const { seriesName } = extractSeriesInfo(anime.title, anime.titleEnglish)
+        const cleanSeriesName = seriesName.replace(/\b(The|A|An)\b/gi, '').trim()
+        
+        // Find anime with similar titles (first pass - broad search)
+        const candidateAnime = await db.anime.findMany({
+          where: {
+            OR: [
+              { title: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } },
+              { titleEnglish: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } }
+            ],
+            ...getContentFilter()
+          },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            titleEnglish: true,
+            year: true,
+            type: true,
+            episodes: true,
+            coverImage: true,
+            averageRating: true,
+            status: true,
+            startDate: true
+          },
+          take: 50, // Limit to prevent performance issues
+          ...getCacheStrategy(600) // 10 minutes - series relationships don't change often
+        })
+        
+        // Filter to only exact series matches (second pass - strict filter)
+        const relatedAnime = candidateAnime.filter((a: typeof candidateAnime[0]) => {
+          const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
+          // Must have exact same series name (case-insensitive)
+          const aSeriesClean = aInfo.seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
+          const targetSeriesClean = seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
+          return aSeriesClean === targetSeriesClean
+        })
+
+        // Convert to SeasonInfo format
+        titleSeasons = relatedAnime.map((a: typeof relatedAnime[0]) => {
+          const info = extractSeriesInfo(a.title, a.titleEnglish)
+          return {
+            animeId: a.id,
+            slug: a.slug,
+            title: a.title,
+            titleEnglish: a.titleEnglish,
+            year: a.year,
+            type: a.type,
+            episodes: a.episodes,
+            coverImage: a.coverImage,
+            averageRating: a.averageRating,
+            status: a.status,
+            startDate: a.startDate,
+            seasonNumber: info.seasonNumber,
+            seasonName: info.seasonName
+          }
+        })
+      }
+
+      // Merge seasons from both sources (database has priority)
+      const mergedSeasons = mergeSeasonsFromSources(dbSeasons, titleSeasons)
+
+      // Validate and sort seasons
+      const validatedSeasons = validateSeasonOrder(mergedSeasons)
+
+      // Extract series name for response
       const { seriesName } = extractSeriesInfo(anime.title, anime.titleEnglish)
 
-      // Create search patterns for better matching
-      // Remove common words that might cause false positives
-      const cleanSeriesName = seriesName.replace(/\b(The|A|An)\b/gi, '').trim()
-      
-      // Find anime with similar titles (first pass - broad search)
-      const candidateAnime = await db.anime.findMany({
-        where: {
-          OR: [
-            { title: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } },
-            { titleEnglish: { contains: cleanSeriesName, mode: Prisma.QueryMode.insensitive } }
-          ],
-          ...getContentFilter()
-        },
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          titleEnglish: true,
-          year: true,
-          type: true,
-          episodes: true,
-          coverImage: true,
-          averageRating: true,
-          status: true
-        },
-        take: 50, // Limit to prevent performance issues
-        ...getCacheStrategy(600) // 10 minutes - series relationships don't change often
-      })
-      
-      // Filter to only exact series matches (second pass - strict filter)
-      const relatedAnime = candidateAnime.filter((a: typeof candidateAnime[0]) => {
-        const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
-        // Must have exact same series name (case-insensitive)
-        const aSeriesClean = aInfo.seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
-        const targetSeriesClean = seriesName.replace(/\b(The|A|An)\b/gi, '').trim().toLowerCase()
-        return aSeriesClean === targetSeriesClean
-      })
-      
-      // Sort by year and season number
-      const sortedSeasons = relatedAnime.sort((a: typeof relatedAnime[0], b: typeof relatedAnime[0]) => {
-        const aInfo = extractSeriesInfo(a.title, a.titleEnglish)
-        const bInfo = extractSeriesInfo(b.title, b.titleEnglish)
-        
-        // First by year
-        if (a.year && b.year && a.year !== b.year) {
-          return a.year - b.year
-        }
-        
-        // Then by season number
-        return aInfo.seasonNumber - bInfo.seasonNumber
-      })
-
-      // Format as seasons
-      const seasons = sortedSeasons.map((s: typeof sortedSeasons[0]) => {
-        const info = extractSeriesInfo(s.title, s.titleEnglish)
-        return {
-          seasonNumber: info.seasonNumber,
-          seasonName: info.seasonName,
-          animeId: s.id,
-          slug: s.slug,
-          title: s.title,
-          titleEnglish: s.titleEnglish,
-          year: s.year,
-          type: s.type,
-          episodes: s.episodes,
-          coverImage: s.coverImage,
-          averageRating: s.averageRating,
-          status: s.status
-        }
-      })
+      // Format as seasons (remove confidence/source metadata for API response)
+      const seasons = validatedSeasons.map((s) => ({
+        seasonNumber: s.seasonNumber,
+        seasonName: s.seasonName,
+        animeId: s.animeId,
+        slug: s.slug,
+        title: s.title,
+        titleEnglish: s.titleEnglish,
+        year: s.year,
+        type: s.type,
+        episodes: s.episodes,
+        coverImage: s.coverImage,
+        averageRating: s.averageRating,
+        status: s.status
+      }))
 
       return { 
         seriesName,

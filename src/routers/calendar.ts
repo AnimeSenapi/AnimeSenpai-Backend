@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db, getCacheStrategy } from '../lib/db'
 import { getContentFilter } from './anime'
-import { generateEpisodeSchedule, getNextAirDate } from '../lib/broadcast-parser'
+import { generateEpisodeSchedule } from '../lib/broadcast-parser'
 import { logger } from '../lib/logger'
 import { syncAiringAnimeCalendarData, syncAnimeById } from '../lib/calendar-sync'
 
@@ -24,7 +24,7 @@ export const calendarRouter = router({
       const start = new Date(startDate)
       const end = new Date(endDate)
       
-      logger.debug('getEpisodeSchedule called', { startDate, endDate, userId })
+      logger.debug('getEpisodeSchedule called', { startDate, endDate, ...(userId && { userId }) })
 
       // Query currently airing anime that overlap with the date range
       const airingAnime = await db.anime.findMany({
@@ -87,7 +87,7 @@ export const calendarRouter = router({
         const userList = await db.userAnimeList.findMany({
           where: {
             userId,
-            animeId: { in: airingAnime.map((a) => a.id) },
+            animeId: { in: airingAnime.map((a: { id: string }) => a.id) },
           },
           select: {
             animeId: true,
@@ -96,7 +96,7 @@ export const calendarRouter = router({
           },
         })
 
-        userList.forEach((item) => {
+        userList.forEach((item: { animeId: string; status: string; progress: number }) => {
           userAnimeList.set(item.animeId, {
             status: item.status,
             progress: item.progress,
@@ -122,6 +122,8 @@ export const calendarRouter = router({
         studio?: string
         season?: string
         year?: number
+        genres?: string[]
+        type?: string
       }> = []
 
       for (const anime of airingAnime) {
@@ -156,19 +158,19 @@ export const calendarRouter = router({
             animeId: anime.id,
             animeTitle: anime.titleEnglish || anime.title,
             animeSlug: anime.slug,
-            animeImage: anime.coverImage || undefined,
+            ...(anime.coverImage && { animeImage: anime.coverImage }),
             episodeNumber: episode.episodeNumber,
             airDate: episode.date,
             airTime: episode.time,
-            duration,
+            ...(duration !== undefined && { duration }),
             isNewEpisode,
             isWatching,
             isCompleted,
-            studio: anime.studios?.[0] || undefined,
-            season: anime.season || undefined,
-            year: anime.year || undefined,
-            genres: anime.genres.map((g) => g.genre.name),
-            type: anime.type || undefined,
+            ...(anime.studios?.[0] && { studio: anime.studios[0] }),
+            ...(anime.season && { season: anime.season }),
+            ...(anime.year && { year: anime.year }),
+            genres: anime.genres.map((g: { genre: { name: string } }) => g.genre.name),
+            ...(anime.type && { type: anime.type }),
           })
         }
       }
@@ -199,7 +201,7 @@ export const calendarRouter = router({
     .query(async ({ input }) => {
       const { season, year, userId } = input
       
-      logger.debug('getSeasonalAnime called', { season, year, userId })
+      logger.debug('getSeasonalAnime called', { season, year, ...(userId && { userId }) })
 
       // Query anime for the specified season and year
       const seasonalAnime = await db.anime.findMany({
@@ -243,7 +245,7 @@ export const calendarRouter = router({
         const userList = await db.userAnimeList.findMany({
           where: {
             userId,
-            animeId: { in: seasonalAnime.map((a) => a.id) },
+            animeId: { in: seasonalAnime.map((a: { id: string }) => a.id) },
           },
           select: {
             animeId: true,
@@ -252,7 +254,7 @@ export const calendarRouter = router({
           },
         })
 
-        userList.forEach((item) => {
+        userList.forEach((item: { animeId: string; status: string; isFavorite: boolean }) => {
           userAnimeList.set(item.animeId, {
             status: item.status,
             isFavorite: item.isFavorite,
@@ -261,7 +263,21 @@ export const calendarRouter = router({
       }
 
       // Transform to match SeasonalAnime interface
-      const result = seasonalAnime.map((anime) => {
+      const result = seasonalAnime.map((anime: {
+        id: string
+        slug: string
+        title: string
+        titleEnglish: string | null
+        coverImage: string | null
+        status: string
+        episodes: number | null
+        studios: string[] | null
+        genres: Array<{ genre: { name: string } }>
+        averageRating: number | null
+        popularity: number | null
+        startDate: Date | null
+        endDate: Date | null
+      }) => {
         const userListEntry = userAnimeList.get(anime.id)
         const status = anime.status === 'Currently Airing' 
           ? 'Airing' 
@@ -280,7 +296,7 @@ export const calendarRouter = router({
           status: status as 'Airing' | 'Upcoming' | 'Completed',
           episodes: anime.episodes || 0,
           episodesAired: anime.status === 'Currently Airing' ? anime.episodes || 0 : undefined,
-          genres: anime.genres.map((g) => g.genre.name),
+          genres: anime.genres.map((g: { genre: { name: string } }) => g.genre.name),
           studios: anime.studios || [],
           score: anime.averageRating ? Math.round(anime.averageRating * 10) / 10 : undefined,
           popularity: anime.popularity || 0,
@@ -362,7 +378,7 @@ export const calendarRouter = router({
       const userAnimeList = await db.userAnimeList.findMany({
         where: {
           userId: ctx.user.id,
-          animeId: { in: airingAnime.map((a) => a.id) },
+            animeId: { in: airingAnime.map((a: { id: string }) => a.id) },
         },
         select: {
           animeId: true,
@@ -372,7 +388,7 @@ export const calendarRouter = router({
       })
 
       const userListMap = new Map<string, { status: string; progress: number }>()
-      userAnimeList.forEach((item) => {
+      userAnimeList.forEach((item: { animeId: string; status: string; progress: number }) => {
         userListMap.set(item.animeId, {
           status: item.status,
           progress: item.progress,

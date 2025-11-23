@@ -6,7 +6,6 @@ import { appRouter } from './routers'
 import { Context } from './lib/trpc'
 import { logger, extractLogContext, generateRequestId } from './lib/logger'
 import { handleError } from './lib/errors'
-import { verifyCsrfToken, RefreshedCsrfToken } from './lib/csrf'
 import { gzip } from 'zlib'
 import { promisify } from 'util'
 
@@ -177,8 +176,16 @@ const performanceMetrics = {
       // Readiness probe endpoint (for Kubernetes/load balancers)
       if (url.pathname === '/ready') {
         const { healthChecker } = await import('./lib/health-check')
-        const readinessStatus = await healthChecker.getReadinessStatus()
-        const isReady = readinessStatus.ready
+        const healthStatus = await healthChecker.runAllChecks()
+        const isReady = healthStatus.status !== 'unhealthy'
+        const readinessStatus = {
+          ready: isReady,
+          status: healthStatus.status,
+          checks: healthStatus.checks.length,
+          healthy: healthStatus.summary.healthy,
+          degraded: healthStatus.summary.degraded,
+          unhealthy: healthStatus.summary.unhealthy,
+        }
         
         logger.api('Readiness check requested', logContext, { readinessStatus })
         

@@ -52,7 +52,7 @@ export function parseBroadcast(broadcast: string | null | undefined): BroadcastI
   // Extract timezone (default to JST if not specified, as most anime air in JST)
   let timezone = 'JST'
   const timezoneMatch = broadcast.match(/\(([A-Z]{3,4})\)/i)
-  if (timezoneMatch) {
+  if (timezoneMatch && timezoneMatch[1]) {
     timezone = timezoneMatch[1].toUpperCase()
   }
 

@@ -27,9 +27,7 @@ if (!globalThis.__PRISMA_TRACING_INITIALIZED__) {
 
   registerInstrumentations({
     instrumentations: [
-      new PrismaInstrumentation({
-        middleware: true,
-      }),
+      new PrismaInstrumentation(),
     ],
   })
 }

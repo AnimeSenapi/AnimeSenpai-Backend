@@ -61,7 +61,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
   // But exclude if it's part of a season indicator
   const ofPattern = /^(.+\s+of)\s+(.+)$/i
   const ofMatch = workingTitle.match(ofPattern)
-  if (ofMatch && ofMatch[1] && !ofMatch[2].match(/Season|Part|Final|Arc|\d/i)) {
+  if (ofMatch && ofMatch[1] && ofMatch[2] && !ofMatch[2].match(/Season|Part|Final|Arc|\d/i)) {
     const baseSeriesName = ofMatch[1].trim()
     const subtitle = ofMatch[2].trim()
     return {
@@ -76,7 +76,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
   // But exclude if it's part of a season indicator
   const inPattern = /^(.+\s+in)\s+(.+)$/i
   const inMatch = workingTitle.match(inPattern)
-  if (inMatch && inMatch[1] && !inMatch[2].match(/Season|Part|Final|Arc|\d/i)) {
+  if (inMatch && inMatch[1] && inMatch[2] && !inMatch[2].match(/Season|Part|Final|Arc|\d/i)) {
     const baseSeriesName = inMatch[1].trim()
     const subtitle = inMatch[2].trim()
     return {
@@ -95,7 +95,7 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
     const baseTitle = colonMatch[1].trim()
     // Only use this if the base title is short enough (likely a series name)
     // and doesn't contain season indicators
-    if (baseTitle.length <= 40 && !baseTitle.match(/Season|Part|Final|Arc|\d/i)) {
+    if (baseTitle.length <= 40 && !baseTitle.match(/Season|Part|Final|Arc|\d/i) && colonMatch[2]) {
       const subtitle = colonMatch[2].trim()
       return {
         seriesName: baseTitle,
@@ -439,7 +439,6 @@ export async function getSeasonsFromRelationships(animeId: string): Promise<Seas
   // Process relationships
   for (const rel of relatedAnime) {
     const relatedAnimeData = rel.animeId === animeId ? rel.related : rel.anime
-    const relationType = rel.relation
 
     if (seenIds.has(relatedAnimeData.id)) continue
     seenIds.add(relatedAnimeData.id)
@@ -633,7 +632,7 @@ export function validateSeasonOrder(seasons: SeasonInfo[]): SeasonInfo[] {
     const curr = sorted[i]
 
     // If season numbers jump by more than 1, might be missing seasons
-    if (curr.seasonNumber - prev.seasonNumber > 2) {
+    if (prev && curr && curr.seasonNumber - prev.seasonNumber > 2) {
       // This is okay, might be intentional gaps
       continue
     }

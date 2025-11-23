@@ -1,11 +1,33 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
+import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { requireAdmin } from '../lib/roles'
 import { TRPCError } from '@trpc/server'
 import { logger } from '../lib/logger'
 
 export const systemSettingsRouter = router({
+  /**
+   * Get public site settings (for SEO and public display)
+   */
+  getPublicSettings: publicProcedure
+    .query(async () => {
+      // Get settings or create defaults
+      let settings = await db.systemSettings.findFirst()
+      
+      if (!settings) {
+        // Return defaults if no settings exist
+        return {
+          siteName: 'AnimeSenpai',
+          siteDescription: 'Your gateway to the anime world. Discover, track, and explore anime and manga effortlessly. Get personalized recommendations, build your watchlist, and connect with a welcoming community of fans. Where every fan feels seen — guided by passion, powered by community.',
+        }
+      }
+
+      // Return only public-facing settings
+      return {
+        siteName: settings.siteName || 'AnimeSenpai',
+        siteDescription: settings.siteDescription || 'Your gateway to the anime world. Discover, track, and explore anime and manga effortlessly. Get personalized recommendations, build your watchlist, and connect with a welcoming community of fans. Where every fan feels seen — guided by passion, powered by community.',
+      }
+    }),
   /**
    * Get current system settings
    */
@@ -117,7 +139,7 @@ export const systemSettingsRouter = router({
         where: { id: settings.id },
         data: {
           siteName: "AnimeSenpai",
-          siteDescription: "Track, discover, and explore your favorite anime",
+          siteDescription: "Your gateway to the anime world. Discover, track, and explore anime and manga effortlessly. Get personalized recommendations, build your watchlist, and connect with a welcoming community of fans. Where every fan feels seen — guided by passion, powered by community.",
           maintenanceMode: false,
           maintenanceMessage: null,
           registrationEnabled: true,

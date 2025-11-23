@@ -51,7 +51,7 @@ async function fetchAnimeFromJikan(malId: number, retries = 0): Promise<JikanAni
       throw new Error(`Jikan API error: ${response.status} ${response.statusText}`)
     }
 
-    const data: JikanAnimeResponse = await response.json()
+    const data = await response.json() as JikanAnimeResponse
     return data
   } catch (error) {
     if (retries < MAX_RETRIES) {
@@ -227,7 +227,7 @@ export async function syncSeasonalAnime(season: string, year: number): Promise<v
       throw new Error(`Jikan API error: ${response.status}`)
     }
 
-    const data = await response.json()
+    const data = await response.json() as { data: JikanAnimeResponse['data'][] }
     const seasonalAnime = data.data || []
 
     logger.system(`Found ${seasonalAnime.length} seasonal anime`, {}, {

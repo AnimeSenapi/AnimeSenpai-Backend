@@ -200,7 +200,6 @@ async function getEmbeddingBasedRecommendations(
  * Analyzes all watched/rated anime and returns top genres weighted by ratings
  */
 async function calculateFavoriteGenresFromHistory(
-  userId: string,
   watchList: Array<{ animeId: string; status: string }>,
   ratings: Array<{ animeId: string; score: number }>
 ): Promise<string[]> {
@@ -254,7 +253,7 @@ async function calculateFavoriteGenresFromHistory(
     const finalWeight = weight * statusWeight
     
     // Add score for each genre
-    anime.genres.forEach(g => {
+    anime.genres.forEach((g: { genre: { id: string } }) => {
       const genreId = g.genre.id
       const currentScore = genreScores.get(genreId) || 0
       genreScores.set(genreId, currentScore + finalWeight)
@@ -312,25 +311,25 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   // Auto-calculate favoriteGenres if not set or empty
   let favoriteGenres = user.preferences?.favoriteGenres || []
   if (favoriteGenres.length === 0 && watchList.length > 0) {
-    favoriteGenres = await calculateFavoriteGenresFromHistory(userId, watchList, ratings)
+    favoriteGenres = await calculateFavoriteGenresFromHistory(watchList, ratings)
   }
   
   // Extract favorited anime, plan-to-watch, currently watching, and completed
   const favoritedAnime = watchList
-    .filter(item => item.isFavorite)
-    .map(item => item.animeId)
+    .filter((item: { animeId: string; status: string; isFavorite: boolean }) => item.isFavorite)
+    .map((item: { animeId: string; status: string; isFavorite: boolean }) => item.animeId)
   
   const planToWatchAnime = watchList
-    .filter(item => item.status === 'plan-to-watch')
-    .map(item => item.animeId)
+    .filter((item: { animeId: string; status: string; isFavorite: boolean }) => item.status === 'plan-to-watch')
+    .map((item: { animeId: string; status: string; isFavorite: boolean }) => item.animeId)
   
   const currentlyWatchingAnime = watchList
-    .filter(item => item.status === 'watching')
-    .map(item => item.animeId)
+    .filter((item: { animeId: string; status: string; isFavorite: boolean }) => item.status === 'watching')
+    .map((item: { animeId: string; status: string; isFavorite: boolean }) => item.animeId)
   
   const completedAnime = watchList
-    .filter(item => item.status === 'completed')
-    .map(item => item.animeId)
+    .filter((item: { animeId: string; status: string; isFavorite: boolean }) => item.status === 'completed')
+    .map((item: { animeId: string; status: string; isFavorite: boolean }) => item.animeId)
   
   const profile: UserProfile = {
     id: userId,
@@ -417,9 +416,9 @@ export async function getForYouRecommendations(
       select: { year: true },
       ...getCacheStrategy(300)
     })
-    const years = completedAnimeDetails.filter(a => a.year).map(a => a.year!)
+    const years = completedAnimeDetails.filter((a: { year: number | null }) => a.year).map((a: { year: number | null }) => a.year!)
     if (years.length > 0) {
-      userAverageYear = years.reduce((a, b) => a + b, 0) / years.length
+      userAverageYear = years.reduce((a: number, b: number) => a + b, 0) / years.length
     }
   }
   
@@ -455,7 +454,7 @@ export async function getForYouRecommendations(
       select: { viewCount: true },
       ...getCacheStrategy(300)
     })
-    const avgViewCount = completedAnimeDetails.reduce((sum, a) => sum + (a.viewCount || 0), 0) / completedAnimeDetails.length
+    const avgViewCount = completedAnimeDetails.reduce((sum: number, a: { viewCount: number | null }) => sum + (a.viewCount || 0), 0) / completedAnimeDetails.length
     userWatchesObscureAnime = avgViewCount < 1000 // User watches anime with low popularity
   }
   
@@ -526,8 +525,8 @@ export async function getForYouRecommendations(
     })
     
     const secondaryGenres = new Set<string>()
-    favoriteAnime.forEach(anime => {
-      anime.genres.forEach(g => {
+    favoriteAnime.forEach((anime: { genres: Array<{ genreId: string }> }) => {
+      anime.genres.forEach((g: { genreId: string }) => {
         if (!profile.favoriteGenres.includes(g.genreId)) {
           secondaryGenres.add(g.genreId)
         }
@@ -871,8 +870,8 @@ export async function getForYouRecommendations(
     })
     
     const uniqueGenres = new Set<string>()
-    watchedAnime.forEach(anime => {
-      anime.genres.forEach(g => uniqueGenres.add(g.genreId))
+    watchedAnime.forEach((anime: { genres: Array<{ genreId: string }> }) => {
+      anime.genres.forEach((g: { genreId: string }) => uniqueGenres.add(g.genreId))
     })
     
     const genreDiversity = uniqueGenres.size

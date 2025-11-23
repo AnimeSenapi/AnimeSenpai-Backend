@@ -178,7 +178,7 @@ export async function findSimilarUsers(
     filteredUsers = eligibleUsers.filter((u: typeof eligibleUsers[0]) => {
       const otherUserGenres = u.preferences?.favoriteGenres || []
       // Count genre overlap
-      const overlap = currentUserFavoriteGenres.filter(g => otherUserGenres.includes(g)).length
+      const overlap = currentUserFavoriteGenres.filter((g: string) => otherUserGenres.includes(g)).length
       // Require at least 2 shared genres for genre-focused users
       return overlap >= 2
     })
@@ -223,7 +223,7 @@ export async function findSimilarUsers(
     if (currentUserFavoriteGenres.length > 0) {
       const otherUser = filteredUsers.find((u: typeof filteredUsers[0]) => u.id === otherUserId)
       const otherUserGenres = otherUser?.preferences?.favoriteGenres || []
-      const genreOverlap = currentUserFavoriteGenres.filter(g => otherUserGenres.includes(g)).length
+      const genreOverlap = currentUserFavoriteGenres.filter((g: string) => otherUserGenres.includes(g)).length
       const maxGenres = Math.max(currentUserFavoriteGenres.length, otherUserGenres.length)
       
       if (maxGenres > 0) {

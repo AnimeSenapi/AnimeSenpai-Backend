@@ -5,6 +5,7 @@ import { getContentFilter } from './anime'
 import { generateEpisodeSchedule } from '../lib/broadcast-parser'
 import { logger } from '../lib/logger'
 import { syncAiringAnimeCalendarData, syncAnimeById } from '../lib/calendar-sync'
+import { Prisma } from '@prisma/client'
 
 export const calendarRouter = router({
   /**
@@ -17,40 +18,148 @@ export const calendarRouter = router({
         startDate: z.string(), // ISO date string (YYYY-MM-DD)
         endDate: z.string(), // ISO date string (YYYY-MM-DD)
         userId: z.string().optional(), // Optional user ID for filtering watched anime
+        search: z.string().optional(), // Text search across anime titles and descriptions
+        genre: z.string().optional(), // Filter by single genre
+        genres: z.array(z.string()).optional(), // Filter by genres
+        studio: z.string().optional(), // Filter by single studio
+        studios: z.array(z.string()).optional(), // Filter by studios
+        season: z.string().optional(), // Filter by single season
+        seasons: z.array(z.string()).optional(), // Filter by seasons
+        year: z.number().optional(), // Filter by single year
+        years: z.array(z.number()).optional(), // Filter by years
+        type: z.string().optional(), // Filter by single type
+        types: z.array(z.string()).optional(), // Filter by types
+        status: z.string().optional(), // Filter by single status
+        statuses: z.array(z.string()).optional(), // Filter by status (watching, completed, etc.)
+        minRating: z.number().min(0).max(10).optional(), // Minimum rating filter
+        maxRating: z.number().min(0).max(10).optional(), // Maximum rating filter
       })
     )
     .query(async ({ input }) => {
-      const { startDate, endDate, userId } = input
+      const { startDate, endDate, userId, search, genre, genres, studio, studios, season, seasons, year, years, type, types, status, statuses, minRating, maxRating } = input
       const start = new Date(startDate)
       const end = new Date(endDate)
       
       logger.debug('getEpisodeSchedule called', { startDate, endDate, ...(userId && { userId }) })
 
+      // Build filter conditions
+      const contentFilter = getContentFilter()
+      const whereConditions: any = {
+        status: 'Currently Airing',
+        airing: true,
+        AND: [
+          // Date range filter
+          {
+            OR: [
+              // Anime that starts before or during the range
+              {
+                startDate: {
+                  lte: end,
+                },
+              },
+              // Anime that ends after or during the range
+              {
+                endDate: {
+                  gte: start,
+                },
+              },
+              // Anime with no end date (still airing)
+              {
+                endDate: null,
+              },
+            ],
+          },
+          // Merge content filter AND conditions
+          ...(contentFilter.AND || []),
+        ],
+      }
+
+      // Search filter
+      if (search) {
+        whereConditions.AND.push({
+          OR: [
+            { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            { titleEnglish: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            { titleJapanese: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            { description: { contains: search, mode: Prisma.QueryMode.insensitive } }
+          ]
+        })
+      }
+
+      // Genre filter (single or multiple)
+      if (genre || (genres && genres.length > 0)) {
+        const genreList = genres && genres.length > 0 ? genres : genre ? [genre] : []
+        if (genreList.length > 0) {
+          whereConditions.genres = {
+            some: {
+              genre: {
+                OR: genreList.flatMap(g => [
+                  { slug: { equals: g.toLowerCase(), mode: Prisma.QueryMode.insensitive } },
+                  { name: { equals: g, mode: Prisma.QueryMode.insensitive } }
+                ])
+              }
+            }
+          }
+        }
+      }
+
+      // Studio filter (single or multiple)
+      if (studio || (studios && studios.length > 0)) {
+        const studioList = studios && studios.length > 0 ? studios : studio ? [studio] : []
+        if (studioList.length > 0) {
+          whereConditions.studio = {
+            in: studioList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
+      }
+
+      // Season filter (single or multiple)
+      if (season || (seasons && seasons.length > 0)) {
+        const seasonList = seasons && seasons.length > 0 ? seasons : season ? [season] : []
+        if (seasonList.length > 0) {
+          whereConditions.season = {
+            in: seasonList.map(s => s.toLowerCase()),
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
+      }
+
+      // Year filter (single or multiple)
+      if (year !== undefined || (years && years.length > 0)) {
+        const yearList = years && years.length > 0 ? years : year !== undefined ? [year] : []
+        if (yearList.length > 0) {
+          whereConditions.year = {
+            in: yearList
+          }
+        }
+      }
+
+      // Type filter (single or multiple)
+      if (type || (types && types.length > 0)) {
+        const typeList = types && types.length > 0 ? types : type ? [type] : []
+        if (typeList.length > 0) {
+          whereConditions.type = {
+            in: typeList,
+            mode: Prisma.QueryMode.insensitive
+          }
+        }
+      }
+
+      // Rating range filter
+      if (minRating !== undefined || maxRating !== undefined) {
+        whereConditions.averageRating = {}
+        if (minRating !== undefined) {
+          whereConditions.averageRating.gte = minRating
+        }
+        if (maxRating !== undefined) {
+          whereConditions.averageRating.lte = maxRating
+        }
+      }
+
       // Query currently airing anime that overlap with the date range
       const airingAnime = await db.anime.findMany({
-        where: {
-          status: 'Currently Airing',
-          airing: true,
-          OR: [
-            // Anime that starts before or during the range
-            {
-              startDate: {
-                lte: end,
-              },
-            },
-            // Anime that ends after or during the range
-            {
-              endDate: {
-                gte: start,
-              },
-            },
-            // Anime with no end date (still airing)
-            {
-              endDate: null,
-            },
-          ],
-          ...getContentFilter(),
-        },
+        where: whereConditions,
         select: {
           id: true,
           slug: true,
@@ -104,6 +213,23 @@ export const calendarRouter = router({
         })
       }
 
+      // Filter by user status if status or statuses filter is provided (filter at anime level)
+      let filteredAnime = airingAnime
+      if ((status || (statuses && statuses.length > 0)) && userId) {
+        const statusList = statuses && statuses.length > 0 ? statuses : status ? [status] : []
+        if (statusList.length > 0) {
+          filteredAnime = airingAnime.filter((anime) => {
+            const userListEntry = userAnimeList.get(anime.id)
+            const userStatus = userListEntry?.status || 'not-in-list'
+            const normalizedStatus = userStatus === 'watching' ? 'watching' : 
+                                   userStatus === 'completed' ? 'completed' : 
+                                   userStatus === 'plan-to-watch' ? 'plan-to-watch' : 'not-in-list'
+            
+            return statusList.includes(normalizedStatus)
+          })
+        }
+      }
+
       // Generate episode schedule for each anime
       const episodes: Array<{
         id: string
@@ -126,7 +252,7 @@ export const calendarRouter = router({
         type?: string
       }> = []
 
-      for (const anime of airingAnime) {
+      for (const anime of filteredAnime) {
         const schedule = generateEpisodeSchedule(
           anime.broadcast,
           start,

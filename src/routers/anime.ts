@@ -32,6 +32,249 @@ export const getContentFilter = (): Prisma.AnimeWhereInput => ({
   ]
 })
 
+// Configuration constants for children's show filtering
+const CHILDRENS_DEMOGRAPHICS = ['Kids', 'Children', 'Child']
+const CHILDRENS_GENRES = ['Kids', 'Educational']
+const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content
+const LONG_RUNNING_THRESHOLD_EPISODES = 100
+const LONG_RUNNING_YEARS_OLD = 5
+const EDUCATIONAL_THEMES = ['Educational', 'Learning', 'School']
+const MIN_QUALITY_RATING_FOR_EXCEPTION = 7.5 // Allow highly-rated anime even if they match children's criteria
+
+// Children's show filter to automatically exclude children's content, educational shows, and long-running children's series
+// Uses database metadata (demographics, genres, ratings, themes) instead of hardcoded title patterns
+// More sophisticated: allows exceptions for highly-rated anime and uses multiple indicators
+// Export for use in other routers (calendar, recommendations, etc.)
+export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
+  const fiveYearsAgo = new Date()
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - LONG_RUNNING_YEARS_OLD)
+
+  return {
+    AND: [
+      // Exclude anime that match children's criteria UNLESS they're highly rated
+      {
+        NOT: {
+          AND: [
+            // Must match at least one children's indicator
+            {
+              OR: [
+                // Children's demographics
+                {
+                  demographics: {
+                    hasSome: CHILDRENS_DEMOGRAPHICS
+                  }
+                },
+                // Children's genres
+                {
+                  genres: {
+                    some: {
+                      genre: {
+                        name: {
+                          in: CHILDRENS_GENRES,
+                          mode: Prisma.QueryMode.insensitive
+                        }
+                      }
+                    }
+                  }
+                },
+                // Children's ratings
+                {
+                  rating: {
+                    in: CHILDRENS_RATINGS,
+                    mode: Prisma.QueryMode.insensitive
+                  }
+                },
+                // Educational content
+                {
+                  OR: [
+                    {
+                      themes: {
+                        hasSome: EDUCATIONAL_THEMES
+                      }
+                    },
+                    {
+                      tags: {
+                        hasSome: EDUCATIONAL_THEMES
+                      }
+                    }
+                  ]
+                },
+                // Long-running low-quality series (high episode count + old + low rating + low popularity)
+                {
+                  AND: [
+                    { episodes: { gte: LONG_RUNNING_THRESHOLD_EPISODES } },
+                    { startDate: { lte: fiveYearsAgo } },
+                    {
+                      OR: [
+                        // Low rating
+                        { averageRating: { lt: 6.5 } },
+                        // Low popularity indicators
+                        {
+                          AND: [
+                            { viewCount: { lt: 500 } },
+                            { popularity: { lt: 500 } }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            // BUT exclude if it's highly rated (exception for quality anime)
+            {
+              NOT: {
+                averageRating: { gte: MIN_QUALITY_RATING_FOR_EXCEPTION }
+              }
+            },
+            // AND exclude if it's very popular (exception for popular anime)
+            {
+              NOT: {
+                OR: [
+                  { viewCount: { gte: 2000 } },
+                  { popularity: { gte: 2000 } }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// Quality filter to exclude obscure anime that no one has heard of
+// Filters out low-quality anime based on rating, popularity, and view count
+// More nuanced approach: different thresholds for different eras and considers multiple quality indicators
+// Also excludes children's shows and educational content via getChildrensShowFilter()
+// Export for use in other routers (calendar, recommendations, etc.)
+export const getQualityFilter = (): Prisma.AnimeWhereInput => {
+  const childrensFilter = getChildrensShowFilter()
+  const childrensFilterConditions = Array.isArray(childrensFilter.AND) ? childrensFilter.AND : []
+  
+  return {
+    AND: [
+      // Exclude children's shows and educational content
+      ...childrensFilterConditions,
+      // Quality requirements - must meet at least one of these
+      {
+        OR: [
+          // Exceptionally well-rated AND popular anime (any era)
+          {
+            AND: [
+              { averageRating: { gte: 7.5 } },
+              {
+                OR: [
+                  { viewCount: { gte: 1500 } },
+                  { popularity: { gte: 1500 } },
+                  { members: { gte: 2000 } }, // Consider member count
+                  { favorites: { gte: 100 } } // Consider favorites
+                ]
+              }
+            ]
+          },
+          // Very popular anime (even if rating is lower)
+          {
+            AND: [
+              {
+                OR: [
+                  { viewCount: { gte: 3000 } },
+                  { popularity: { gte: 3000 } },
+                  { members: { gte: 5000 } }
+                ]
+              },
+              { averageRating: { gte: 6.5 } } // Still needs decent rating
+            ]
+          },
+          // Classic anime (pre-2010) - more lenient thresholds
+          {
+            AND: [
+              { year: { lt: 2010 } },
+              {
+                OR: [
+                  { averageRating: { gte: 7.0 } },
+                  { viewCount: { gte: 1000 } },
+                  { popularity: { gte: 1000 } },
+                  { members: { gte: 1500 } }
+                ]
+              }
+            ]
+          },
+          // Recent anime (2010-2014) - moderate requirements
+          {
+            AND: [
+              { year: { gte: 2010, lt: 2015 } },
+              {
+                OR: [
+                  // High rating with some popularity
+                  {
+                    AND: [
+                      { averageRating: { gte: 7.3 } },
+                      {
+                        OR: [
+                          { viewCount: { gte: 1000 } },
+                          { popularity: { gte: 1000 } }
+                        ]
+                      }
+                    ]
+                  },
+                  // Moderate rating with high popularity
+                  {
+                    AND: [
+                      { averageRating: { gte: 6.8 } },
+                      {
+                        OR: [
+                          { viewCount: { gte: 2000 } },
+                          { popularity: { gte: 2000 } }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          // Modern anime (2015-2019) - stricter requirements
+          {
+            AND: [
+              { year: { gte: 2015, lt: 2020 } },
+              { averageRating: { gte: 7.2 } },
+              {
+                OR: [
+                  { viewCount: { gte: 1500 } },
+                  { popularity: { gte: 1500 } },
+                  { members: { gte: 2000 } }
+                ]
+              }
+            ]
+          },
+          // Very recent anime (2020+) - strict quality requirements
+          {
+            AND: [
+              { year: { gte: 2020 } },
+              { averageRating: { gte: 7.0 } },
+              {
+                OR: [
+                  { viewCount: { gte: 1200 } },
+                  { popularity: { gte: 1200 } },
+                  { members: { gte: 1500 } }
+                ]
+              }
+            ]
+          },
+          // Highly favorited anime (indicator of quality even if other metrics are lower)
+          {
+            AND: [
+              { favorites: { gte: 500 } },
+              { averageRating: { gte: 6.8 } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
 export const animeRouter = router({
   // Get all anime with pagination and filters
   getAll: publicProcedure

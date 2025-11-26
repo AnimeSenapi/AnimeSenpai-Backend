@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
 import { db, getCacheStrategy } from '../lib/db'
-import { getContentFilter } from './anime'
+import { getContentFilter, getQualityFilter } from './anime'
 import { generateEpisodeSchedule } from '../lib/broadcast-parser'
 import { logger } from '../lib/logger'
 import { syncAiringAnimeCalendarData, syncAnimeById } from '../lib/calendar-sync'
@@ -44,6 +44,7 @@ export const calendarRouter = router({
 
       // Build filter conditions
       const contentFilter = getContentFilter()
+      const qualityFilter = getQualityFilter()
       const whereConditions: any = {
         status: 'Currently Airing',
         airing: true,
@@ -71,6 +72,8 @@ export const calendarRouter = router({
           },
           // Merge content filter AND conditions
           ...(contentFilter.AND || []),
+          // Apply quality filter
+          qualityFilter,
         ],
       }
 
@@ -175,6 +178,9 @@ export const calendarRouter = router({
           season: true,
           year: true,
           type: true,
+          averageRating: true,
+          viewCount: true,
+          popularity: true,
           genres: {
             select: {
               genre: {
@@ -297,6 +303,9 @@ export const calendarRouter = router({
             ...(anime.year && { year: anime.year }),
             genres: anime.genres.map((g: { genre: { name: string } }) => g.genre.name),
             ...(anime.type && { type: anime.type }),
+            ...(anime.averageRating !== null && anime.averageRating !== undefined && { averageRating: anime.averageRating }),
+            ...(anime.viewCount !== null && anime.viewCount !== undefined && { viewCount: anime.viewCount }),
+            ...(anime.popularity !== null && anime.popularity !== undefined && { popularity: anime.popularity }),
           })
         }
       }
@@ -335,6 +344,7 @@ export const calendarRouter = router({
           season: season.toLowerCase(),
           year,
           ...getContentFilter(),
+          ...getQualityFilter(),
         },
         select: {
           id: true,
@@ -486,6 +496,7 @@ export const calendarRouter = router({
             },
           ],
           ...getContentFilter(),
+          ...getQualityFilter(),
         },
         select: {
           id: true,
@@ -551,6 +562,7 @@ export const calendarRouter = router({
           status: 'Currently Airing',
           airing: true,
           ...getContentFilter(),
+          ...getQualityFilter(),
         },
         select: {
           id: true,

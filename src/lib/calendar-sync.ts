@@ -11,6 +11,8 @@ import { getContentFilter } from '../routers/anime'
 import { syncAnimeCalendarDataFromAniList } from './anilist-client'
 import { syncCalendarDataFromJikanSchedules } from './jikan-schedules-client'
 import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client'
+import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils'
+import { fetchAnimeFromJikan as fetchFullAnimeFromJikan, syncAnimeToDatabase } from './anime-sync'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)
@@ -359,12 +361,16 @@ export async function syncCalendarDataFromJikanSeasonsNow(): Promise<{
   synced: number
   failed: number
   total: number
+  added: number
+  filtered: number
 }> {
   const startTime = Date.now()
   logger.system('Starting calendar sync from Jikan seasons/now...', {}, {})
 
   let synced = 0
   let failed = 0
+  let added = 0
+  let filtered = 0
   const processedMalIds = new Set<number>()
 
   try {
@@ -390,11 +396,53 @@ export async function syncCalendarDataFromJikanSeasonsNow(): Promise<{
         })
 
         if (!existingAnime) {
-          // Anime not in our database, skip it
-          logger.debug(`Anime ${anime.mal_id} (${anime.title}) not in database, skipping`, {}, {
-            malId: anime.mal_id,
-            title: anime.title,
-          })
+          // Anime not in our database - check if we should add it
+          // First, apply filters to partial data
+          if (shouldFilterAnimeFromJikanData(anime as JikanAnimePartial)) {
+            filtered++
+            logger.debug(`Filtered out anime ${anime.mal_id}: ${anime.title}`, {}, {
+              malId: anime.mal_id,
+              title: anime.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Fetch full anime details
+          const fullAnimeData = await fetchFullAnimeFromJikan(anime.mal_id)
+          if (!fullAnimeData) {
+            failed++
+            logger.warn(`Failed to fetch full details for anime ${anime.mal_id}`, {}, {
+              malId: anime.mal_id,
+              title: anime.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Apply filters to full data
+          if (shouldFilterAnimeFromJikanFull(fullAnimeData)) {
+            filtered++
+            logger.debug(`Filtered out anime ${anime.mal_id} (full check): ${fullAnimeData.title}`, {}, {
+              malId: anime.mal_id,
+              title: fullAnimeData.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Create new anime
+          const result = await syncAnimeToDatabase(fullAnimeData)
+          if (result.created) {
+            added++
+            synced++
+            logger.debug(`Added new anime ${anime.mal_id}: ${fullAnimeData.title}`, {}, {
+              malId: anime.mal_id,
+              title: fullAnimeData.title,
+            })
+          }
+
+          await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
           continue
         }
 
@@ -438,6 +486,8 @@ export async function syncCalendarDataFromJikanSeasonsNow(): Promise<{
       totalAnime,
       uniqueAnime: uniqueAnimeCount,
       synced,
+      added,
+      filtered,
       failed,
       duration: `${Math.round(duration / 1000)}s`,
       successRate: uniqueAnimeCount > 0 ? `${((synced / uniqueAnimeCount) * 100).toFixed(1)}%` : '0%',
@@ -447,6 +497,8 @@ export async function syncCalendarDataFromJikanSeasonsNow(): Promise<{
       synced,
       failed,
       total: uniqueAnimeCount,
+      added,
+      filtered,
     }
   } catch (error) {
     logger.error('Calendar sync from Jikan seasons/now failed', error as Error, {}, {})
@@ -457,17 +509,22 @@ export async function syncCalendarDataFromJikanSeasonsNow(): Promise<{
 /**
  * Sync calendar data from Jikan seasons/upcoming endpoint
  * Fetches upcoming season anime and updates database records
+ * Now also adds new anime if they don't exist (after filtering)
  */
 export async function syncCalendarDataFromJikanSeasonsUpcoming(): Promise<{
   synced: number
   failed: number
   total: number
+  added: number
+  filtered: number
 }> {
   const startTime = Date.now()
   logger.system('Starting calendar sync from Jikan seasons/upcoming...', {}, {})
 
   let synced = 0
   let failed = 0
+  let added = 0
+  let filtered = 0
   const processedMalIds = new Set<number>()
 
   try {
@@ -493,11 +550,53 @@ export async function syncCalendarDataFromJikanSeasonsUpcoming(): Promise<{
         })
 
         if (!existingAnime) {
-          // Anime not in our database, skip it
-          logger.debug(`Anime ${anime.mal_id} (${anime.title}) not in database, skipping`, {}, {
-            malId: anime.mal_id,
-            title: anime.title,
-          })
+          // Anime not in our database - check if we should add it
+          // First, apply filters to partial data
+          if (shouldFilterAnimeFromJikanData(anime as JikanAnimePartial)) {
+            filtered++
+            logger.debug(`Filtered out anime ${anime.mal_id}: ${anime.title}`, {}, {
+              malId: anime.mal_id,
+              title: anime.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Fetch full anime details
+          const fullAnimeData = await fetchFullAnimeFromJikan(anime.mal_id)
+          if (!fullAnimeData) {
+            failed++
+            logger.warn(`Failed to fetch full details for anime ${anime.mal_id}`, {}, {
+              malId: anime.mal_id,
+              title: anime.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Apply filters to full data
+          if (shouldFilterAnimeFromJikanFull(fullAnimeData)) {
+            filtered++
+            logger.debug(`Filtered out anime ${anime.mal_id} (full check): ${fullAnimeData.title}`, {}, {
+              malId: anime.mal_id,
+              title: fullAnimeData.title,
+            })
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+            continue
+          }
+
+          // Create new anime
+          const result = await syncAnimeToDatabase(fullAnimeData)
+          if (result.created) {
+            added++
+            synced++
+            logger.debug(`Added new anime ${anime.mal_id}: ${fullAnimeData.title}`, {}, {
+              malId: anime.mal_id,
+              title: fullAnimeData.title,
+            })
+          }
+
+          await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
           continue
         }
 
@@ -541,6 +640,8 @@ export async function syncCalendarDataFromJikanSeasonsUpcoming(): Promise<{
       totalAnime,
       uniqueAnime: uniqueAnimeCount,
       synced,
+      added,
+      filtered,
       failed,
       duration: `${Math.round(duration / 1000)}s`,
       successRate: uniqueAnimeCount > 0 ? `${((synced / uniqueAnimeCount) * 100).toFixed(1)}%` : '0%',
@@ -550,6 +651,8 @@ export async function syncCalendarDataFromJikanSeasonsUpcoming(): Promise<{
       synced,
       failed,
       total: uniqueAnimeCount,
+      added,
+      filtered,
     }
   } catch (error) {
     logger.error('Calendar sync from Jikan seasons/upcoming failed', error as Error, {}, {})
@@ -567,9 +670,9 @@ export async function syncAiringAnimeCalendarData(): Promise<void> {
   logger.system('Starting calendar sync for airing anime...', {}, {})
 
   const allResults = {
-    seasonsNow: { synced: 0, failed: 0, total: 0 },
-    schedules: { synced: 0, failed: 0, total: 0 },
-    seasonsUpcoming: { synced: 0, failed: 0, total: 0 },
+    seasonsNow: { synced: 0, failed: 0, total: 0, added: 0, filtered: 0 },
+    schedules: { synced: 0, failed: 0, total: 0, added: 0, filtered: 0 },
+    seasonsUpcoming: { synced: 0, failed: 0, total: 0, added: 0, filtered: 0 },
   }
 
   // Step 1: Sync from seasons/now (current airing anime)
@@ -580,6 +683,8 @@ export async function syncAiringAnimeCalendarData(): Promise<void> {
     
     logger.system('Completed sync from seasons/now', {}, {
       synced: seasonsNowResult.synced,
+      added: seasonsNowResult.added,
+      filtered: seasonsNowResult.filtered,
       failed: seasonsNowResult.failed,
       total: seasonsNowResult.total,
     })
@@ -598,6 +703,8 @@ export async function syncAiringAnimeCalendarData(): Promise<void> {
     
     logger.system('Completed sync from schedules', {}, {
       synced: schedulesResult.synced,
+      added: schedulesResult.added,
+      filtered: schedulesResult.filtered,
       failed: schedulesResult.failed,
       total: schedulesResult.total,
     })
@@ -616,6 +723,8 @@ export async function syncAiringAnimeCalendarData(): Promise<void> {
     
     logger.system('Completed sync from seasons/upcoming', {}, {
       synced: seasonsUpcomingResult.synced,
+      added: seasonsUpcomingResult.added,
+      filtered: seasonsUpcomingResult.filtered,
       failed: seasonsUpcomingResult.failed,
       total: seasonsUpcomingResult.total,
     })
@@ -632,16 +741,22 @@ export async function syncAiringAnimeCalendarData(): Promise<void> {
   logger.system('Calendar sync completed - all endpoints processed', {}, {
     seasonsNow: {
       synced: allResults.seasonsNow.synced,
+      added: allResults.seasonsNow.added,
+      filtered: allResults.seasonsNow.filtered,
       failed: allResults.seasonsNow.failed,
       total: allResults.seasonsNow.total,
     },
     schedules: {
       synced: allResults.schedules.synced,
+      added: allResults.schedules.added,
+      filtered: allResults.schedules.filtered,
       failed: allResults.schedules.failed,
       total: allResults.schedules.total,
     },
     seasonsUpcoming: {
       synced: allResults.seasonsUpcoming.synced,
+      added: allResults.seasonsUpcoming.added,
+      filtered: allResults.seasonsUpcoming.filtered,
       failed: allResults.seasonsUpcoming.failed,
       total: allResults.seasonsUpcoming.total,
     },

@@ -13,6 +13,7 @@ import {
 import { logSecurityEvent, sendPasswordReset } from '../lib/auth'
 import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security'
 import { emailService } from '../lib/email'
+import { jobQueue } from '../lib/background-jobs'
 
 export const adminRouter = router({
   // Get all users with their roles
@@ -291,6 +292,11 @@ export const adminRouter = router({
         db.userAnimeList.count(),
       ])
 
+      // Get sync job information
+      const jobStats = jobQueue.getStats()
+      const animeDataSyncJob = jobStats.jobs.find(job => job.name === 'anime-data-sync')
+      const calendarSyncJob = jobStats.jobs.find(job => job.name === 'calendar-sync')
+
       return {
         users: {
           total: totalUsers,
@@ -305,6 +311,30 @@ export const adminRouter = router({
         },
         features: {
           flags: totalFlags,
+        },
+        sync: {
+          animeDataSync: {
+            scheduled: !!animeDataSyncJob?.scheduled,
+            lastRun: animeDataSyncJob?.lastRun || 'N/A',
+            interval: animeDataSyncJob?.interval ? Math.round(animeDataSyncJob.interval / (60 * 60 * 1000)) : null, // Convert to hours
+            isRunning: animeDataSyncJob?.isRunning || false,
+            runningDuration: animeDataSyncJob?.runningDuration,
+            estimatedTimeRemaining: animeDataSyncJob?.estimatedTimeRemaining,
+            nextRun: animeDataSyncJob?.lastRun && animeDataSyncJob?.interval
+              ? new Date(new Date(animeDataSyncJob.lastRun).getTime() + animeDataSyncJob.interval).toISOString()
+              : null,
+          },
+          calendarSync: {
+            scheduled: !!calendarSyncJob?.scheduled,
+            lastRun: calendarSyncJob?.lastRun || 'N/A',
+            interval: calendarSyncJob?.interval ? Math.round(calendarSyncJob.interval / (60 * 60 * 1000)) : null, // Convert to hours
+            isRunning: calendarSyncJob?.isRunning || false,
+            runningDuration: calendarSyncJob?.runningDuration,
+            estimatedTimeRemaining: calendarSyncJob?.estimatedTimeRemaining,
+            nextRun: calendarSyncJob?.lastRun && calendarSyncJob?.interval
+              ? new Date(new Date(calendarSyncJob.lastRun).getTime() + calendarSyncJob.interval).toISOString()
+              : null,
+          },
         }
       }
     }),

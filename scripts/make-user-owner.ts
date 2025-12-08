@@ -47,7 +47,7 @@ async function makeUserOwner(userId: string) {
     console.log('\n🔍 Looking for OWNER role...')
     const ownerRole = await db.role.findFirst({
       where: { 
-        name: 'OWNER'
+        name: 'owner'
       },
       select: {
         id: true,
@@ -115,7 +115,7 @@ async function makeUserOwner(userId: string) {
       }
     })
     
-    if (verification?.primaryRole.name === 'OWNER') {
+    if (verification?.primaryRole.name === 'owner') {
       console.log('\n🎉 Verification successful! User is now an OWNER.')
     } else {
       console.log('\n❌ Verification failed! Role was not updated correctly.')

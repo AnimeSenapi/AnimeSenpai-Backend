@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-const MIN_LINES = 0.6 // 60%
+const MIN_LINES = 0.8 // 80% - required minimum coverage
 
 try {
   const lcov = readFileSync('./coverage/lcov.info', 'utf8')

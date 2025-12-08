@@ -3,42 +3,59 @@ import { router, publicProcedure } from '../lib/trpc'
 import { db, getCacheStrategy } from '../lib/db'
 import { Prisma } from '@prisma/client'
 import { createSeriesEntries } from '../lib/series-grouping'
+import { ANIME_FILTERS } from '../types/anime-filters'
 
 // Content filter to exclude adult content (Hentai, explicit material)
+// Uses shared filter configuration from anime-filters.ts
 // Export for use in other routers (recommendations, social, etc.)
-export const getContentFilter = (): Prisma.AnimeWhereInput => ({
-  AND: [
-    {
+export const getContentFilter = (): Prisma.AnimeWhereInput => {
+  const conditions: Prisma.AnimeWhereInput[] = []
+
+  // Exclude ratings
+  for (const excludedRating of ANIME_FILTERS.excludedRatings) {
+    conditions.push({
       NOT: {
-        rating: { contains: 'Hentai', mode: Prisma.QueryMode.insensitive }
+        rating: { contains: excludedRating, mode: Prisma.QueryMode.insensitive }
       }
-    },
-    {
-      NOT: {
-        rating: { startsWith: 'Rx', mode: Prisma.QueryMode.insensitive }
-      }
-    },
-    {
+    })
+    // Also check for ratings that start with the excluded rating (e.g., "Rx")
+    if (excludedRating.length <= 5) {
+      conditions.push({
+        NOT: {
+          rating: { startsWith: excludedRating, mode: Prisma.QueryMode.insensitive }
+        }
+      })
+    }
+  }
+
+  // Exclude genres
+  if (ANIME_FILTERS.excludedGenres.length > 0) {
+    conditions.push({
       NOT: {
         genres: {
           some: {
             genre: {
-              name: { in: ['Hentai', 'Erotica'], mode: Prisma.QueryMode.insensitive }
+              name: { in: ANIME_FILTERS.excludedGenres, mode: Prisma.QueryMode.insensitive }
             }
           }
         }
       }
-    }
-  ]
-})
+    })
+  }
+
+  return {
+    AND: conditions
+  }
+}
 
 // Configuration constants for children's show filtering
-const CHILDRENS_DEMOGRAPHICS = ['Kids', 'Children', 'Child']
-const CHILDRENS_GENRES = ['Kids', 'Educational']
+// Uses shared filter configuration where applicable
+const CHILDRENS_DEMOGRAPHICS = ANIME_FILTERS.excludedDemographics
+const CHILDRENS_GENRES = ['Kids', ...ANIME_FILTERS.excludedGenres.filter(g => g.toLowerCase() !== 'hentai' && g.toLowerCase() !== 'erotica')]
 const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content
 const LONG_RUNNING_THRESHOLD_EPISODES = 100
 const LONG_RUNNING_YEARS_OLD = 5
-const EDUCATIONAL_THEMES = ['Educational', 'Learning', 'School']
+const EDUCATIONAL_THEMES = ANIME_FILTERS.excludedThemes
 const MIN_QUALITY_RATING_FOR_EXCEPTION = 7.5 // Allow highly-rated anime even if they match children's criteria
 
 // Children's show filter to automatically exclude children's content, educational shows, and long-running children's series

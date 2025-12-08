@@ -7,6 +7,8 @@
 
 import { logger } from './logger'
 import { db } from './db'
+import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils'
+import { fetchAnimeFromJikan, syncAnimeToDatabase } from './anime-sync'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)
@@ -185,6 +187,8 @@ export async function syncCalendarDataFromJikanSchedules(): Promise<{
   synced: number
   failed: number
   total: number
+  added: number
+  filtered: number
 }> {
   const startTime = Date.now()
   logger.system('Starting calendar sync from Jikan schedules...', {}, {})
@@ -192,6 +196,8 @@ export async function syncCalendarDataFromJikanSchedules(): Promise<{
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   let synced = 0
   let failed = 0
+  let added = 0
+  let filtered = 0
   let totalAnime = 0
   const processedMalIds = new Set<number>()
 
@@ -230,11 +236,53 @@ export async function syncCalendarDataFromJikanSchedules(): Promise<{
           })
 
           if (!existingAnime) {
-            // Anime not in our database, skip it
-            logger.debug(`Anime ${anime.mal_id} (${anime.title}) not in database, skipping`, {}, {
-              malId: anime.mal_id,
-              title: anime.title,
-            })
+            // Anime not in our database - check if we should add it
+            // First, apply filters to partial data
+            if (shouldFilterAnimeFromJikanData(anime as JikanAnimePartial)) {
+              filtered++
+              logger.debug(`Filtered out anime ${anime.mal_id}: ${anime.title}`, {}, {
+                malId: anime.mal_id,
+                title: anime.title,
+              })
+              await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+              continue
+            }
+
+            // Fetch full anime details
+            const fullAnimeData = await fetchAnimeFromJikan(anime.mal_id)
+            if (!fullAnimeData) {
+              failed++
+              logger.warn(`Failed to fetch full details for anime ${anime.mal_id}`, {}, {
+                malId: anime.mal_id,
+                title: anime.title,
+              })
+              await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+              continue
+            }
+
+            // Apply filters to full data
+            if (shouldFilterAnimeFromJikanFull(fullAnimeData)) {
+              filtered++
+              logger.debug(`Filtered out anime ${anime.mal_id} (full check): ${fullAnimeData.title}`, {}, {
+                malId: anime.mal_id,
+                title: fullAnimeData.title,
+              })
+              await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+              continue
+            }
+
+            // Create new anime
+            const result = await syncAnimeToDatabase(fullAnimeData)
+            if (result.created) {
+              added++
+              synced++
+              logger.debug(`Added new anime ${anime.mal_id}: ${fullAnimeData.title}`, {}, {
+                malId: anime.mal_id,
+                title: fullAnimeData.title,
+              })
+            }
+
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
             continue
           }
 
@@ -330,6 +378,8 @@ export async function syncCalendarDataFromJikanSchedules(): Promise<{
       totalAnime,
       uniqueAnime: uniqueAnimeCount,
       synced,
+      added,
+      filtered,
       failed,
       duration: `${Math.round(duration / 1000)}s`,
       successRate: uniqueAnimeCount > 0 ? `${((synced / uniqueAnimeCount) * 100).toFixed(1)}%` : '0%',
@@ -339,6 +389,8 @@ export async function syncCalendarDataFromJikanSchedules(): Promise<{
       synced,
       failed,
       total: uniqueAnimeCount,
+      added,
+      filtered,
     }
   } catch (error) {
     logger.error('Calendar sync from Jikan schedules failed', error as Error, {}, {})

@@ -32,6 +32,10 @@ interface Job {
   }
   retries?: number
   maxRetries?: number
+  running?: {
+    startTime: number
+    estimatedDuration?: number // milliseconds, based on previous runs
+  }
 }
 
 let hasLoggedTrendingDatabaseUnavailable = false
@@ -39,6 +43,7 @@ let hasLoggedTrendingDatabaseUnavailable = false
 class BackgroundJobQueue {
   private jobs = new Map<string, Job>()
   private intervals = new Map<string, NodeJS.Timeout>()
+  private jobDurations = new Map<string, number[]>() // Track last 5 durations for each job
 
   /**
    * Register a one-time job
@@ -119,12 +124,23 @@ class BackgroundJobQueue {
   private async executeJob(job: Job): Promise<void> {
     const startTime = Date.now()
     
+    // Mark job as running
+    const estimatedDuration = this.getEstimatedDuration(job.name)
+    job.running = {
+      startTime,
+      ...(estimatedDuration !== undefined && { estimatedDuration }),
+    }
+    
     try {
       logger.debug(`Executing job: ${job.name}`, {}, { jobId: job.id })
       
       await job.handler()
       
       const duration = Date.now() - startTime
+      
+      // Track duration for future estimates
+      this.recordJobDuration(job.name, duration)
+      
       logger.system(`Job completed: ${job.name}`, {}, {
         jobId: job.id,
         duration,
@@ -136,8 +152,14 @@ class BackgroundJobQueue {
       } else {
         job.schedule.lastRun = Date.now()
       }
+      
+      // Clear running state
+      delete job.running
     } catch (error) {
       const duration = Date.now() - startTime
+      
+      // Clear running state on error
+      delete job.running
       
       logger.error(
         `Job failed: ${job.name}`,
@@ -198,19 +220,68 @@ class BackgroundJobQueue {
   }
 
   /**
+   * Record job duration for future estimates
+   */
+  private recordJobDuration(jobName: string, duration: number): void {
+    const durations = this.jobDurations.get(jobName) || []
+    durations.push(duration)
+    // Keep only last 5 durations
+    if (durations.length > 5) {
+      durations.shift()
+    }
+    this.jobDurations.set(jobName, durations)
+  }
+
+  /**
+   * Get estimated duration based on previous runs
+   */
+  private getEstimatedDuration(jobName: string): number | undefined {
+    const durations = this.jobDurations.get(jobName)
+    if (!durations || durations.length === 0) {
+      return undefined
+    }
+    // Return average of last 5 runs
+    const sum = durations.reduce((a, b) => a + b, 0)
+    return Math.round(sum / durations.length)
+  }
+
+  /**
    * Get job statistics
    */
   getStats() {
+    const now = Date.now()
+    
     return {
       totalJobs: this.jobs.size,
       scheduledJobs: this.intervals.size,
-      jobs: Array.from(this.jobs.values()).map(job => ({
-        id: job.id,
-        name: job.name,
-        scheduled: !!job.schedule,
-        lastRun: job.schedule?.lastRun ? new Date(job.schedule.lastRun).toISOString() : 'N/A',
-        interval: job.schedule?.interval,
-      })),
+      jobs: Array.from(this.jobs.values()).map(job => {
+        const isRunning = !!job.running
+        const running = job.running
+        const runningDuration = isRunning && running ? now - running.startTime : 0
+        const estimatedTimeRemaining = isRunning && running && running.estimatedDuration
+          ? Math.max(0, running.estimatedDuration - runningDuration)
+          : undefined
+        
+        // Calculate next run time
+        let nextRunTime: string | null = null
+        if (job.schedule?.lastRun && job.schedule.interval) {
+          const nextRun = job.schedule.lastRun + job.schedule.interval
+          nextRunTime = new Date(nextRun).toISOString()
+        }
+        
+        return {
+          id: job.id,
+          name: job.name,
+          scheduled: !!job.schedule,
+          lastRun: job.schedule?.lastRun ? new Date(job.schedule.lastRun).toISOString() : 'N/A',
+          interval: job.schedule?.interval,
+          isRunning,
+          runningDuration: isRunning ? runningDuration : undefined,
+          estimatedTimeRemaining,
+          estimatedDuration: running?.estimatedDuration,
+          nextRun: nextRunTime,
+        }
+      }),
     }
   }
 
@@ -407,6 +478,36 @@ export function scheduleCalendarSync() {
 }
 
 /**
+ * Schedule daily anime data sync
+ * Fetches new anime, updates existing anime, and applies content filters
+ */
+export function scheduleAnimeDataSync() {
+  const syncHandler = async () => {
+    try {
+      const { syncDailyAnimeData } = await import('./anime-sync')
+      await syncDailyAnimeData()
+    } catch (error) {
+      logger.error('Anime data sync job failed', error as Error, {}, {})
+    }
+  }
+
+  // Run immediately on startup (first fetch) after a delay to ensure server is ready
+  setTimeout(() => {
+    logger.system('Starting initial anime data sync...', {}, {})
+    syncHandler().catch((error) => {
+      logger.error('Initial anime data sync failed', error as Error, {}, {})
+    })
+  }, 10000) // Wait 10 seconds for server to fully initialize
+
+  // Schedule daily runs
+  jobQueue.schedule(
+    'anime-data-sync',
+    syncHandler,
+    24 * 60 * 60 * 1000, // Daily
+  )
+}
+
+/**
  * Initialize all scheduled jobs
  */
 export function initializeBackgroundJobs() {
@@ -416,6 +517,7 @@ export function initializeBackgroundJobs() {
   scheduleTrendingUpdate()
   scheduleTokenCleanup()
   scheduleCalendarSync()
+  scheduleAnimeDataSync()
   
   logger.system('Background jobs initialized', {}, {
     jobs: jobQueue.getStats(),

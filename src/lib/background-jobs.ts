@@ -508,6 +508,36 @@ export function scheduleAnimeDataSync() {
 }
 
 /**
+ * Schedule grouping learning job (runs daily at 3 AM)
+ * Processes feedback and updates pattern confidence scores
+ */
+export function scheduleGroupingLearning() {
+  jobQueue.schedule(
+    'grouping-learning',
+    async () => {
+      try {
+        const { updatePatternWeights, decayOldPatterns } = await import('./grouping-learning')
+        
+        logger.system('Starting grouping learning job...', {}, {})
+        
+        // Update pattern weights based on recent performance
+        await updatePatternWeights()
+        
+        // Decay old patterns that haven't been used recently
+        await decayOldPatterns(90) // 90 days threshold
+        
+        logger.system('Grouping learning job completed', {}, {})
+      } catch (error) {
+        logger.error('Failed to run grouping learning job', error as Error, {}, {
+          job: 'grouping-learning',
+        })
+      }
+    },
+    24 * 60 * 60 * 1000, // Daily
+  )
+}
+
+/**
  * Initialize all scheduled jobs
  */
 export function initializeBackgroundJobs() {
@@ -518,6 +548,7 @@ export function initializeBackgroundJobs() {
   scheduleTokenCleanup()
   scheduleCalendarSync()
   scheduleAnimeDataSync()
+  scheduleGroupingLearning()
   
   logger.system('Background jobs initialized', {}, {
     jobs: jobQueue.getStats(),

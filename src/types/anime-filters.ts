@@ -13,6 +13,12 @@ export interface AnimeFilters {
   excludedTypes?: string[]
   minQualityRating?: number
   minPopularity?: number
+  // Additional filter options
+  excludeEcchi?: boolean
+  excludeYaoi?: boolean
+  excludeYuri?: boolean
+  excludeShoujoAi?: boolean
+  excludeShounenAi?: boolean
 }
 
 /**
@@ -21,15 +27,26 @@ export interface AnimeFilters {
  */
 export const ANIME_FILTERS: AnimeFilters = {
   // Genres to exclude (case-insensitive matching)
+  // Includes variations and related genres
   excludedGenres: [
     'Hentai',
     'Erotica',
+    'Ecchi', // Suggestive content
+    'Yaoi', // Boys' Love
+    'Yuri', // Girls' Love
+    'Shoujo Ai', // Girls' Love (alternative)
+    'Shounen Ai', // Boys' Love (alternative)
   ],
 
   // Ratings to exclude (case-insensitive matching)
+  // Includes variations and partial matches
   excludedRatings: [
     'Rx',
+    'R+',
+    'R18+',
+    'R18',
     'Hentai',
+    'Ecchi',
   ],
 
   // Demographics to exclude
@@ -37,19 +54,39 @@ export const ANIME_FILTERS: AnimeFilters = {
     'Kids',
     'Children',
     'Child',
+    'Preschool',
   ],
 
   // Themes/tags to exclude
   excludedThemes: [
     'Educational',
     'Learning',
+    'School',
+    'Workplace',
   ],
 
-  // Optional: Anime types to exclude (if needed)
-  excludedTypes: [],
+  // Anime types to exclude (non-anime content)
+  // Only include actual anime types: TV, Movie, OVA, ONA, Special
+  // Exclude: Music (music videos), Manga, etc.
+  excludedTypes: [
+    'Music',
+    'Manga',
+    'Light Novel',
+    'Novel',
+    'Doujin',
+    'Manhua',
+    'Manhwa',
+  ],
 
   // Optional: Minimum quality thresholds (if needed)
   // minQualityRating: 6.0,
   // minPopularity: 100,
+
+  // Additional filter options
+  excludeEcchi: true,
+  excludeYaoi: false, // Set to true if you want to exclude BL content
+  excludeYuri: false, // Set to true if you want to exclude GL content
+  excludeShoujoAi: false,
+  excludeShounenAi: false,
 }
 

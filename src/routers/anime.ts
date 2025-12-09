@@ -11,6 +11,14 @@ import { ANIME_FILTERS } from '../types/anime-filters'
 export const getContentFilter = (): Prisma.AnimeWhereInput => {
   const conditions: Prisma.AnimeWhereInput[] = []
 
+  // Exclude anime without genres (incomplete data)
+  // Anime must have at least one genre to be included
+  conditions.push({
+    genres: {
+      some: {} // Must have at least one genre
+    }
+  })
+
   // Exclude ratings
   for (const excludedRating of ANIME_FILTERS.excludedRatings) {
     conditions.push({
@@ -39,6 +47,15 @@ export const getContentFilter = (): Prisma.AnimeWhereInput => {
             }
           }
         }
+      }
+    })
+  }
+
+  // Exclude non-anime types (Music, Manga, etc.)
+  if (ANIME_FILTERS.excludedTypes && ANIME_FILTERS.excludedTypes.length > 0) {
+    conditions.push({
+      NOT: {
+        type: { in: ANIME_FILTERS.excludedTypes, mode: Prisma.QueryMode.insensitive }
       }
     })
   }

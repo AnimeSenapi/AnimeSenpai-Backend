@@ -5,6 +5,7 @@ import { animeRouter } from './anime'
 import { userRouter } from './user'
 import { adminRouter } from './admin'
 import { recommendationsRouter } from './recommendations'
+import { groupingRouter } from './grouping'
 import { onboardingRouter } from './onboarding'
 import { socialRouter } from './social'
 import { moderationRouter } from './moderation'
@@ -53,6 +54,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   appStatus: appStatusRouter,
   calendar: calendarRouter,
+  grouping: groupingRouter,
 })
 
 export type AppRouter = typeof appRouter

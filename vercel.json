@@ -12,6 +12,14 @@
       "destination": "/api"
     },
     {
+      "source": "/api/sync/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/api/jobs/:path*",
+      "destination": "/api"
+    },
+    {
       "source": "/health",
       "destination": "/api"
     }
@@ -21,6 +29,28 @@
       "source": "/",
       "destination": "https://animesenpai.app",
       "permanent": true
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/sync/anime-data",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/sync/calendar",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/jobs/session-cleanup",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/jobs/token-cleanup",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/jobs/trending-update",
+      "schedule": "0 * * * *"
     }
   ]
 }

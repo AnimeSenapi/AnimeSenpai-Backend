@@ -29,6 +29,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
+    "@types/pg": "^8.16.0",
     "postgresql": "^0.0.1",
     "prisma": "^7.1.0",
     "resend": "^6.1.2",
@@ -97,7 +98,6 @@
     "validate:env": "bun run scripts/validate-env.ts"
   },
   "devDependencies": {
-    "@types/pg": "^8.16.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "@vercel/node": "4.0.0",

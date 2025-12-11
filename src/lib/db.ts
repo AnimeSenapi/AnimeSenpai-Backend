@@ -176,16 +176,38 @@ function createPrismaClientWithoutOptimize() {
 }
 
 // Prisma Client with Accelerate and Optimize extensions (for API requests)
-// Wrap in try-catch to handle connection errors gracefully in serverless environments
+// Initialize lazily to prevent connection failures during module load
 let _db: any = null
-try {
-  _db = globalForPrisma.prisma ?? createPrismaClient()
-} catch (error: any) {
-  console.error('⚠️  Prisma Client initialization error (will retry on first query):', error?.message || error)
-  // Create client anyway - connection will be established on first query
-  _db = globalForPrisma.prisma ?? createPrismaClient()
+function initializeDb() {
+  if (!_db) {
+    try {
+      _db = globalForPrisma.prisma ?? createPrismaClient()
+    } catch (error: any) {
+      console.error('⚠️  Prisma Client initialization error:', error?.message || error)
+      // Retry once
+      try {
+        _db = globalForPrisma.prisma ?? createPrismaClient()
+      } catch (retryError: any) {
+        console.error('❌ Prisma Client initialization failed after retry:', retryError?.message || retryError)
+        throw retryError
+      }
+    }
+  }
+  return _db
 }
-export const db = _db
+
+// Export db as a proxy that initializes on first access
+export const db = new Proxy({} as any, {
+  get(_target, prop) {
+    const client = initializeDb()
+    const value = client[prop]
+    // If it's a function, bind it to the client
+    if (typeof value === 'function') {
+      return value.bind(client)
+    }
+    return value
+  }
+})
 
 // Prisma Client without Optimize (for background jobs)
 // Use this in background jobs to avoid tracing issues
@@ -290,26 +312,39 @@ if (process.env.NODE_ENV === 'development' && baseClientForEvents) {
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
 // Handle Prisma connection errors gracefully in serverless environments
-// Connection failures during initialization should not crash the app
-const originalUnhandledRejection = process.listeners('unhandledRejection')
-process.removeAllListeners('unhandledRejection')
-process.on('unhandledRejection', (reason: any, promise) => {
-  const errorMessage = reason?.message || String(reason || '')
-  // Catch Prisma Accelerate connection errors during initialization
-  if (errorMessage.includes('fetch failed') && errorMessage.includes('Accelerate')) {
-    console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
-    // Don't crash - Prisma will retry on actual query
-    return
-  }
-  // Call original handlers for other errors
-  originalUnhandledRejection.forEach(handler => {
-    try {
-      handler(reason, promise)
-    } catch (e) {
-      // Ignore handler errors
+// Only catch Accelerate connection errors during initialization, not query errors
+let unhandledRejectionHandlerAdded = false
+if (!unhandledRejectionHandlerAdded) {
+  unhandledRejectionHandlerAdded = true
+  const originalUnhandledRejection = process.listeners('unhandledRejection').filter(
+    (handler: any) => handler.name !== 'prismaErrorHandler'
+  )
+  
+  const prismaErrorHandler = (reason: any, promise: Promise<any>) => {
+    const errorMessage = reason?.message || String(reason || '')
+    const errorStack = reason?.stack || ''
+    
+    // Only catch Accelerate connection errors during initialization, not actual query failures
+    if (errorMessage.includes('fetch failed') && 
+        (errorStack.includes('getConnectionInfo') || errorStack.includes('Dt.start'))) {
+      console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
+      // Don't crash - Prisma will retry on actual query
+      return
     }
-  })
-})
+    
+    // Call original handlers for other errors
+    originalUnhandledRejection.forEach((handler: any) => {
+      try {
+        handler(reason, promise)
+      } catch (e) {
+        // Ignore handler errors
+      }
+    })
+  }
+  
+  prismaErrorHandler.name = 'prismaErrorHandler'
+  process.on('unhandledRejection', prismaErrorHandler)
+}
 
 // Query statistics tracker
 export const queryStats = {

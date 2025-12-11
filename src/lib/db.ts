@@ -87,23 +87,23 @@ function createPrismaClient() {
   }
 
   // Apply Accelerate extension
-  // Accelerate is automatically enabled if DATABASE_URL starts with 'prisma://' or 'prisma+postgres://'
-  // No need to set ENABLE_ACCELERATE="true" if using prisma:// URL
-  const shouldUseAccelerate = 
-    isAccelerateProxyUrl || 
+  // When using accelerateUrl in constructor, Accelerate is already enabled - don't apply extension again
+  // Only apply withAccelerate() extension if using direct connection with ENABLE_ACCELERATE=true
+  const shouldUseAccelerateExtension = 
+    !isAccelerateProxyUrl && 
     process.env.ENABLE_ACCELERATE === 'true'
   
-  if (shouldUseAccelerate) {
+  if (isAccelerateProxyUrl) {
     console.log('✅ Prisma Accelerate: ENABLED - Connection pooling & caching active')
-    if (isAccelerateProxyUrl) {
-      console.log('   Using Accelerate proxy (detected prisma:// or prisma+postgres:// in DATABASE_URL)')
-      console.log('   💡 This is the recommended setup - set DATABASE_URL="prisma://..." or "prisma+postgres://..."')
-      console.log('   ✨ Benefits: Global caching, connection pooling, edge locations')
-    } else {
-      console.log('   Using Accelerate extension with direct connection (ENABLE_ACCELERATE=true)')
-      console.log('   ✨ Benefits: Connection pooling, local caching')
-      console.log('   💡 For global caching, use DATABASE_URL="prisma://..." instead')
-    }
+    console.log('   Using Accelerate proxy (detected prisma:// or prisma+postgres:// in DATABASE_URL)')
+    console.log('   💡 This is the recommended setup - set DATABASE_URL="prisma://..." or "prisma+postgres://..."')
+    console.log('   ✨ Benefits: Global caching, connection pooling, edge locations')
+    // accelerateUrl in constructor already enables Accelerate - no need for extension
+  } else if (shouldUseAccelerateExtension) {
+    console.log('✅ Prisma Accelerate: ENABLED - Connection pooling & caching active')
+    console.log('   Using Accelerate extension with direct connection (ENABLE_ACCELERATE=true)')
+    console.log('   ✨ Benefits: Connection pooling, local caching')
+    console.log('   💡 For global caching, use DATABASE_URL="prisma://..." instead')
     client = client.$extends(withAccelerate())
   } else {
     console.log('⚠️  Prisma Accelerate: DISABLED')
@@ -176,7 +176,16 @@ function createPrismaClientWithoutOptimize() {
 }
 
 // Prisma Client with Accelerate and Optimize extensions (for API requests)
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+// Wrap in try-catch to handle connection errors gracefully in serverless environments
+let _db: any = null
+try {
+  _db = globalForPrisma.prisma ?? createPrismaClient()
+} catch (error: any) {
+  console.error('⚠️  Prisma Client initialization error (will retry on first query):', error?.message || error)
+  // Create client anyway - connection will be established on first query
+  _db = globalForPrisma.prisma ?? createPrismaClient()
+}
+export const db = _db
 
 // Prisma Client without Optimize (for background jobs)
 // Use this in background jobs to avoid tracing issues
@@ -279,6 +288,28 @@ if (process.env.NODE_ENV === 'development' && baseClientForEvents) {
 
 // Prevent multiple instances in development
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+
+// Handle Prisma connection errors gracefully in serverless environments
+// Connection failures during initialization should not crash the app
+const originalUnhandledRejection = process.listeners('unhandledRejection')
+process.removeAllListeners('unhandledRejection')
+process.on('unhandledRejection', (reason: any, promise) => {
+  const errorMessage = reason?.message || String(reason || '')
+  // Catch Prisma Accelerate connection errors during initialization
+  if (errorMessage.includes('fetch failed') && errorMessage.includes('Accelerate')) {
+    console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
+    // Don't crash - Prisma will retry on actual query
+    return
+  }
+  // Call original handlers for other errors
+  originalUnhandledRejection.forEach(handler => {
+    try {
+      handler(reason, promise)
+    } catch (e) {
+      // Ignore handler errors
+    }
+  })
+})
 
 // Query statistics tracker
 export const queryStats = {

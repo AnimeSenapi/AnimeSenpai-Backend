@@ -4,11 +4,7 @@
     "api/index.ts": {
       "runtime": "@vercel/node@3.2.29",
       "maxDuration": 30,
-      "includeFiles": [
-        "generated/**",
-        "node_modules/@prisma/client/**",
-        "node_modules/.prisma/**"
-      ]
+      "includeFiles": "generated/**"
     }
   },
   "outputDirectory": ".",

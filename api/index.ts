@@ -1,5 +1,5 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter } from '../src/routers'
+import { appRouter } from '../src/routers/index.js'
 
 // Vercel Serverless Function Handler
 export default async function handler(req: any, res: any) {

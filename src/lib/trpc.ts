@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server'
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { Prisma } from '../../generated/prisma/client/client.js'
 import { verifyAccessToken } from './auth'
 import { db } from './db'
 import { appErrorToTRPCError, handleError, createError } from './errors'
@@ -36,7 +36,7 @@ const t = initTRPC.context<Context>().create({
         errorMessage: error.message,
         errorString: errorString.substring(0, 500)
         })
-    } else if (error.cause instanceof PrismaClientKnownRequestError) {
+    } else if (error.cause instanceof Prisma.PrismaClientKnownRequestError) {
         logger.error(`Prisma error in ${path}`, error.cause, logContext, { 
           path, 
           input: typeof input === 'object' ? input : { value: input },

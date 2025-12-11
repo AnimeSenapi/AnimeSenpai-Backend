@@ -1,7 +1,9 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '../../generated/prisma/client/client.js'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { withAccelerate } from '@prisma/extension-accelerate'
 import { withOptimize } from '@prisma/extension-optimize'
 import { logger } from './logger'
+import pg from 'pg'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: any | undefined
@@ -18,7 +20,26 @@ export const getBaseClientForEvents = (): PrismaClient | null => baseClientForEv
 
 // Create Prisma Client with Accelerate and Optimize extensions
 function createPrismaClient() {
+  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db'
+  const isAccelerateProxyUrl = databaseUrl.startsWith('prisma://') || databaseUrl.startsWith('prisma+postgres://')
+  
+  // For Prisma v7, use adapter for direct connections
+  // If using Accelerate proxy URL, provide accelerateUrl instead
+  let adapter: PrismaPg | undefined
+  let accelerateUrl: string | undefined
+  
+  if (isAccelerateProxyUrl) {
+    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
+    accelerateUrl = databaseUrl
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    // For direct PostgreSQL connections, use adapter
+    const pool = new pg.Pool({ connectionString: databaseUrl })
+    adapter = new PrismaPg(pool)
+  }
+
   const baseClient = new PrismaClient({
+    adapter,
+    accelerateUrl,
     log: [
       {
         emit: 'event',
@@ -33,16 +54,6 @@ function createPrismaClient() {
         level: 'warn',
       },
     ],
-    
-    // Connection pooling and performance settings
-    datasources: {
-      db: {
-        // RECOMMENDED: Use DATABASE_URL="prisma://..." (Accelerate automatically enabled)
-        url: process.env.DATABASE_URL || 'file:./dev.db',
-      },
-    },
-    // Enable tracing for Prisma Optimize (required for Prisma 6.x)
-    // This is automatically enabled when using Optimize extension
   })
 
   // Store base client reference for event listeners
@@ -82,8 +93,6 @@ function createPrismaClient() {
   // Apply Accelerate extension
   // Accelerate is automatically enabled if DATABASE_URL starts with 'prisma://' or 'prisma+postgres://'
   // No need to set ENABLE_ACCELERATE="true" if using prisma:// URL
-  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db'
-  const isAccelerateProxyUrl = databaseUrl.startsWith('prisma://') || databaseUrl.startsWith('prisma+postgres://')
   const shouldUseAccelerate = 
     isAccelerateProxyUrl || 
     process.env.ENABLE_ACCELERATE === 'true'
@@ -111,7 +120,26 @@ function createPrismaClient() {
 
 // Create Prisma Client WITHOUT Optimize (for background jobs where tracing isn't available)
 function createPrismaClientWithoutOptimize() {
+  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db'
+  const isAccelerateProxyUrl = databaseUrl.startsWith('prisma://') || databaseUrl.startsWith('prisma+postgres://')
+  
+  // For Prisma v7, use adapter for direct connections
+  // If using Accelerate proxy URL, provide accelerateUrl instead
+  let adapter: PrismaPg | undefined
+  let accelerateUrl: string | undefined
+  
+  if (isAccelerateProxyUrl) {
+    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
+    accelerateUrl = databaseUrl
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    // For direct PostgreSQL connections, use adapter
+    const pool = new pg.Pool({ connectionString: databaseUrl })
+    adapter = new PrismaPg(pool)
+  }
+
   const baseClient = new PrismaClient({
+    adapter,
+    accelerateUrl,
     log: [
       {
         emit: 'event',
@@ -126,19 +154,12 @@ function createPrismaClientWithoutOptimize() {
         level: 'warn',
       },
     ],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL || 'file:./dev.db',
-      },
-    },
   })
 
   let client: any = baseClient
 
   // Apply Accelerate extension (but not Optimize, to avoid tracing issues in background jobs)
   // Accelerate is automatically enabled if URL starts with 'prisma://' or 'prisma+postgres://'
-  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db'
-  const isAccelerateProxyUrl = databaseUrl.startsWith('prisma://') || databaseUrl.startsWith('prisma+postgres://')
   const shouldUseAccelerate = 
     isAccelerateProxyUrl || 
     process.env.ENABLE_ACCELERATE === 'true'
@@ -168,7 +189,26 @@ export function getDirectDbClient(): PrismaClient {
     return baseClientForEvents
   }
 
+  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db'
+  const isAccelerateProxyUrl = databaseUrl.startsWith('prisma://') || databaseUrl.startsWith('prisma+postgres://')
+  
+  // For Prisma v7, use adapter for direct connections
+  // If using Accelerate proxy URL, provide accelerateUrl instead
+  let adapter: PrismaPg | undefined
+  let accelerateUrl: string | undefined
+  
+  if (isAccelerateProxyUrl) {
+    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
+    accelerateUrl = databaseUrl
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    // For direct PostgreSQL connections, use adapter
+    const pool = new pg.Pool({ connectionString: databaseUrl })
+    adapter = new PrismaPg(pool)
+  }
+
   return new PrismaClient({
+    adapter,
+    accelerateUrl,
     log: [
       {
         emit: 'event',
@@ -183,11 +223,6 @@ export function getDirectDbClient(): PrismaClient {
         level: 'warn',
       },
     ],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL || 'file:./dev.db',
-      },
-    },
   })
 }
 

@@ -5,7 +5,7 @@
  * These embeddings power semantic similarity recommendations
  */
 
-import { PrismaClient } from '../generated/prisma/client/client.js'
+import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { getAnimeEmbedding, getEmbeddingStats } from '../src/lib/ml-embeddings'

@@ -4,7 +4,7 @@
  * Creates test accounts with different data states for testing
  */
 
-import { PrismaClient } from '../generated/prisma/client/client.js'
+import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'

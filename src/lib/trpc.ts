@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server'
-import { Prisma } from '../../generated/prisma/client/client.js'
+import { Prisma } from '@prisma/client'
 import { verifyAccessToken } from './auth.js'
 import { db } from './db.js'
 import { appErrorToTRPCError, handleError, createError } from './errors.js'

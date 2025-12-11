@@ -5,7 +5,7 @@
  * Usage: bun run scripts/test-db-connection.ts
  */
 
-import { PrismaClient } from '../generated/prisma/client/client.js'
+import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 

@@ -267,24 +267,30 @@ function levenshteinDistance(str1: string, str2: string): number {
   }
 
   for (let j = 0; j <= len2; j++) {
-    matrix[0][j] = j
+    if (matrix[0]) {
+      matrix[0][j] = j
+    }
   }
 
   for (let i = 1; i <= len1; i++) {
     for (let j = 1; j <= len2; j++) {
       if (str1[i - 1] === str2[j - 1]) {
-        matrix[i][j] = matrix[i - 1][j - 1]
+        const prev = matrix[i - 1]?.[j - 1]
+        if (matrix[i] && prev !== undefined) {
+          matrix[i][j] = prev
+        }
       } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1, // deletion
-          matrix[i][j - 1] + 1, // insertion
-          matrix[i - 1][j - 1] + 1 // substitution
-        )
+        const del = (matrix[i - 1]?.[j] ?? 0) + 1 // deletion
+        const ins = (matrix[i]?.[j - 1] ?? 0) + 1 // insertion
+        const sub = (matrix[i - 1]?.[j - 1] ?? 0) + 1 // substitution
+        if (matrix[i]) {
+          matrix[i][j] = Math.min(del, ins, sub)
+        }
       }
     }
   }
 
-  return matrix[len1][len2]
+  return matrix[len1]?.[len2] ?? 0
 }
 
 /**
@@ -901,7 +907,11 @@ export function identifyFranchiseRoot(franchise: SeasonInfo[]): SeasonInfo {
   }
   
   if (franchise.length === 1) {
-    return franchise[0]
+    const first = franchise[0]
+    if (!first) {
+      throw new Error('Franchise cannot be empty')
+    }
+    return first
   }
   
   // Sort by year (oldest first), then by popularity (highest rating/viewCount)
@@ -928,6 +938,10 @@ export function identifyFranchiseRoot(franchise: SeasonInfo[]): SeasonInfo {
     return a.seasonNumber - b.seasonNumber
   })
   
-  return sorted[0]
+  const first = sorted[0]
+  if (!first) {
+    throw new Error('Franchise cannot be empty')
+  }
+  return first
 }
 

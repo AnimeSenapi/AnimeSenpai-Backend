@@ -10,7 +10,6 @@ import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
 import { db } from '../lib/db'
 import { getAnimeGrouping, groupAnimeWithLearning } from '../lib/enhanced-grouping'
 import { learnFromFeedback } from '../lib/grouping-learning'
-import { logger } from '../lib/logger'
 
 export const groupingRouter = router({
   /**
@@ -88,7 +87,7 @@ export const groupingRouter = router({
         targetGroupId: z.string().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       // Verify anime exists
       const anime = await db.anime.findUnique({
         where: { id: input.animeId },
@@ -107,8 +106,8 @@ export const groupingRouter = router({
         animeId: input.animeId,
         groupType: input.groupType,
         action: input.action,
-        sourceGroupId: input.sourceGroupId,
-        targetGroupId: input.targetGroupId,
+        sourceGroupId: input.sourceGroupId ?? null,
+        targetGroupId: input.targetGroupId ?? null,
       })
 
       return { success: true }
@@ -124,7 +123,7 @@ export const groupingRouter = router({
         minConfidence: z.number().min(0).max(1).default(0.6),
       })
     )
-    .query(async ({ input, ctx }) => {
+    .query(async () => {
       // Check if user is admin (you'll need to implement this check based on your auth system)
       // For now, we'll allow any authenticated user to see suggestions
 

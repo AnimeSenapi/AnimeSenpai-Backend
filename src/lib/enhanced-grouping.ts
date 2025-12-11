@@ -13,13 +13,10 @@ import {
   buildSeasonGraph,
   buildFranchiseGraph,
   identifyFranchiseRoot,
-  type SeasonInfo,
 } from './series-grouping'
 import {
   getPatternConfidence,
   recordGroupingSuccess,
-  recordGroupingFailure,
-  type PatternType,
 } from './grouping-learning'
 import { logger } from './logger'
 
@@ -179,11 +176,15 @@ async function groupByTitlePatterns(
       .sort((a, b) => a - b)
     
     if (years.length >= 2) {
-      const yearSpread = years[years.length - 1] - years[0]
-      if (yearSpread <= 3) {
-        confidence += 0.1 // Boost for close years
-      } else if (yearSpread > 10) {
-        confidence -= 0.2 // Penalty for very spread out years
+      const lastYear = years[years.length - 1]
+      const firstYear = years[0]
+      if (lastYear !== undefined && firstYear !== undefined) {
+        const yearSpread = lastYear - firstYear
+        if (yearSpread <= 3) {
+          confidence += 0.1 // Boost for close years
+        } else if (yearSpread > 10) {
+          confidence -= 0.2 // Penalty for very spread out years
+        }
       }
     }
     
@@ -233,17 +234,6 @@ async function groupFranchises(
     for (const [rootId, franchiseIds] of franchiseMap.entries()) {
       if (franchiseIds.length < 2) continue // Skip single-item franchises
       
-      // Get root anime for metadata
-      const rootAnime = await db.anime.findUnique({
-        where: { id: rootId },
-        select: {
-          title: true,
-          titleEnglish: true,
-        },
-      })
-      
-      const franchiseName = rootAnime?.titleEnglish || rootAnime?.title || rootId
-      
       // Record success for franchise grouping
       await recordGroupingSuccess('relationship_type', 'franchise', franchiseIds)
       
@@ -260,7 +250,7 @@ async function groupFranchises(
       })
     }
   } catch (error) {
-    logger.error('Failed to group franchises', error)
+    logger.error('Failed to group franchises', error instanceof Error ? error : undefined)
   }
   
   return groups
@@ -339,7 +329,7 @@ export async function getAnimeGrouping(animeId: string): Promise<{
       }
     }
   } catch (error) {
-    logger.error('Failed to get franchise grouping', error, { animeId })
+    logger.error('Failed to get franchise grouping', error instanceof Error ? error : undefined, { animeId })
   }
   
   return result

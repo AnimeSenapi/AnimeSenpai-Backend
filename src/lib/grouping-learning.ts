@@ -79,7 +79,7 @@ export async function recordGroupingSuccess(
       })
     }
   } catch (error) {
-    logger.error('Failed to record grouping success', error, {
+    logger.error('Failed to record grouping success', error instanceof Error ? error : undefined, {
       patternType,
       pattern,
       animeCount: animeIds.length,
@@ -144,7 +144,7 @@ export async function recordGroupingFailure(
       })
     }
   } catch (error) {
-    logger.error('Failed to record grouping failure', error, {
+    logger.error('Failed to record grouping failure', error instanceof Error ? error : undefined, {
       patternType,
       pattern,
       animeCount: animeIds.length,
@@ -181,7 +181,7 @@ export async function getPatternConfidence(
     // Return initial confidence for unknown patterns
     return getInitialConfidence(patternType)
   } catch (error) {
-    logger.error('Failed to get pattern confidence', error, {
+    logger.error('Failed to get pattern confidence', error instanceof Error ? error : undefined, {
       patternType,
       pattern,
     })
@@ -276,7 +276,7 @@ export async function learnFromFeedback(feedback: {
       })
     }
   } catch (error) {
-    logger.error('Failed to learn from feedback', error, feedback)
+    logger.error('Failed to learn from feedback', error instanceof Error ? error : undefined, undefined, feedback)
   }
 }
 
@@ -321,7 +321,7 @@ export async function updatePatternWeights(): Promise<void> {
 
     logger.info(`Updated ${updated} pattern weights`)
   } catch (error) {
-    logger.error('Failed to update pattern weights', error)
+    logger.error('Failed to update pattern weights', error instanceof Error ? error : undefined)
   }
 }
 
@@ -369,7 +369,7 @@ export async function decayOldPatterns(daysThreshold = 90): Promise<void> {
       logger.info(`Decayed ${decayed} old patterns`)
     }
   } catch (error) {
-    logger.error('Failed to decay old patterns', error)
+    logger.error('Failed to decay old patterns', error instanceof Error ? error : undefined)
   }
 }
 
@@ -393,7 +393,7 @@ export async function getTopPatterns(
       take: limit,
     })
 
-    return patterns.map(p => ({
+    return patterns.map((p: any) => ({
       id: p.id,
       patternType: p.patternType as PatternType,
       pattern: p.pattern,
@@ -404,7 +404,7 @@ export async function getTopPatterns(
       metadata: p.metadata,
     }))
   } catch (error) {
-    logger.error('Failed to get top patterns', error)
+    logger.error('Failed to get top patterns', error instanceof Error ? error : undefined)
     return []
   }
 }
@@ -446,16 +446,16 @@ export async function getGroupingStatistics(): Promise<{
     const totalPatterns = patterns.length
     const averageConfidence =
       patterns.length > 0
-        ? patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length
+        ? patterns.reduce((sum: number, p: any) => sum + p.confidence, 0) / patterns.length
         : 0
-    const highConfidencePatterns = patterns.filter(p => p.confidence >= 0.7).length
+    const highConfidencePatterns = patterns.filter((p: any) => p.confidence >= 0.7).length
     const recentFeedback = feedback.length
 
     const totalAttempts = patterns.reduce(
-      (sum, p) => sum + p.successCount + p.failureCount,
+      (sum: number, p: any) => sum + p.successCount + p.failureCount,
       0
     )
-    const totalSuccesses = patterns.reduce((sum, p) => sum + p.successCount, 0)
+    const totalSuccesses = patterns.reduce((sum: number, p: any) => sum + p.successCount, 0)
     const successRate = totalAttempts > 0 ? totalSuccesses / totalAttempts : 0
 
     return {
@@ -466,7 +466,7 @@ export async function getGroupingStatistics(): Promise<{
       successRate,
     }
   } catch (error) {
-    logger.error('Failed to get grouping statistics', error)
+    logger.error('Failed to get grouping statistics', error instanceof Error ? error : undefined)
     return {
       totalPatterns: 0,
       averageConfidence: 0,

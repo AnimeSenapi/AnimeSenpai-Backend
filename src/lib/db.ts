@@ -176,38 +176,17 @@ function createPrismaClientWithoutOptimize() {
 }
 
 // Prisma Client with Accelerate and Optimize extensions (for API requests)
-// Initialize lazily to prevent connection failures during module load
+// Initialize immediately but handle connection errors gracefully
 let _db: any = null
-function initializeDb() {
-  if (!_db) {
-    try {
-      _db = globalForPrisma.prisma ?? createPrismaClient()
-    } catch (error: any) {
-      console.error('⚠️  Prisma Client initialization error:', error?.message || error)
-      // Retry once
-      try {
-        _db = globalForPrisma.prisma ?? createPrismaClient()
-      } catch (retryError: any) {
-        console.error('❌ Prisma Client initialization failed after retry:', retryError?.message || retryError)
-        throw retryError
-      }
-    }
-  }
-  return _db
+try {
+  _db = globalForPrisma.prisma ?? createPrismaClient()
+} catch (error: any) {
+  console.error('⚠️  Prisma Client initialization error (will retry on first query):', error?.message || error)
+  // Create client anyway - connection will be established on first query
+  // In serverless, Prisma Client doesn't connect until first query
+  _db = globalForPrisma.prisma ?? createPrismaClient()
 }
-
-// Export db as a proxy that initializes on first access
-export const db = new Proxy({} as any, {
-  get(_target, prop) {
-    const client = initializeDb()
-    const value = client[prop]
-    // If it's a function, bind it to the client
-    if (typeof value === 'function') {
-      return value.bind(client)
-    }
-    return value
-  }
-})
+export const db = _db
 
 // Prisma Client without Optimize (for background jobs)
 // Use this in background jobs to avoid tracing issues

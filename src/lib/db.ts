@@ -304,11 +304,10 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 let unhandledRejectionHandlerAdded = false
 if (!unhandledRejectionHandlerAdded) {
   unhandledRejectionHandlerAdded = true
-  const originalUnhandledRejection = process.listeners('unhandledRejection').filter(
-    (handler: any) => handler.name !== 'prismaErrorHandler'
-  )
+  const originalUnhandledRejection = process.listeners('unhandledRejection')
   
-  const prismaErrorHandler = (reason: any, promise: Promise<any>) => {
+  // Use a named function instead of arrow function to avoid read-only property issues
+  function prismaErrorHandler(reason: any, promise: Promise<any>) {
     const errorMessage = reason?.message || String(reason || '')
     const errorStack = reason?.stack || ''
     
@@ -324,6 +323,8 @@ if (!unhandledRejectionHandlerAdded) {
     
     // Call original handlers for other errors
     originalUnhandledRejection.forEach((handler: any) => {
+      // Skip this handler to avoid infinite recursion
+      if (handler === prismaErrorHandler) return
       try {
         handler(reason, promise)
       } catch (e) {
@@ -332,7 +333,6 @@ if (!unhandledRejectionHandlerAdded) {
     })
   }
   
-  prismaErrorHandler.name = 'prismaErrorHandler'
   process.on('unhandledRejection', prismaErrorHandler)
 }
 

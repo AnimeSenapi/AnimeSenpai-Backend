@@ -19,6 +19,13 @@ export interface AnimeFilters {
   excludeYuri?: boolean
   excludeShoujoAi?: boolean
   excludeShounenAi?: boolean
+  // Filter options for incomplete data
+  excludeWithoutGenres?: boolean // Exclude anime without any genres
+  excludeWithoutTags?: boolean // Exclude anime without any tags/themes
+  // Filter options for long-running children's shows
+  excludeLongRunningChildrenShows?: boolean // Exclude long-running children's shows
+  longRunningThresholdEpisodes?: number // Episode count threshold for long-running shows
+  longRunningThresholdYears?: number // Years old threshold for long-running shows
 }
 
 /**
@@ -55,6 +62,7 @@ export const ANIME_FILTERS: AnimeFilters = {
     'Children',
     'Child',
     'Preschool',
+    'Kodomomuke', // Children's anime demographic
   ],
 
   // Themes/tags to exclude
@@ -63,6 +71,9 @@ export const ANIME_FILTERS: AnimeFilters = {
     'Learning',
     'School',
     'Workplace',
+    'Kids', // Children's content tags
+    'Children', // Children's content tags
+    'Preschool', // Preschool content
   ],
 
   // Anime types to exclude (non-anime content)
@@ -88,5 +99,14 @@ export const ANIME_FILTERS: AnimeFilters = {
   excludeYuri: false, // Set to true if you want to exclude GL content
   excludeShoujoAi: false,
   excludeShounenAi: false,
+  
+  // Filter options for incomplete data
+  excludeWithoutGenres: true, // Exclude anime without any genres
+  excludeWithoutTags: true, // Exclude anime without any tags/themes (requires at least one)
+  
+  // Filter options for long-running children's shows
+  excludeLongRunningChildrenShows: true, // Exclude long-running children's shows
+  longRunningThresholdEpisodes: 100, // Episode count threshold for long-running shows
+  longRunningThresholdYears: 5, // Years old threshold for long-running shows
 }
 

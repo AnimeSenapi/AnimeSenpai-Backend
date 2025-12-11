@@ -273,19 +273,20 @@ function levenshteinDistance(str1: string, str2: string): number {
   }
 
   for (let i = 1; i <= len1; i++) {
+    const row = matrix[i]
+    if (!row) continue
+    
     for (let j = 1; j <= len2; j++) {
       if (str1[i - 1] === str2[j - 1]) {
         const prev = matrix[i - 1]?.[j - 1]
-        if (matrix[i] && prev !== undefined) {
-          matrix[i][j] = prev
+        if (prev !== undefined) {
+          row[j] = prev
         }
       } else {
         const del = (matrix[i - 1]?.[j] ?? 0) + 1 // deletion
-        const ins = (matrix[i]?.[j - 1] ?? 0) + 1 // insertion
+        const ins = (row[j - 1] ?? 0) + 1 // insertion
         const sub = (matrix[i - 1]?.[j - 1] ?? 0) + 1 // substitution
-        if (matrix[i]) {
-          matrix[i][j] = Math.min(del, ins, sub)
-        }
+        row[j] = Math.min(del, ins, sub)
       }
     }
   }

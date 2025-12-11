@@ -259,18 +259,16 @@ function checkAccelerateEnabled(): boolean {
   return isAccelerateEnabled
 }
 
-// Helper function to get cacheStrategy only when Accelerate is enabled
-// Returns empty object when Accelerate is disabled, so it can be safely spread
+// Helper function to get cacheStrategy only when Accelerate is enabled and working
+// Returns empty object when Accelerate is disabled or connection failed
 export function getCacheStrategy(ttl: number): { cacheStrategy?: { ttl: number } } {
-  // Only use cacheStrategy if Accelerate is confirmed enabled
-  // When using accelerateUrl, Accelerate is enabled but cacheStrategy might not work if connection failed
-  // Return empty object to be safe - queries will still work without caching
-  if (checkAccelerateEnabled()) {
-    // Only return cacheStrategy if we're confident Accelerate is working
-    // If connection failed, don't use cacheStrategy to avoid query errors
+  // Only use cacheStrategy if Accelerate is enabled AND connection hasn't failed
+  // If Accelerate connection failed, don't use cacheStrategy to avoid query errors
+  if (checkAccelerateEnabled() && !accelerateConnectionFailed) {
     return { cacheStrategy: { ttl } }
   }
-  return {} // Return empty object when Accelerate is disabled
+  // Return empty object if Accelerate is disabled or connection failed
+  return {}
 }
 
 // Query performance monitoring

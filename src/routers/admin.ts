@@ -14,6 +14,7 @@ import { logSecurityEvent, sendPasswordReset } from '../lib/auth'
 import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security'
 import { emailService } from '../lib/email'
 import { jobQueue } from '../lib/background-jobs'
+import { getGroupingStatistics, getTopPatterns } from '../lib/grouping-learning'
 
 export const adminRouter = router({
   // Get all users with their roles
@@ -296,6 +297,11 @@ export const adminRouter = router({
       const jobStats = jobQueue.getStats()
       const animeDataSyncJob = jobStats.jobs.find(job => job.name === 'anime-data-sync')
       const calendarSyncJob = jobStats.jobs.find(job => job.name === 'calendar-sync')
+      const groupingLearningJob = jobStats.jobs.find(job => job.name === 'grouping-learning')
+
+      // Get grouping statistics
+      const groupingStats = await getGroupingStatistics()
+      const topPatterns = await getTopPatterns(10)
 
       return {
         users: {
@@ -333,6 +339,32 @@ export const adminRouter = router({
             estimatedTimeRemaining: calendarSyncJob?.estimatedTimeRemaining,
             nextRun: calendarSyncJob?.lastRun && calendarSyncJob?.interval
               ? new Date(new Date(calendarSyncJob.lastRun).getTime() + calendarSyncJob.interval).toISOString()
+              : null,
+          },
+        },
+        grouping: {
+          totalPatterns: groupingStats.totalPatterns,
+          averageConfidence: groupingStats.averageConfidence,
+          highConfidencePatterns: groupingStats.highConfidencePatterns,
+          recentFeedback: groupingStats.recentFeedback,
+          successRate: groupingStats.successRate,
+          topPatterns: topPatterns.map(p => ({
+            patternType: p.patternType,
+            pattern: p.pattern,
+            confidence: p.confidence,
+            successCount: p.successCount,
+            failureCount: p.failureCount,
+            lastUsed: p.lastUsed,
+          })),
+          learningJob: {
+            scheduled: !!groupingLearningJob?.scheduled,
+            lastRun: groupingLearningJob?.lastRun || 'N/A',
+            interval: groupingLearningJob?.interval ? Math.round(groupingLearningJob.interval / (60 * 60 * 1000)) : null,
+            isRunning: groupingLearningJob?.isRunning || false,
+            runningDuration: groupingLearningJob?.runningDuration,
+            estimatedTimeRemaining: groupingLearningJob?.estimatedTimeRemaining,
+            nextRun: groupingLearningJob?.lastRun && groupingLearningJob?.interval
+              ? new Date(new Date(groupingLearningJob.lastRun).getTime() + groupingLearningJob.interval).toISOString()
               : null,
           },
         }

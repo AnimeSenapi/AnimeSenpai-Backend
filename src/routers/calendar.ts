@@ -71,7 +71,11 @@ export const calendarRouter = router({
             ],
           },
           // Merge content filter AND conditions
-          ...(contentFilter.AND || []),
+          ...(Array.isArray(contentFilter.AND) 
+            ? contentFilter.AND 
+            : contentFilter.AND 
+              ? [contentFilter.AND as Prisma.AnimeWhereInput] 
+              : []),
           // Apply quality filter
           qualityFilter,
         ],
@@ -224,7 +228,7 @@ export const calendarRouter = router({
       if ((status || (statuses && statuses.length > 0)) && userId) {
         const statusList = statuses && statuses.length > 0 ? statuses : status ? [status] : []
         if (statusList.length > 0) {
-          filteredAnime = airingAnime.filter((anime) => {
+          filteredAnime = airingAnime.filter((anime: typeof airingAnime[0]) => {
             const userListEntry = userAnimeList.get(anime.id)
             const userStatus = userListEntry?.status || 'not-in-list'
             const normalizedStatus = userStatus === 'watching' ? 'watching' : 

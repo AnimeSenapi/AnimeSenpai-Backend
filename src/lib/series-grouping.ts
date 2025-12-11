@@ -216,6 +216,13 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
     { regex: /\s+2nd\s+/i, number: 2, name: '2nd Season' },
     { regex: /\s+3rd\s+/i, number: 3, name: '3rd Season' },
     { regex: /\s+4th\s+/i, number: 4, name: '4th Season' },
+    
+    // Additional patterns for better coverage
+    { regex: /:\s*Next\s+Season/i, number: 2, name: 'Next Season' },
+    { regex: /:\s*New\s+Season/i, number: 2, name: 'New Season' },
+    { regex: /:\s*Continuation/i, number: 2, name: 'Continuation' },
+    { regex: /\s+Next\s+Season/i, number: 2, name: 'Next Season' },
+    { regex: /\s+New\s+Season/i, number: 2, name: 'New Season' },
   ]
   
   for (const pattern of patterns) {
@@ -248,8 +255,49 @@ export function extractSeriesInfo(title: string, titleEnglish?: string | null): 
 }
 
 /**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length
+  const len2 = str2.length
+  const matrix: number[][] = []
+
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i]
+  }
+
+  for (let j = 0; j <= len2; j++) {
+    if (matrix[0]) {
+      matrix[0][j] = j
+    }
+  }
+
+  for (let i = 1; i <= len1; i++) {
+    const row = matrix[i]
+    if (!row) continue
+    
+    for (let j = 1; j <= len2; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        const prev = matrix[i - 1]?.[j - 1]
+        if (prev !== undefined) {
+          row[j] = prev
+        }
+      } else {
+        const del = (matrix[i - 1]?.[j] ?? 0) + 1 // deletion
+        const ins = (row[j - 1] ?? 0) + 1 // insertion
+        const sub = (matrix[i - 1]?.[j - 1] ?? 0) + 1 // substitution
+        row[j] = Math.min(del, ins, sub)
+      }
+    }
+  }
+
+  return matrix[len1]?.[len2] ?? 0
+}
+
+/**
  * Calculate similarity score between two series names
  * Returns a score between 0 and 1, where 1 is exact match
+ * Uses Levenshtein distance for better fuzzy matching
  */
 function calculateSeriesSimilarity(name1: string, name2: string): number {
   const normalize = (s: string) => s
@@ -271,13 +319,22 @@ function calculateSeriesSimilarity(name1: string, name2: string): number {
     return shorter / longer
   }
   
-  // Simple word overlap
-  const words1 = new Set(n1.split(/\s+/))
-  const words2 = new Set(n2.split(/\s+/))
+  // Use Levenshtein distance for fuzzy matching
+  const maxLen = Math.max(n1.length, n2.length)
+  if (maxLen === 0) return 1.0
+  
+  const distance = levenshteinDistance(n1, n2)
+  const similarity = 1 - distance / maxLen
+  
+  // Also check word overlap for additional signal
+  const words1 = new Set(n1.split(/\s+/).filter(w => w.length > 2))
+  const words2 = new Set(n2.split(/\s+/).filter(w => w.length > 2))
   const intersection = new Set([...words1].filter(x => words2.has(x)))
   const union = new Set([...words1, ...words2])
+  const wordOverlap = union.size > 0 ? intersection.size / union.size : 0
   
-  return intersection.size / union.size
+  // Combine Levenshtein similarity (70%) with word overlap (30%)
+  return similarity * 0.7 + wordOverlap * 0.3
 }
 
 /**
@@ -672,5 +729,220 @@ export function mergeSeasonsFromSources(
   }
 
   return Array.from(merged.values())
+}
+
+/**
+ * Group anime by franchise using RelatedAnime relationships
+ * Builds a complete franchise graph including all relationship types
+ */
+export async function groupAnimeByFranchise(animeIds: string[]): Promise<Map<string, string[]>> {
+  const franchiseMap = new Map<string, string[]>()
+  const visited = new Set<string>()
+  
+  // All relationship types that indicate franchise connections
+  const franchiseRelationTypes = [
+    'Adaptation',
+    'Spin-off',
+    'Side story',
+    'Alternative setting',
+    'Parent story',
+    'Alternative version',
+    'Sequel',
+    'Prequel',
+  ]
+  
+  for (const animeId of animeIds) {
+    if (visited.has(animeId)) continue
+    
+    // Build franchise graph starting from this anime
+    const franchise = await buildFranchiseGraph(animeId, franchiseRelationTypes)
+    const franchiseAnimeIds = franchise.map(s => s.animeId)
+    
+    if (franchiseAnimeIds.length > 1) {
+      // Use the root anime (oldest or most popular) as the franchise identifier
+      const root = identifyFranchiseRoot(franchise)
+      franchiseMap.set(root.animeId, franchiseAnimeIds)
+      
+      // Mark all as visited
+      franchiseAnimeIds.forEach(id => visited.add(id))
+    }
+  }
+  
+  return franchiseMap
+}
+
+/**
+ * Build complete franchise graph using all relationship types
+ */
+export async function buildFranchiseGraph(
+  animeId: string,
+  relationTypes: string[]
+): Promise<SeasonInfo[]> {
+  const visited = new Set<string>()
+  const franchise: SeasonInfo[] = []
+  const queue: string[] = [animeId]
+  
+  // Get initial anime
+  const initialAnime = await db.anime.findUnique({
+    where: { id: animeId },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      titleEnglish: true,
+      year: true,
+      type: true,
+      episodes: true,
+      coverImage: true,
+      averageRating: true,
+      status: true,
+      startDate: true,
+    },
+  })
+  
+  if (!initialAnime) return []
+  
+  const initialSeasonInfo = extractSeriesInfo(initialAnime.title, initialAnime.titleEnglish)
+  franchise.push({
+    animeId: initialAnime.id,
+    slug: initialAnime.slug,
+    title: initialAnime.title,
+    titleEnglish: initialAnime.titleEnglish,
+    year: initialAnime.year,
+    type: initialAnime.type,
+    episodes: initialAnime.episodes,
+    coverImage: initialAnime.coverImage,
+    averageRating: initialAnime.averageRating,
+    status: initialAnime.status,
+    startDate: initialAnime.startDate,
+    seasonNumber: initialSeasonInfo.seasonNumber,
+    seasonName: initialSeasonInfo.seasonName,
+  })
+  visited.add(animeId)
+  
+  // BFS traversal of all relationship types
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    if (visited.has(currentId)) continue
+    visited.add(currentId)
+    
+    // Get all related anime with franchise relationships
+    const relationships = await db.relatedAnime.findMany({
+      where: {
+        OR: [
+          { animeId: currentId, relation: { in: relationTypes } },
+          { relatedId: currentId, relation: { in: relationTypes } },
+        ],
+      },
+      include: {
+        anime: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            titleEnglish: true,
+            year: true,
+            type: true,
+            episodes: true,
+            coverImage: true,
+            averageRating: true,
+            status: true,
+            startDate: true,
+          },
+        },
+        related: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            titleEnglish: true,
+            year: true,
+            type: true,
+            episodes: true,
+            coverImage: true,
+            averageRating: true,
+            status: true,
+            startDate: true,
+          },
+        },
+      },
+    })
+    
+    for (const rel of relationships) {
+      const relatedAnimeData = rel.animeId === currentId ? rel.related : rel.anime
+      
+      if (visited.has(relatedAnimeData.id)) continue
+      
+      const seasonInfo = extractSeriesInfo(relatedAnimeData.title, relatedAnimeData.titleEnglish)
+      
+      franchise.push({
+        animeId: relatedAnimeData.id,
+        slug: relatedAnimeData.slug,
+        title: relatedAnimeData.title,
+        titleEnglish: relatedAnimeData.titleEnglish,
+        year: relatedAnimeData.year,
+        type: relatedAnimeData.type,
+        episodes: relatedAnimeData.episodes,
+        coverImage: relatedAnimeData.coverImage,
+        averageRating: relatedAnimeData.averageRating,
+        status: relatedAnimeData.status,
+        startDate: relatedAnimeData.startDate,
+        seasonNumber: seasonInfo.seasonNumber,
+        seasonName: seasonInfo.seasonName,
+      })
+      
+      queue.push(relatedAnimeData.id)
+    }
+  }
+  
+  return franchise
+}
+
+/**
+ * Identify the root/main entry of a franchise
+ * Usually the oldest or most popular entry
+ */
+export function identifyFranchiseRoot(franchise: SeasonInfo[]): SeasonInfo {
+  if (franchise.length === 0) {
+    throw new Error('Franchise cannot be empty')
+  }
+  
+  if (franchise.length === 1) {
+    const first = franchise[0]
+    if (!first) {
+      throw new Error('Franchise cannot be empty')
+    }
+    return first
+  }
+  
+  // Sort by year (oldest first), then by popularity (highest rating/viewCount)
+  const sorted = [...franchise].sort((a, b) => {
+    // Prefer entries with year information
+    if (a.year && b.year) {
+      if (a.year !== b.year) {
+        return a.year - b.year
+      }
+    } else if (a.year && !b.year) {
+      return -1
+    } else if (!a.year && b.year) {
+      return 1
+    }
+    
+    // Then by rating
+    const aRating = a.averageRating || 0
+    const bRating = b.averageRating || 0
+    if (aRating !== bRating) {
+      return bRating - aRating // Higher rating first
+    }
+    
+    // Finally by season number (lower is usually the original)
+    return a.seasonNumber - b.seasonNumber
+  })
+  
+  const first = sorted[0]
+  if (!first) {
+    throw new Error('Franchise cannot be empty')
+  }
+  return first
 }
 

@@ -4,10 +4,19 @@
  * Creates test accounts with different data states for testing
  */
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '../generated/prisma/client/client.js'
+import { PrismaPg } from '@prisma/adapter-pg'
+import pg from 'pg'
 import bcrypt from 'bcryptjs'
 
-const prisma = new PrismaClient()
+const databaseUrl = process.env.DATABASE_URL
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is required')
+}
+
+const pool = new pg.Pool({ connectionString: databaseUrl })
+const adapter = new PrismaPg(pool)
+const prisma = new PrismaClient({ adapter })
 
 // Test account configurations
 const TEST_ACCOUNTS = [

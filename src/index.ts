@@ -290,6 +290,260 @@ const performanceMetrics = {
         })
       }
 
+      // Sync endpoints for cron jobs (protected by secret token or Vercel Cron header)
+      if (url.pathname === '/api/sync/anime-data' && request.method === 'POST') {
+        // Check if this is a Vercel Cron Job request
+        const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+        const authHeader = request.headers.get('authorization')
+        const expectedToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
+        
+        // Check for Bearer token or query parameter (if not Vercel Cron)
+        const providedToken = authHeader?.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : url.searchParams.get('token')
+        
+        // Allow if Vercel Cron or valid token
+        if (!isVercelCron && providedToken !== expectedToken) {
+          logger.warn('Unauthorized sync attempt', logContext, {
+            path: url.pathname,
+            ip: logContext.ipAddress,
+            isVercelCron,
+          })
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              ...baseHeaders,
+              'Content-Type': 'application/json',
+            } as Record<string, string>,
+          })
+        }
+
+        // Run sync in background (don't wait for completion)
+        const { syncDailyAnimeData } = await import('./lib/anime-sync')
+        syncDailyAnimeData().then((result) => {
+          logger.system('Anime data sync completed', {}, {
+            added: result.added,
+            updated: result.updated,
+            filtered: result.filtered,
+            errors: result.errors,
+          })
+        }).catch((error) => {
+          logger.error('Anime data sync failed', error as Error, {}, {})
+        })
+
+        return new Response(JSON.stringify({ 
+          status: 'started',
+          message: 'Anime data sync started',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 202,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
+      if (url.pathname === '/api/sync/calendar' && request.method === 'POST') {
+        // Check if this is a Vercel Cron Job request
+        const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+        const authHeader = request.headers.get('authorization')
+        const expectedToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
+        
+        // Check for Bearer token or query parameter (if not Vercel Cron)
+        const providedToken = authHeader?.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : url.searchParams.get('token')
+        
+        // Allow if Vercel Cron or valid token
+        if (!isVercelCron && providedToken !== expectedToken) {
+          logger.warn('Unauthorized sync attempt', logContext, {
+            path: url.pathname,
+            ip: logContext.ipAddress,
+            isVercelCron,
+          })
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              ...baseHeaders,
+              'Content-Type': 'application/json',
+            } as Record<string, string>,
+          })
+        }
+
+        // Run sync in background (don't wait for completion)
+        const { syncAiringAnimeCalendarData } = await import('./lib/calendar-sync')
+        syncAiringAnimeCalendarData().then(() => {
+          logger.system('Calendar sync completed', {}, {})
+        }).catch((error) => {
+          logger.error('Calendar sync failed', error as Error, {}, {})
+        })
+
+        return new Response(JSON.stringify({ 
+          status: 'started',
+          message: 'Calendar sync started',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 202,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
+      // Cleanup endpoints for cron jobs
+      if (url.pathname === '/api/jobs/session-cleanup' && request.method === 'POST') {
+        const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+        const authHeader = request.headers.get('authorization')
+        const expectedToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
+        const providedToken = authHeader?.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : url.searchParams.get('token')
+        
+        if (!isVercelCron && providedToken !== expectedToken) {
+          logger.warn('Unauthorized cleanup attempt', logContext, {
+            path: url.pathname,
+            ip: logContext.ipAddress,
+          })
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              ...baseHeaders,
+              'Content-Type': 'application/json',
+            } as Record<string, string>,
+          })
+        }
+
+        const { getDbWithoutOptimize } = await import('./lib/db')
+        const db = getDbWithoutOptimize()
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        
+        db.session.deleteMany({
+          where: { expiresAt: { lt: thirtyDaysAgo } },
+        }).then((result: { count: number }) => {
+          logger.system(`Cleaned up ${result.count} old sessions`, {}, {
+            deletedCount: result.count,
+          })
+        }).catch((error: unknown) => {
+          logger.error('Session cleanup failed', error as Error, {}, {})
+        })
+
+        return new Response(JSON.stringify({ 
+          status: 'started',
+          message: 'Session cleanup started',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 202,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
+      if (url.pathname === '/api/jobs/token-cleanup' && request.method === 'POST') {
+        const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+        const authHeader = request.headers.get('authorization')
+        const expectedToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
+        const providedToken = authHeader?.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : url.searchParams.get('token')
+        
+        if (!isVercelCron && providedToken !== expectedToken) {
+          logger.warn('Unauthorized cleanup attempt', logContext, {
+            path: url.pathname,
+            ip: logContext.ipAddress,
+          })
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              ...baseHeaders,
+              'Content-Type': 'application/json',
+            } as Record<string, string>,
+          })
+        }
+
+        const { getDbWithoutOptimize } = await import('./lib/db')
+        const db = getDbWithoutOptimize()
+        const now = new Date()
+        
+        db.verificationToken.deleteMany({
+          where: { expiresAt: { lt: now } },
+        }).then((result: { count: number }) => {
+          logger.system(`Cleaned up ${result.count} expired tokens`, {}, {
+            deletedCount: result.count,
+          })
+        }).catch((error: unknown) => {
+          logger.error('Token cleanup failed', error as Error, {}, {})
+        })
+
+        return new Response(JSON.stringify({ 
+          status: 'started',
+          message: 'Token cleanup started',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 202,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
+      if (url.pathname === '/api/jobs/trending-update' && request.method === 'POST') {
+        const isVercelCron = request.headers.get('x-vercel-cron') === '1'
+        const authHeader = request.headers.get('authorization')
+        const expectedToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
+        const providedToken = authHeader?.startsWith('Bearer ') 
+          ? authHeader.substring(7)
+          : url.searchParams.get('token')
+        
+        if (!isVercelCron && providedToken !== expectedToken) {
+          logger.warn('Unauthorized trending update attempt', logContext, {
+            path: url.pathname,
+            ip: logContext.ipAddress,
+          })
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              ...baseHeaders,
+              'Content-Type': 'application/json',
+            } as Record<string, string>,
+          })
+        }
+
+        const { getDbWithoutOptimize } = await import('./lib/db')
+        const db = getDbWithoutOptimize()
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        
+        db.userAnimeList.groupBy({
+          by: ['animeId'],
+          where: { createdAt: { gte: sevenDaysAgo } },
+          _count: { animeId: true },
+          orderBy: { _count: { animeId: 'desc' } },
+          take: 100,
+        }).then((trending: Array<{ animeId: string; _count: { animeId: number } }>) => {
+          logger.system(`Updated trending anime`, {}, {
+            trendingCount: trending.length,
+          })
+        }).catch((error: unknown) => {
+          logger.error('Trending update failed', error as Error, {}, {})
+        })
+
+        return new Response(JSON.stringify({ 
+          status: 'started',
+          message: 'Trending update started',
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 202,
+          headers: {
+            ...baseHeaders,
+            'Content-Type': 'application/json',
+          } as Record<string, string>,
+        })
+      }
+
       // Monitoring dashboard endpoint
       if (url.pathname === '/monitoring') {
         const { monitoringService } = await import('./lib/monitoring-service')

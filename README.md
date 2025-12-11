@@ -78,7 +78,10 @@ bun dev
 ## Requirements
 
 - **Bun 1.0+** (required - Node.js not needed)
+- **Node.js 20.19+** (required for Prisma 7 - if using Node.js runtime)
+- **TypeScript 5.4.0+** (required for Prisma 7)
 - **PostgreSQL** (production) or **SQLite** (development)
+- **Prisma 7.x** (ORM - latest version)
 - **Prisma Accelerate** (recommended for production)
 - **Prisma Optimize** (optional, for query analysis)
 
@@ -244,6 +247,12 @@ See `ACCELERATE_SETUP.md` and `OPTIMIZE_TROUBLESHOOTING.md` for detailed instruc
 - Schema is managed externally
 - **DO NOT** run `prisma migrate` or `prisma db push`
 - See `NO_MIGRATIONS.md` for details
+
+**Prisma 7 Notes:**
+- This project uses Prisma 7.x (latest version)
+- Prisma 7 requires TypeScript 5.4.0+ (already configured)
+- Prisma 7 requires Node.js 20.19+ (if using Node.js runtime)
+- The schema uses `provider = "prisma-client"` (Prisma 7 format)
 
 **Safe Commands:**
 ```bash
@@ -552,6 +561,20 @@ Kubernetes manifests are available in `k8s/`:
 - Readiness: `GET /ready`
 - Health: `GET /health`
 
+**Sync Jobs (for Cron):**
+- Anime Data Sync: `POST /api/sync/anime-data` (Daily at 2:00 AM UTC)
+- Calendar Sync: `POST /api/sync/calendar` (Daily at 3:00 AM UTC)
+
+**Maintenance Jobs (for Cron):**
+- Session Cleanup: `POST /api/jobs/session-cleanup` (Daily at 4:00 AM UTC)
+- Token Cleanup: `POST /api/jobs/token-cleanup` (Daily at 5:00 AM UTC)
+- Trending Update: `POST /api/jobs/trending-update` (Hourly)
+
+All endpoints require authentication via:
+- Vercel Cron Jobs (automatically authenticated via `x-vercel-cron` header)
+- Bearer token: `Authorization: Bearer <SYNC_SECRET_TOKEN>`
+- Query parameter: `?token=<SYNC_SECRET_TOKEN>`
+
 ---
 
 ## Monitoring & Observability
@@ -595,6 +618,103 @@ curl http://localhost:3005/monitoring | jq
 
 # Or use npm script
 bun run monitoring
+```
+
+### Sync Jobs
+
+The backend includes scheduled sync jobs for anime data and calendar information. On serverless platforms (like Vercel), these jobs need to be triggered via API endpoints.
+
+**For Vercel Deployments:**
+
+The `vercel.json` file includes cron job configuration:
+- Anime Data Sync: Runs daily at 2:00 AM UTC
+- Calendar Sync: Runs daily at 3:00 AM UTC
+- Session Cleanup: Runs daily at 4:00 AM UTC
+- Token Cleanup: Runs daily at 5:00 AM UTC
+- Trending Update: Runs hourly
+
+Vercel Cron Jobs automatically authenticate via the `x-vercel-cron` header.
+
+**For Railway Deployments:**
+
+Railway doesn't have built-in cron jobs, but you can use:
+
+1. **GitHub Actions (Recommended):**
+   Create `.github/workflows/sync-jobs.yml`:
+   ```yaml
+   name: Sync Jobs
+   on:
+     schedule:
+       - cron: '0 2 * * *'  # Anime data sync at 2 AM UTC
+       - cron: '0 3 * * *'  # Calendar sync at 3 AM UTC
+   jobs:
+     sync:
+       runs-on: ubuntu-latest
+       steps:
+         - name: Trigger Anime Data Sync
+           if: github.event.schedule == '0 2 * * *'
+           run: |
+             curl -X POST ${{ secrets.BACKEND_URL }}/api/sync/anime-data \
+               -H "Authorization: Bearer ${{ secrets.SYNC_SECRET_TOKEN }}"
+         - name: Trigger Calendar Sync
+           if: github.event.schedule == '0 3 * * *'
+           run: |
+             curl -X POST ${{ secrets.BACKEND_URL }}/api/sync/calendar \
+               -H "Authorization: Bearer ${{ secrets.SYNC_SECRET_TOKEN }}"
+   ```
+
+2. **External Cron Services:**
+   - [cron-job.org](https://cron-job.org)
+   - [EasyCron](https://www.easycron.com)
+   - [Cronitor](https://cronitor.io)
+
+   Example setup:
+   ```bash
+   # Anime Data Sync (daily at 2:00 AM UTC)
+   curl -X POST https://your-backend-url.com/api/sync/anime-data \
+     -H "Authorization: Bearer YOUR_SYNC_SECRET_TOKEN"
+
+   # Calendar Sync (daily at 3:00 AM UTC)
+   curl -X POST https://your-backend-url.com/api/sync/calendar \
+     -H "Authorization: Bearer YOUR_SYNC_SECRET_TOKEN"
+
+   # Session Cleanup (daily at 4:00 AM UTC)
+   curl -X POST https://your-backend-url.com/api/jobs/session-cleanup \
+     -H "Authorization: Bearer YOUR_SYNC_SECRET_TOKEN"
+
+   # Token Cleanup (daily at 5:00 AM UTC)
+   curl -X POST https://your-backend-url.com/api/jobs/token-cleanup \
+     -H "Authorization: Bearer YOUR_SYNC_SECRET_TOKEN"
+
+   # Trending Update (hourly)
+   curl -X POST https://your-backend-url.com/api/jobs/trending-update \
+     -H "Authorization: Bearer YOUR_SYNC_SECRET_TOKEN"
+   ```
+
+**Environment Variable:**
+Set `SYNC_SECRET_TOKEN` in your environment variables (Railway, Vercel, etc.) for external cron job authentication.
+
+**Testing Endpoints:**
+```bash
+# Test anime data sync
+curl -X POST http://localhost:3005/api/sync/anime-data \
+  -H "Authorization: Bearer your-sync-secret-token"
+
+# Test calendar sync
+curl -X POST http://localhost:3005/api/sync/calendar \
+  -H "Authorization: Bearer your-sync-secret-token"
+
+# Test session cleanup
+curl -X POST http://localhost:3005/api/jobs/session-cleanup \
+  -H "Authorization: Bearer your-sync-secret-token"
+
+# Test token cleanup
+curl -X POST http://localhost:3005/api/jobs/token-cleanup \
+  -H "Authorization: Bearer your-sync-secret-token"
+
+# Test trending update
+curl -X POST http://localhost:3005/api/jobs/trending-update \
+  -H "Authorization: Bearer your-sync-secret-token"
 ```
 
 ### Logging

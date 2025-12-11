@@ -1,10 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma/client"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
   schemas  = ["auth", "content", "user_data"]
 }
 
@@ -652,6 +652,43 @@ model RecommendationFeedback {
   @@index([feedbackType])
   @@map("recommendation_feedback")
   @@schema("user_data")
+}
+
+model GroupingFeedback {
+  id              String   @id @default(cuid())
+  userId          String?
+  animeId         String
+  groupType       String   // 'series' | 'franchise' | 'ungrouped'
+  action          String   // 'merge' | 'split' | 'correct' | 'create_group'
+  sourceGroupId   String?  // Original group identifier
+  targetGroupId   String?  // Target group identifier (for merge/split)
+  confidence      String   // 'high' | 'medium' | 'low'
+  createdAt       DateTime @default(now())
+
+  @@index([animeId])
+  @@index([groupType, action])
+  @@index([createdAt])
+  @@map("grouping_feedback")
+  @@schema("user_data")
+}
+
+model GroupingPattern {
+  id              String   @id @default(cuid())
+  patternType     String   // 'title_pattern' | 'relationship_type' | 'studio_match'
+  pattern         String   // The actual pattern (regex, relationship type, etc.)
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  lastUsed        DateTime @default(now())
+  confidence      Float    @default(0.5) // 0-1, learned from feedback
+  metadata        String?  // JSON for pattern-specific data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([patternType, pattern])
+  @@index([confidence(sort: Desc)])
+  @@index([lastUsed])
+  @@map("grouping_patterns")
+  @@schema("content")
 }
 
 model UserInteraction {

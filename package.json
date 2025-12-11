@@ -1,15 +1,16 @@
 {
   "name": "animesenpai-backend",
   "version": "1.0.0",
+  "type": "module",
   "main": "src/index.ts",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation": "^0.52.0",
     "@opentelemetry/sdk-trace-base": "^1.9.0",
-    "@prisma/client": "^6.19.0",
-    "@prisma/extension-accelerate": "^2.0.2",
-    "@prisma/extension-optimize": "^2.0.0",
-    "@prisma/instrumentation": "^6.19.0",
+    "@prisma/adapter-pg": "^7.1.0",
+    "@prisma/client": "^7.1.0",
+    "@prisma/extension-accelerate": "^3.0.1",
+    "@prisma/instrumentation": "^7.1.0",
     "@trpc/client": "^10.45.0",
     "@trpc/server": "^10.45.0",
     "@types/bcryptjs": "^3.0.0",
@@ -27,10 +28,12 @@
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3",
+    "@types/pg": "^8.16.0",
     "postgresql": "^0.0.1",
-    "prisma": "6.19.0",
+    "prisma": "^7.1.0",
     "resend": "^6.1.2",
-    "typescript": "^5.3.3",
+    "typescript": "^5.4.0",
     "undici": "^7.16.0",
     "uuid": "^11.0.0",
     "validator": "^13.15.20",
@@ -95,10 +98,10 @@
     "validate:env": "bun run scripts/validate-env.ts"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
     "@vercel/node": "4.0.0",
     "eslint": "^8.57.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
     "eslint-plugin-eslint-comments": "^3.2.0"
   }
 }

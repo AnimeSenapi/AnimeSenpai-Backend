@@ -7,7 +7,7 @@
 
 import { db } from './db.js'
 import { logger } from './logger.js'
-import { getContentFilter } from '../routers/anime'
+import { getContentFilter } from '../routers/anime.js'
 import { syncAnimeCalendarDataFromAniList } from './anilist-client.js'
 import { syncCalendarDataFromJikanSchedules } from './jikan-schedules-client.js'
 import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client.js'

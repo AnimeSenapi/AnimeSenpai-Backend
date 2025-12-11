@@ -5,8 +5,8 @@
  * based on common anime naming conventions and relationship types.
  */
 
-import { db } from '../lib/db'
-import { logger } from '../lib/logger'
+import { db } from '../lib/db.js'
+import { logger } from '../lib/logger.js'
 
 interface PatternSeed {
   patternType: 'title_pattern' | 'relationship_type' | 'studio_match' | 'year_proximity' | 'fuzzy_match'

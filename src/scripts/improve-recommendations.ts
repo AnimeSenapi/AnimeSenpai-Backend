@@ -8,8 +8,8 @@
  * 4. Popularity and quality signals
  */
 
-import { db } from '../lib/db'
-import { cache } from '../lib/cache'
+import { db } from '../lib/db.js'
+import { cache } from '../lib/cache.js'
 
 async function improveRecommendations() {
   console.log('🚀 Enhancing Recommendation System...\n')

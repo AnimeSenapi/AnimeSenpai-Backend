@@ -11,9 +11,9 @@
  * 4. Creates optimized lookup tables
  */
 
-import { db } from '../lib/db'
-import { cache } from '../lib/cache'
-import { createDescriptionEmbedding, getAnimeEmbedding } from '../lib/ml-embeddings'
+import { db } from '../lib/db.js'
+import { cache } from '../lib/cache.js'
+import { createDescriptionEmbedding, getAnimeEmbedding } from '../lib/ml-embeddings.js'
 
 interface TrainingStats {
   totalAnime: number

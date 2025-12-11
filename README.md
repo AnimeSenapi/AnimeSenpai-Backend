@@ -78,7 +78,10 @@ bun dev
 ## Requirements
 
 - **Bun 1.0+** (required - Node.js not needed)
+- **Node.js 20.19+** (required for Prisma 7 - if using Node.js runtime)
+- **TypeScript 5.4.0+** (required for Prisma 7)
 - **PostgreSQL** (production) or **SQLite** (development)
+- **Prisma 7.x** (ORM - latest version)
 - **Prisma Accelerate** (recommended for production)
 - **Prisma Optimize** (optional, for query analysis)
 
@@ -244,6 +247,12 @@ See `ACCELERATE_SETUP.md` and `OPTIMIZE_TROUBLESHOOTING.md` for detailed instruc
 - Schema is managed externally
 - **DO NOT** run `prisma migrate` or `prisma db push`
 - See `NO_MIGRATIONS.md` for details
+
+**Prisma 7 Notes:**
+- This project uses Prisma 7.x (latest version)
+- Prisma 7 requires TypeScript 5.4.0+ (already configured)
+- Prisma 7 requires Node.js 20.19+ (if using Node.js runtime)
+- The schema uses `provider = "prisma-client"` (Prisma 7 format)
 
 **Safe Commands:**
 ```bash

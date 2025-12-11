@@ -314,8 +314,8 @@ if (!unhandledRejectionHandlerAdded) {
     if (errorMessage.includes('fetch failed') && 
         (errorStack.includes('getConnectionInfo') || errorStack.includes('Dt.start'))) {
       console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
-      // Mark Accelerate connection as failed - don't use cacheStrategy
-      accelerateConnectionSuccessful = false
+      // Mark Accelerate connection as failed - disable cacheStrategy to prevent query errors
+      accelerateConnectionFailed = true
       // Don't crash - Prisma will retry on actual query
       return
     }

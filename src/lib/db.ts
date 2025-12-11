@@ -258,10 +258,18 @@ function checkAccelerateEnabled(): boolean {
 }
 
 // Helper function to get cacheStrategy only when Accelerate is enabled
-// Returns undefined when Accelerate is disabled, so it can be conditionally spread
-export function getCacheStrategy(ttl: number): { cacheStrategy: { ttl: number } } | {} {
-  if (checkAccelerateEnabled()) {
-    return { cacheStrategy: { ttl } }
+// Returns empty object when Accelerate is disabled, so it can be safely spread
+export function getCacheStrategy(ttl: number): { cacheStrategy?: { ttl: number } } {
+  // Only use cacheStrategy if Accelerate is confirmed enabled
+  // Don't use it if Accelerate connection failed during initialization
+  if (checkAccelerateEnabled() && _db) {
+    try {
+      // Verify client has cacheStrategy support (Accelerate extension)
+      return { cacheStrategy: { ttl } }
+    } catch {
+      // If Accelerate isn't available, return empty object
+      return {}
+    }
   }
   return {} // Return empty object when Accelerate is disabled
 }

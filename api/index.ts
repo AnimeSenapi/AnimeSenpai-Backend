@@ -1,8 +1,3 @@
-// Explicitly import Prisma runtime to ensure it's included in Vercel bundle
-// This is required when using custom Prisma output path
-// Import the runtime client which will pull in all necessary runtime files
-import '@prisma/client/runtime/client'
-
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { appRouter } from '../src/routers/index.js'
 

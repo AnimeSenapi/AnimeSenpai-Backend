@@ -136,29 +136,29 @@ function createPrismaClientWithoutOptimize() {
     },
   ]
   
+  let baseClient: PrismaClient
+  
   if (isAccelerateProxyUrl) {
     // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
-    const baseClient = new PrismaClient({
+    baseClient = new PrismaClient({
       accelerateUrl: databaseUrl,
       log: logConfig,
     })
-    return baseClient
   } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
     // For direct PostgreSQL connections, use adapter
     const pool = new pg.Pool({ connectionString: databaseUrl })
     const adapter = new PrismaPg(pool)
-    const baseClient = new PrismaClient({
+    baseClient = new PrismaClient({
       adapter,
       log: logConfig,
     })
-    return baseClient
+  } else {
+    // Fallback for other database types
+    // Note: For Prisma v7, adapter or accelerateUrl is typically required
+    baseClient = new PrismaClient({
+      log: logConfig,
+    } as any) // Type assertion needed for fallback case
   }
-
-  // Fallback for other database types
-  // Note: For Prisma v7, adapter or accelerateUrl is typically required
-  const baseClient = new PrismaClient({
-    log: logConfig,
-  } as any) // Type assertion needed for fallback case
 
   let client: any = baseClient
 

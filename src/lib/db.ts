@@ -99,15 +99,14 @@ function createPrismaClient() {
     console.log('   💡 This is the recommended setup - set DATABASE_URL="prisma://..." or "prisma+postgres://..."')
     console.log('   ✨ Benefits: Global caching, connection pooling, edge locations')
     // accelerateUrl in constructor already enables Accelerate - no need for extension
-    // Mark Accelerate as enabled - connection will be verified on first query
-    accelerateConnectionSuccessful = true
+    // Connection will be verified on first query - if it fails, accelerateConnectionFailed will be set
   } else if (shouldUseAccelerateExtension) {
     console.log('✅ Prisma Accelerate: ENABLED - Connection pooling & caching active')
     console.log('   Using Accelerate extension with direct connection (ENABLE_ACCELERATE=true)')
     console.log('   ✨ Benefits: Connection pooling, local caching')
     console.log('   💡 For global caching, use DATABASE_URL="prisma://..." instead')
     client = client.$extends(withAccelerate())
-    accelerateConnectionSuccessful = true
+    // Connection will be verified on first query - if it fails, accelerateConnectionFailed will be set
   } else {
     console.log('⚠️  Prisma Accelerate: DISABLED')
     console.log('   To enable: Set DATABASE_URL="prisma://..." (recommended) or ENABLE_ACCELERATE=true')

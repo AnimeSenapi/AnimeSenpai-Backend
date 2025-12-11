@@ -3,7 +3,7 @@ import { router, publicProcedure } from '../lib/trpc.js'
 import { db, getCacheStrategy } from '../lib/db.js'
 import { Prisma } from '@prisma/client'
 import { createSeriesEntries } from '../lib/series-grouping.js'
-import { ANIME_FILTERS } from '../types/anime-filters'
+import { ANIME_FILTERS } from '../types/anime-filters.js'
 
 // Content filter to exclude adult content (Hentai, explicit material)
 // Uses shared filter configuration from anime-filters.ts
@@ -84,11 +84,13 @@ export const getContentFilter = (): Prisma.AnimeWhereInput => {
 // Uses shared filter configuration where applicable
 const CHILDRENS_DEMOGRAPHICS = ANIME_FILTERS.excludedDemographics
 const CHILDRENS_GENRES = ['Kids', ...ANIME_FILTERS.excludedGenres.filter(g => g.toLowerCase() !== 'hentai' && g.toLowerCase() !== 'erotica')]
-const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content
+const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content (PG-13 is too broad, includes many teen shows)
 const LONG_RUNNING_THRESHOLD_EPISODES = ANIME_FILTERS.longRunningThresholdEpisodes ?? 100
 const LONG_RUNNING_YEARS_OLD = ANIME_FILTERS.longRunningThresholdYears ?? 5
 const EDUCATIONAL_THEMES = ANIME_FILTERS.excludedThemes
-const MIN_QUALITY_RATING_FOR_EXCEPTION = 7.5 // Allow highly-rated anime even if they match children's criteria
+// Stricter exception threshold - require BOTH high rating AND high popularity to bypass children's filter
+const MIN_QUALITY_RATING_FOR_EXCEPTION = 8.0 // Raised from 7.5 - only truly exceptional anime bypass
+const MIN_POPULARITY_FOR_EXCEPTION = 5000 // Require significant popularity to bypass
 
 // Children's show filter to automatically exclude children's content, educational shows, and long-running children's series
 // Uses database metadata (demographics, genres, ratings, themes) instead of hardcoded title patterns
@@ -169,7 +171,7 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
 
   return {
     AND: [
-      // Exclude anime that match children's criteria UNLESS they're highly rated
+      // Exclude anime that match children's criteria UNLESS they're both highly rated AND very popular
       {
         NOT: {
           AND: [
@@ -177,18 +179,20 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
             {
               OR: childrensIndicators
             },
-            // BUT exclude if it's highly rated (exception for quality anime)
+            // BUT allow exception ONLY if BOTH conditions are met (stricter filtering)
             {
               NOT: {
-                averageRating: { gte: MIN_QUALITY_RATING_FOR_EXCEPTION }
-              }
-            },
-            // AND exclude if it's very popular (exception for popular anime)
-            {
-              NOT: {
-                OR: [
-                  { viewCount: { gte: 2000 } },
-                  { popularity: { gte: 2000 } }
+                AND: [
+                  // Must have exceptional rating
+                  { averageRating: { gte: MIN_QUALITY_RATING_FOR_EXCEPTION } },
+                  // AND must have significant popularity (viewCount OR popularity OR members)
+                  {
+                    OR: [
+                      { viewCount: { gte: MIN_POPULARITY_FOR_EXCEPTION } },
+                      { popularity: { gte: MIN_POPULARITY_FOR_EXCEPTION } },
+                      { members: { gte: MIN_POPULARITY_FOR_EXCEPTION } }
+                    ]
+                  }
                 ]
               }
             }

@@ -12,12 +12,27 @@ export const getContentFilter = (): Prisma.AnimeWhereInput => {
   const conditions: Prisma.AnimeWhereInput[] = []
 
   // Exclude anime without genres (incomplete data)
-  // Anime must have at least one genre to be included
-  conditions.push({
-    genres: {
-      some: {} // Must have at least one genre
-    }
-  })
+  // Anime must have at least one genre to be included if excludeWithoutGenres is enabled
+  if (ANIME_FILTERS.excludeWithoutGenres !== false) {
+    conditions.push({
+      genres: {
+        some: {} // Must have at least one genre
+      }
+    })
+  }
+
+  // Exclude anime without tags/themes (incomplete data)
+  // Anime must have at least one tag or theme if excludeWithoutTags is enabled
+  if (ANIME_FILTERS.excludeWithoutTags !== false) {
+    conditions.push({
+      OR: [
+        { themes: { isEmpty: false } }, // Has themes
+        { tags: { isEmpty: false } }, // Has tags
+        // If genres are allowed, they can count as tags
+        ...(ANIME_FILTERS.excludeWithoutGenres === false ? [{ genres: { some: {} } }] : [])
+      ]
+    })
+  }
 
   // Exclude ratings
   for (const excludedRating of ANIME_FILTERS.excludedRatings) {
@@ -70,8 +85,8 @@ export const getContentFilter = (): Prisma.AnimeWhereInput => {
 const CHILDRENS_DEMOGRAPHICS = ANIME_FILTERS.excludedDemographics
 const CHILDRENS_GENRES = ['Kids', ...ANIME_FILTERS.excludedGenres.filter(g => g.toLowerCase() !== 'hentai' && g.toLowerCase() !== 'erotica')]
 const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content
-const LONG_RUNNING_THRESHOLD_EPISODES = 100
-const LONG_RUNNING_YEARS_OLD = 5
+const LONG_RUNNING_THRESHOLD_EPISODES = ANIME_FILTERS.longRunningThresholdEpisodes ?? 100
+const LONG_RUNNING_YEARS_OLD = ANIME_FILTERS.longRunningThresholdYears ?? 5
 const EDUCATIONAL_THEMES = ANIME_FILTERS.excludedThemes
 const MIN_QUALITY_RATING_FOR_EXCEPTION = 7.5 // Allow highly-rated anime even if they match children's criteria
 
@@ -83,6 +98,75 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
   const fiveYearsAgo = new Date()
   fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - LONG_RUNNING_YEARS_OLD)
 
+  // Build the OR conditions for children's indicators
+  const childrensIndicators: Prisma.AnimeWhereInput[] = [
+    // Children's demographics
+    {
+      demographics: {
+        hasSome: CHILDRENS_DEMOGRAPHICS
+      }
+    },
+    // Children's genres
+    {
+      genres: {
+        some: {
+          genre: {
+            name: {
+              in: CHILDRENS_GENRES,
+              mode: Prisma.QueryMode.insensitive
+            }
+          }
+        }
+      }
+    },
+    // Children's ratings
+    {
+      rating: {
+        in: CHILDRENS_RATINGS,
+        mode: Prisma.QueryMode.insensitive
+      }
+    },
+    // Educational content
+    {
+      OR: [
+        {
+          themes: {
+            hasSome: EDUCATIONAL_THEMES
+          }
+        },
+        {
+          tags: {
+            hasSome: EDUCATIONAL_THEMES
+          }
+        }
+      ]
+    }
+  ]
+
+  // Add long-running children's shows filter if enabled
+  if (ANIME_FILTERS.excludeLongRunningChildrenShows !== false) {
+    childrensIndicators.push({
+      // Long-running low-quality series (high episode count + old + low rating + low popularity)
+      AND: [
+        { episodes: { gte: LONG_RUNNING_THRESHOLD_EPISODES } },
+        { startDate: { lte: fiveYearsAgo } },
+        {
+          OR: [
+            // Low rating
+            { averageRating: { lt: 6.5 } },
+            // Low popularity indicators
+            {
+              AND: [
+                { viewCount: { lt: 500 } },
+                { popularity: { lt: 500 } }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+  }
+
   return {
     AND: [
       // Exclude anime that match children's criteria UNLESS they're highly rated
@@ -91,69 +175,7 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
           AND: [
             // Must match at least one children's indicator
             {
-              OR: [
-                // Children's demographics
-                {
-                  demographics: {
-                    hasSome: CHILDRENS_DEMOGRAPHICS
-                  }
-                },
-                // Children's genres
-                {
-                  genres: {
-                    some: {
-                      genre: {
-                        name: {
-                          in: CHILDRENS_GENRES,
-                          mode: Prisma.QueryMode.insensitive
-                        }
-                      }
-                    }
-                  }
-                },
-                // Children's ratings
-                {
-                  rating: {
-                    in: CHILDRENS_RATINGS,
-                    mode: Prisma.QueryMode.insensitive
-                  }
-                },
-                // Educational content
-                {
-                  OR: [
-                    {
-                      themes: {
-                        hasSome: EDUCATIONAL_THEMES
-                      }
-                    },
-                    {
-                      tags: {
-                        hasSome: EDUCATIONAL_THEMES
-                      }
-                    }
-                  ]
-                },
-                // Long-running low-quality series (high episode count + old + low rating + low popularity)
-                {
-                  AND: [
-                    { episodes: { gte: LONG_RUNNING_THRESHOLD_EPISODES } },
-                    { startDate: { lte: fiveYearsAgo } },
-                    {
-                      OR: [
-                        // Low rating
-                        { averageRating: { lt: 6.5 } },
-                        // Low popularity indicators
-                        {
-                          AND: [
-                            { viewCount: { lt: 500 } },
-                            { popularity: { lt: 500 } }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+              OR: childrensIndicators
             },
             // BUT exclude if it's highly rated (exception for quality anime)
             {

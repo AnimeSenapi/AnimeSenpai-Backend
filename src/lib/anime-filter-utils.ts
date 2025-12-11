@@ -103,6 +103,21 @@ export function shouldFilterAnimeFromJikanData(anime: JikanAnimePartial): boolea
   // Filter out anime without genres or tags (incomplete data)
   const hasGenres = anime.genres && anime.genres.length > 0
   const hasThemes = anime.themes && anime.themes.length > 0
+  
+  // Check if we should exclude anime without genres
+  if (ANIME_FILTERS.excludeWithoutGenres && !hasGenres) {
+    return true // Filter out anime with no genres
+  }
+  
+  // Check if we should exclude anime without tags/themes
+  if (ANIME_FILTERS.excludeWithoutTags && !hasThemes) {
+    // If no themes, check if we have genres as a fallback
+    if (!hasGenres) {
+      return true // Filter out anime with no themes and no genres
+    }
+  }
+  
+  // Legacy check: if both filters are disabled but we want to ensure at least one exists
   if (!hasGenres && !hasThemes) {
     return true // Filter out anime with no genres or themes
   }
@@ -225,6 +240,21 @@ export function shouldFilterAnimeFromJikanFull(anime: JikanAnimeFull): boolean {
   // Filter out anime without genres or tags (incomplete data)
   const hasGenres = anime.genres && anime.genres.length > 0
   const hasThemes = anime.themes && anime.themes.length > 0
+  
+  // Check if we should exclude anime without genres
+  if (ANIME_FILTERS.excludeWithoutGenres && !hasGenres) {
+    return true // Filter out anime with no genres
+  }
+  
+  // Check if we should exclude anime without tags/themes
+  if (ANIME_FILTERS.excludeWithoutTags && !hasThemes) {
+    // If no themes, check if we have genres as a fallback
+    if (!hasGenres) {
+      return true // Filter out anime with no themes and no genres
+    }
+  }
+  
+  // Legacy check: if both filters are disabled but we want to ensure at least one exists
   if (!hasGenres && !hasThemes) {
     return true // Filter out anime with no genres or themes
   }

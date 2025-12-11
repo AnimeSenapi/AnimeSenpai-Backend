@@ -4,7 +4,7 @@
  * Provides database setup, teardown, and helper functions for tests
  */
 
-import { db } from '../../lib/db'
+import { db } from '../../lib/db.js'
 import { Prisma } from '@prisma/client'
 
 /**
@@ -39,7 +39,7 @@ export async function createTestUser(data?: {
   emailVerified?: boolean
   role?: string
 }) {
-  const { hashPassword } = await import('../../lib/auth')
+  const { hashPassword } = await import('../../lib/auth.js')
   
   const user = await db.user.create({
     data: {

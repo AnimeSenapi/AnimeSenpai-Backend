@@ -6,9 +6,9 @@
  */
 
 import { describe, test, expect } from 'bun:test'
-import { appRouter } from '../../routers'
-import { db } from '../../lib/db'
-import { cache } from '../../lib/cache'
+import { appRouter } from '../../routers.js'
+import { db } from '../../lib/db.js'
+import { cache } from '../../lib/cache.js'
 
 // Load test configuration
 interface LoadTestConfig {

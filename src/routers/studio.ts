@@ -5,10 +5,10 @@
  */
 
 import { z } from 'zod'
-import { router, publicProcedure } from '../lib/trpc'
-import { db, getCacheStrategy } from '../lib/db'
+import { router, publicProcedure } from '../lib/trpc.js'
+import { db, getCacheStrategy } from '../lib/db.js'
 import { TRPCError } from '@trpc/server'
-import { logger, extractLogContext } from '../lib/logger'
+import { logger, extractLogContext } from '../lib/logger.js'
 
 export const studioRouter = router({
   /**

@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../lib/trpc'
-import { logger } from '../lib/logger'
-import { errorRateMonitor, getErrorMetrics } from '../lib/monitoring-service'
-import { getQueryStats, getSlowQueries } from '../lib/query-monitor'
-import { sendUptimeAlert, sendPerformanceAlert } from '../lib/alerts'
+import { publicProcedure, router } from '../lib/trpc.js'
+import { logger } from '../lib/logger.js'
+import { errorRateMonitor, getErrorMetrics } from '../lib/monitoring-service.js'
+import { getQueryStats, getSlowQueries } from '../lib/query-monitor.js'
+import { sendUptimeAlert, sendPerformanceAlert } from '../lib/alerts.js'
 
 // Web Vitals Schema
 const WebVitalSchema = z.object({

@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { router, publicProcedure } from '../lib/trpc'
-import { db, getCacheStrategy } from '../lib/db'
+import { router, publicProcedure } from '../lib/trpc.js'
+import { db, getCacheStrategy } from '../lib/db.js'
 import { Prisma } from '@prisma/client'
-import { createSeriesEntries } from '../lib/series-grouping'
+import { createSeriesEntries } from '../lib/series-grouping.js'
 import { ANIME_FILTERS } from '../types/anime-filters'
 
 // Content filter to exclude adult content (Hentai, explicit material)

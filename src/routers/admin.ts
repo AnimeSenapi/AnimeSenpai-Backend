@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import {
   UserRole,
   requireAdmin,
@@ -9,12 +9,12 @@ import {
   promoteToAdmin,
   setFeatureFlag,
   clearFeatureFlagCache,
-} from '../lib/roles'
-import { logSecurityEvent, sendPasswordReset } from '../lib/auth'
-import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security'
-import { emailService } from '../lib/email'
-import { jobQueue } from '../lib/background-jobs'
-import { getGroupingStatistics, getTopPatterns } from '../lib/grouping-learning'
+} from '../lib/roles.js'
+import { logSecurityEvent, sendPasswordReset } from '../lib/auth.js'
+import { secureAdminOperation, checkAdminRateLimit } from '../lib/admin-security.js'
+import { emailService } from '../lib/email.js'
+import { jobQueue } from '../lib/background-jobs.js'
+import { getGroupingStatistics, getTopPatterns } from '../lib/grouping-learning.js'
 
 export const adminRouter = router({
   // Get all users with their roles

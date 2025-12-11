@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import { 
   hashPassword, 
   verifyPassword, 
@@ -20,11 +20,11 @@ import {
   deleteUserData,
   exportUserData,
   SessionInfo
-} from '../lib/auth'
-import { createError, handleError } from '../lib/errors'
-import { logger, extractLogContext, logAuth, logError } from '../lib/logger'
-import { schemas } from '../lib/validation'
-import { checkRateLimit } from '../lib/rate-limiter'
+} from '../lib/auth.js'
+import { createError, handleError } from '../lib/errors.js'
+import { logger, extractLogContext, logAuth, logError } from '../lib/logger.js'
+import { schemas } from '../lib/validation.js'
+import { checkRateLimit } from '../lib/rate-limiter.js'
 
 export const authRouter = router({
   // Sign up

@@ -10,13 +10,13 @@
  */
 
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import { Prisma } from '@prisma/client'
-import { requireAdmin } from '../lib/roles'
-import { checkAdminRateLimit, secureAdminOperation } from '../lib/admin-security'
+import { requireAdmin } from '../lib/roles.js'
+import { checkAdminRateLimit, secureAdminOperation } from '../lib/admin-security.js'
 import { TRPCError } from '@trpc/server'
-import { logger, extractLogContext } from '../lib/logger'
+import { logger, extractLogContext } from '../lib/logger.js'
 
 export const moderationRouter = router({
   // Get all reviews with moderation info

@@ -5,10 +5,10 @@
  */
 
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { requireAdmin } from '../lib/roles'
-import { logSecurityEvent } from '../lib/auth'
+import { router, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { requireAdmin } from '../lib/roles.js'
+import { logSecurityEvent } from '../lib/auth.js'
 
 export const roleManagementRouter = router({
   /**

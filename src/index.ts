@@ -1,11 +1,11 @@
-import './lib/tracing'
-import './lib/env'
+import './lib/tracing.js'
+import './lib/env.js'
 import { serve } from 'bun'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import { appRouter } from './routers'
-import { Context } from './lib/trpc'
-import { logger, extractLogContext, generateRequestId } from './lib/logger'
-import { handleError } from './lib/errors'
+import { appRouter } from './routers/index.js'
+import { Context } from './lib/trpc.js'
+import { logger, extractLogContext, generateRequestId } from './lib/logger.js'
+import { handleError } from './lib/errors.js'
 import { gzip } from 'zlib'
 import { promisify } from 'util'
 
@@ -27,15 +27,15 @@ const performanceMetrics = {
 // Start server
 ;(async () => {
   // Initialize cache system
-  const { CacheWarmer } = await import('./lib/cache-middleware')
+  const { CacheWarmer } = await import('./lib/cache-middleware.js')
   
   // Warm up cache
   await CacheWarmer.warmUp()
   
   // Initialize monitoring and health check systems
-  const { monitoringService } = await import('./lib/monitoring-service')
-  const { securityManager } = await import('./lib/security')
-  const { performanceMonitor } = await import('./lib/performance-monitor')
+  const { monitoringService } = await import('./lib/monitoring-service.js')
+  const { securityManager } = await import('./lib/security.js')
+  const { performanceMonitor } = await import('./lib/performance-monitor.js')
   
   // Start monitoring
   await monitoringService.start()
@@ -44,7 +44,7 @@ const performanceMetrics = {
   performanceMonitor.startProfilingMode()
   
   // Initialize background jobs
-  const { initializeBackgroundJobs } = await import('./lib/background-jobs')
+  const { initializeBackgroundJobs } = await import('./lib/background-jobs.js')
   initializeBackgroundJobs()
   
   serve({
@@ -154,7 +154,7 @@ const performanceMetrics = {
 
       // Health check endpoint
       if (url.pathname === '/health' || url.pathname === '/') {
-        const { healthChecker } = await import('./lib/health-check')
+        const { healthChecker } = await import('./lib/health-check.js')
         const healthStatus = await healthChecker.runAllChecks()
         
         logger.api('Health check requested', logContext, { healthStatus })
@@ -175,7 +175,7 @@ const performanceMetrics = {
 
       // Readiness probe endpoint (for Kubernetes/load balancers)
       if (url.pathname === '/ready') {
-        const { healthChecker } = await import('./lib/health-check')
+        const { healthChecker } = await import('./lib/health-check.js')
         const healthStatus = await healthChecker.runAllChecks()
         const isReady = healthStatus.status !== 'unhealthy'
         const readinessStatus = {
@@ -223,10 +223,10 @@ const performanceMetrics = {
 
       // Metrics endpoint
       if (url.pathname === '/metrics') {
-        const { queryStats } = await import('./lib/db')
-        const { getRateLimitStats } = await import('./lib/rate-limiter')
-        const { jobQueue } = await import('./lib/background-jobs')
-        const { cache } = await import('./lib/cache')
+        const { queryStats } = await import('./lib/db.js')
+        const { getRateLimitStats } = await import('./lib/rate-limiter.js')
+        const { jobQueue } = await import('./lib/background-jobs.js')
+        const { cache } = await import('./lib/cache.js')
         
         const avgResponseTime = performanceMetrics.requests > 0 
           ? (performanceMetrics.totalResponseTime / performanceMetrics.requests).toFixed(2)
@@ -319,7 +319,7 @@ const performanceMetrics = {
         }
 
         // Run sync in background (don't wait for completion)
-        const { syncDailyAnimeData } = await import('./lib/anime-sync')
+        const { syncDailyAnimeData } = await import('./lib/anime-sync.js')
         syncDailyAnimeData().then((result) => {
           logger.system('Anime data sync completed', {}, {
             added: result.added,
@@ -372,7 +372,7 @@ const performanceMetrics = {
         }
 
         // Run sync in background (don't wait for completion)
-        const { syncAiringAnimeCalendarData } = await import('./lib/calendar-sync')
+        const { syncAiringAnimeCalendarData } = await import('./lib/calendar-sync.js')
         syncAiringAnimeCalendarData().then(() => {
           logger.system('Calendar sync completed', {}, {})
         }).catch((error) => {
@@ -415,7 +415,7 @@ const performanceMetrics = {
           })
         }
 
-        const { getDbWithoutOptimize } = await import('./lib/db')
+        const { getDbWithoutOptimize } = await import('./lib/db.js')
         const db = getDbWithoutOptimize()
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
         
@@ -464,7 +464,7 @@ const performanceMetrics = {
           })
         }
 
-        const { getDbWithoutOptimize } = await import('./lib/db')
+        const { getDbWithoutOptimize } = await import('./lib/db.js')
         const db = getDbWithoutOptimize()
         const now = new Date()
         
@@ -513,7 +513,7 @@ const performanceMetrics = {
           })
         }
 
-        const { getDbWithoutOptimize } = await import('./lib/db')
+        const { getDbWithoutOptimize } = await import('./lib/db.js')
         const db = getDbWithoutOptimize()
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
         
@@ -546,8 +546,8 @@ const performanceMetrics = {
 
       // Monitoring dashboard endpoint
       if (url.pathname === '/monitoring') {
-        const { monitoringService } = await import('./lib/monitoring-service')
-        const { errorHandler } = await import('./lib/error-handler')
+        const { monitoringService } = await import('./lib/monitoring-service.js')
+        const { errorHandler } = await import('./lib/error-handler.js')
         
         const monitoringData = {
           system: monitoringService.getSystemStatus(),
@@ -845,7 +845,7 @@ const performanceMetrics = {
       try {
         const ipAddr = logContext.ipAddress || ''
         if (ipAddr) {
-          const { getRateLimitHeaders } = await import('./lib/rate-limiter')
+          const { getRateLimitHeaders } = await import('./lib/rate-limiter.js')
           const rlHeaders = getRateLimitHeaders(ipAddr, 'public', url.pathname)
           Object.entries(rlHeaders).forEach(([k, v]) => mergedHeaders.set(k, v))
         }

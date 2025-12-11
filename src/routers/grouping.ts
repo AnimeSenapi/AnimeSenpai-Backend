@@ -6,10 +6,10 @@
 
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { getAnimeGrouping, groupAnimeWithLearning } from '../lib/enhanced-grouping'
-import { learnFromFeedback } from '../lib/grouping-learning'
+import { router, protectedProcedure, publicProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { getAnimeGrouping, groupAnimeWithLearning } from '../lib/enhanced-grouping.js'
+import { learnFromFeedback } from '../lib/grouping-learning.js'
 
 export const groupingRouter = router({
   /**

@@ -4,9 +4,9 @@
  * Achievement/badge system for user milestones with tiered progression
  */
 
-import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { logger, extractLogContext } from '../lib/logger'
+import { router, protectedProcedure, publicProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { logger, extractLogContext } from '../lib/logger.js'
 
 export const achievementsRouter = router({
   /**

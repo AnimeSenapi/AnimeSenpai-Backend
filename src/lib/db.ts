@@ -259,6 +259,10 @@ function checkAccelerateEnabled(): boolean {
   return isAccelerateEnabled
 }
 
+// Track if Accelerate connection failed
+// Start optimistic - assume it will work, but disable if we detect failures
+let accelerateConnectionFailed = false
+
 // Helper function to get cacheStrategy only when Accelerate is enabled and working
 // Returns empty object when Accelerate is disabled or connection failed
 export function getCacheStrategy(ttl: number): { cacheStrategy?: { ttl: number } } {

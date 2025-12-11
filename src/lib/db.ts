@@ -1,7 +1,6 @@
 import { PrismaClient } from '../../generated/prisma/client/client.js'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { logger } from './logger'
 import pg from 'pg'
 
 // Note: @prisma/extension-optimize@2.0.0 is not compatible with Prisma v7
@@ -112,21 +111,12 @@ function createPrismaClientWithoutOptimize() {
   
   // For Prisma v7, use adapter for direct connections
   // If using Accelerate proxy URL, provide accelerateUrl instead
-  let adapter: PrismaPg | undefined
-  let accelerateUrl: string | undefined
-  
-  if (isAccelerateProxyUrl) {
-    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
-    accelerateUrl = databaseUrl
-  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
-    // For direct PostgreSQL connections, use adapter
-    const pool = new pg.Pool({ connectionString: databaseUrl })
-    adapter = new PrismaPg(pool)
-  }
-
-  const baseClient = new PrismaClient({
-    adapter,
-    accelerateUrl,
+  // Build options object conditionally to satisfy TypeScript strict optional properties
+  const clientOptions: {
+    adapter?: PrismaPg
+    accelerateUrl?: string
+    log: Array<{ emit: 'event'; level: 'query' | 'error' | 'warn' }>
+  } = {
     log: [
       {
         emit: 'event',
@@ -141,7 +131,18 @@ function createPrismaClientWithoutOptimize() {
         level: 'warn',
       },
     ],
-  })
+  }
+  
+  if (isAccelerateProxyUrl) {
+    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
+    clientOptions.accelerateUrl = databaseUrl
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    // For direct PostgreSQL connections, use adapter
+    const pool = new pg.Pool({ connectionString: databaseUrl })
+    clientOptions.adapter = new PrismaPg(pool)
+  }
+
+  const baseClient = new PrismaClient(clientOptions)
 
   let client: any = baseClient
 
@@ -181,21 +182,12 @@ export function getDirectDbClient(): PrismaClient {
   
   // For Prisma v7, use adapter for direct connections
   // If using Accelerate proxy URL, provide accelerateUrl instead
-  let adapter: PrismaPg | undefined
-  let accelerateUrl: string | undefined
-  
-  if (isAccelerateProxyUrl) {
-    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
-    accelerateUrl = databaseUrl
-  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
-    // For direct PostgreSQL connections, use adapter
-    const pool = new pg.Pool({ connectionString: databaseUrl })
-    adapter = new PrismaPg(pool)
-  }
-
-  return new PrismaClient({
-    adapter,
-    accelerateUrl,
+  // Build options object conditionally to satisfy TypeScript strict optional properties
+  const clientOptions: {
+    adapter?: PrismaPg
+    accelerateUrl?: string
+    log: Array<{ emit: 'event'; level: 'query' | 'error' | 'warn' }>
+  } = {
     log: [
       {
         emit: 'event',
@@ -210,7 +202,18 @@ export function getDirectDbClient(): PrismaClient {
         level: 'warn',
       },
     ],
-  })
+  }
+  
+  if (isAccelerateProxyUrl) {
+    // When using Accelerate proxy URL, provide accelerateUrl to PrismaClient
+    clientOptions.accelerateUrl = databaseUrl
+  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    // For direct PostgreSQL connections, use adapter
+    const pool = new pg.Pool({ connectionString: databaseUrl })
+    clientOptions.adapter = new PrismaPg(pool)
+  }
+
+  return new PrismaClient(clientOptions)
 }
 
 // Check if Accelerate is enabled (to conditionally use cacheStrategy)

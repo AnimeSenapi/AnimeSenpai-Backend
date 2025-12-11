@@ -99,12 +99,14 @@ function createPrismaClient() {
     console.log('   💡 This is the recommended setup - set DATABASE_URL="prisma://..." or "prisma+postgres://..."')
     console.log('   ✨ Benefits: Global caching, connection pooling, edge locations')
     // accelerateUrl in constructor already enables Accelerate - no need for extension
+    // Connection will be verified on first query - if it fails, accelerateConnectionFailed will be set
   } else if (shouldUseAccelerateExtension) {
     console.log('✅ Prisma Accelerate: ENABLED - Connection pooling & caching active')
     console.log('   Using Accelerate extension with direct connection (ENABLE_ACCELERATE=true)')
     console.log('   ✨ Benefits: Connection pooling, local caching')
     console.log('   💡 For global caching, use DATABASE_URL="prisma://..." instead')
     client = client.$extends(withAccelerate())
+    // Connection will be verified on first query - if it fails, accelerateConnectionFailed will be set
   } else {
     console.log('⚠️  Prisma Accelerate: DISABLED')
     console.log('   To enable: Set DATABASE_URL="prisma://..." (recommended) or ENABLE_ACCELERATE=true')
@@ -176,13 +178,14 @@ function createPrismaClientWithoutOptimize() {
 }
 
 // Prisma Client with Accelerate and Optimize extensions (for API requests)
-// Wrap in try-catch to handle connection errors gracefully in serverless environments
+// Initialize immediately but handle connection errors gracefully
 let _db: any = null
 try {
   _db = globalForPrisma.prisma ?? createPrismaClient()
 } catch (error: any) {
   console.error('⚠️  Prisma Client initialization error (will retry on first query):', error?.message || error)
   // Create client anyway - connection will be established on first query
+  // In serverless, Prisma Client doesn't connect until first query
   _db = globalForPrisma.prisma ?? createPrismaClient()
 }
 export const db = _db
@@ -256,13 +259,20 @@ function checkAccelerateEnabled(): boolean {
   return isAccelerateEnabled
 }
 
-// Helper function to get cacheStrategy only when Accelerate is enabled
-// Returns undefined when Accelerate is disabled, so it can be conditionally spread
-export function getCacheStrategy(ttl: number): { cacheStrategy: { ttl: number } } | {} {
-  if (checkAccelerateEnabled()) {
+// Track if Accelerate connection failed
+// Start optimistic - assume it will work, but disable if we detect failures
+let accelerateConnectionFailed = false
+
+// Helper function to get cacheStrategy only when Accelerate is enabled and working
+// Returns empty object when Accelerate is disabled or connection failed
+export function getCacheStrategy(ttl: number): { cacheStrategy?: { ttl: number } } {
+  // Only use cacheStrategy if Accelerate is enabled AND connection hasn't failed
+  // If Accelerate connection failed, don't use cacheStrategy to avoid query errors
+  if (checkAccelerateEnabled() && !accelerateConnectionFailed) {
     return { cacheStrategy: { ttl } }
   }
-  return {} // Return empty object when Accelerate is disabled
+  // Return empty object if Accelerate is disabled or connection failed
+  return {}
 }
 
 // Query performance monitoring
@@ -290,26 +300,41 @@ if (process.env.NODE_ENV === 'development' && baseClientForEvents) {
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
 // Handle Prisma connection errors gracefully in serverless environments
-// Connection failures during initialization should not crash the app
-const originalUnhandledRejection = process.listeners('unhandledRejection')
-process.removeAllListeners('unhandledRejection')
-process.on('unhandledRejection', (reason: any, promise) => {
-  const errorMessage = reason?.message || String(reason || '')
-  // Catch Prisma Accelerate connection errors during initialization
-  if (errorMessage.includes('fetch failed') && errorMessage.includes('Accelerate')) {
-    console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
-    // Don't crash - Prisma will retry on actual query
-    return
-  }
-  // Call original handlers for other errors
-  originalUnhandledRejection.forEach(handler => {
-    try {
-      handler(reason, promise)
-    } catch (e) {
-      // Ignore handler errors
+// Only catch Accelerate connection errors during initialization, not query errors
+let unhandledRejectionHandlerAdded = false
+if (!unhandledRejectionHandlerAdded) {
+  unhandledRejectionHandlerAdded = true
+  const originalUnhandledRejection = process.listeners('unhandledRejection').filter(
+    (handler: any) => handler.name !== 'prismaErrorHandler'
+  )
+  
+  const prismaErrorHandler = (reason: any, promise: Promise<any>) => {
+    const errorMessage = reason?.message || String(reason || '')
+    const errorStack = reason?.stack || ''
+    
+    // Only catch Accelerate connection errors during initialization, not actual query failures
+    if (errorMessage.includes('fetch failed') && 
+        (errorStack.includes('getConnectionInfo') || errorStack.includes('Dt.start'))) {
+      console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
+      // Mark Accelerate connection as failed - disable cacheStrategy to prevent query errors
+      accelerateConnectionFailed = true
+      // Don't crash - Prisma will retry on actual query
+      return
     }
-  })
-})
+    
+    // Call original handlers for other errors
+    originalUnhandledRejection.forEach((handler: any) => {
+      try {
+        handler(reason, promise)
+      } catch (e) {
+        // Ignore handler errors
+      }
+    })
+  }
+  
+  prismaErrorHandler.name = 'prismaErrorHandler'
+  process.on('unhandledRejection', prismaErrorHandler)
+}
 
 // Query statistics tracker
 export const queryStats = {

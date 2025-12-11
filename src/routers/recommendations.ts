@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod'
-import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, protectedProcedure, publicProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import {
   getForYouRecommendations,
   getBecauseYouWatchedRecommendations,
@@ -20,13 +20,13 @@ import {
   getFansLikeYouRecommendations,
   trackInteraction,
   submitRecommendationFeedback
-} from '../lib/recommendations'
+} from '../lib/recommendations.js'
 import {
   findSimilarAnimeByEmbedding,
   searchBySemanticSimilarity,
   getEmbeddingStats,
   generateAllAnimeEmbeddings
-} from '../lib/ml-embeddings'
+} from '../lib/ml-embeddings.js'
 import { TRPCError } from '@trpc/server'
 
 export const recommendationsRouter = router({

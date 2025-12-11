@@ -5,8 +5,8 @@
  * including database, cache, external services, and business logic.
  */
 
-import { getDirectDbClient } from './db'
-import { cache } from './cache'
+import { getDirectDbClient } from './db.js'
+import { cache } from './cache.js'
 
 // Health check result interface
 interface HealthCheckResult {

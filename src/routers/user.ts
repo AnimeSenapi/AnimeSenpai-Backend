@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { getUserFeatures, hasFeatureAccess } from '../lib/roles'
-import { invalidateUserCaches } from '../lib/recommendations'
-import { createActivity } from '../lib/social'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { getUserFeatures, hasFeatureAccess } from '../lib/roles.js'
+import { invalidateUserCaches } from '../lib/recommendations.js'
+import { createActivity } from '../lib/social.js'
 import { TRPCError } from '@trpc/server'
-import { logger } from '../lib/logger'
+import { logger } from '../lib/logger.js'
 
 export const userRouter = router({
   // Get user's anime list with full anime details

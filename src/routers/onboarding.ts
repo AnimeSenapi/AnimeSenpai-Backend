@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import { TRPCError } from '@trpc/server'
 
 export const onboardingRouter = router({

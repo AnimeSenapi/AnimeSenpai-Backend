@@ -6,10 +6,10 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test'
-import { appRouter } from '../../routers'
-import { db } from '../../lib/db'
-import { cache } from '../../lib/cache'
-import { errorHandler } from '../../lib/error-handler'
+import { appRouter } from '../../routers.js'
+import { db } from '../../lib/db.js'
+import { cache } from '../../lib/cache.js'
+import { errorHandler } from '../../lib/error-handler.js'
 
 // Test data
 interface TestUser {
@@ -49,7 +49,7 @@ describe('API Integration Tests', () => {
     await clearTestData()
     
     // Initialize monitoring and error handling
-    const { monitoringService } = await import('../../lib/monitoring-service')
+    const { monitoringService } = await import('../../lib/monitoring-service.js')
     await monitoringService.start()
   })
 
@@ -58,7 +58,7 @@ describe('API Integration Tests', () => {
     await clearTestData()
     
     // Stop monitoring
-    const { monitoringService } = await import('../../lib/monitoring-service')
+    const { monitoringService } = await import('../../lib/monitoring-service.js')
     monitoringService.stop()
   })
 

@@ -5,10 +5,10 @@
  * Applies content filters before saving to exclude unwanted content.
  */
 
-import { db } from './db'
-import { logger } from './logger'
-import { shouldFilterAnimeFromJikanFull } from './anime-filter-utils'
-import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client'
+import { db } from './db.js'
+import { logger } from './logger.js'
+import { shouldFilterAnimeFromJikanFull } from './anime-filter-utils.js'
+import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)

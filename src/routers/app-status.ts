@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
-import { requireAdmin } from '../lib/roles'
-import { db } from '../lib/db'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc.js'
+import { requireAdmin } from '../lib/roles.js'
+import { db } from '../lib/db.js'
 import { promises as fs } from 'fs'
 import path from 'path'
 

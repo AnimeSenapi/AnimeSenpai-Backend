@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createError } from './errors'
+import { createError } from './errors.js'
 
 // Common validation schemas
 export const emailSchema = z

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../lib/trpc'
-import { logger } from '../lib/logger'
-import { db } from '../lib/db'
+import { publicProcedure, router } from '../lib/trpc.js'
+import { logger } from '../lib/logger.js'
+import { db } from '../lib/db.js'
 
 // Analytics Event Schema
 const AnalyticsEventSchema = z.object({

@@ -1,5 +1,5 @@
-import { AppError, ErrorCode } from './errors'
-import { getLoggerConfig, shouldLogCategory, LOG_CATEGORIES, type LogCategory } from './logger-config'
+import { AppError, ErrorCode } from './errors.js'
+import { getLoggerConfig, shouldLogCategory, LOG_CATEGORIES, type LogCategory } from './logger-config.js'
 
 export enum LogLevel {
   ERROR = 'error',

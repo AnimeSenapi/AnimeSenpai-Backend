@@ -1,94 +1,21 @@
 import { z } from 'zod'
-import { router, publicProcedure } from '../lib/trpc'
-import { db, getCacheStrategy } from '../lib/db'
+import { router, publicProcedure } from '../lib/trpc.js'
+import { db, getCacheStrategy } from '../lib/db.js'
 import { Prisma } from '@prisma/client'
-import { createSeriesEntries } from '../lib/series-grouping'
-import { ANIME_FILTERS } from '../types/anime-filters'
-
-// Content filter to exclude adult content (Hentai, explicit material)
-// Uses shared filter configuration from anime-filters.ts
-// Export for use in other routers (recommendations, social, etc.)
-export const getContentFilter = (): Prisma.AnimeWhereInput => {
-  const conditions: Prisma.AnimeWhereInput[] = []
-
-  // Exclude anime without genres (incomplete data)
-  // Anime must have at least one genre to be included if excludeWithoutGenres is enabled
-  if (ANIME_FILTERS.excludeWithoutGenres !== false) {
-    conditions.push({
-      genres: {
-        some: {} // Must have at least one genre
-      }
-    })
-  }
-
-  // Exclude anime without tags/themes (incomplete data)
-  // Anime must have at least one tag or theme if excludeWithoutTags is enabled
-  if (ANIME_FILTERS.excludeWithoutTags !== false) {
-    conditions.push({
-      OR: [
-        { themes: { isEmpty: false } }, // Has themes
-        { tags: { isEmpty: false } }, // Has tags
-        // If genres are allowed, they can count as tags
-        ...(ANIME_FILTERS.excludeWithoutGenres === false ? [{ genres: { some: {} } }] : [])
-      ]
-    })
-  }
-
-  // Exclude ratings
-  for (const excludedRating of ANIME_FILTERS.excludedRatings) {
-    conditions.push({
-      NOT: {
-        rating: { contains: excludedRating, mode: Prisma.QueryMode.insensitive }
-      }
-    })
-    // Also check for ratings that start with the excluded rating (e.g., "Rx")
-    if (excludedRating.length <= 5) {
-      conditions.push({
-        NOT: {
-          rating: { startsWith: excludedRating, mode: Prisma.QueryMode.insensitive }
-        }
-      })
-    }
-  }
-
-  // Exclude genres
-  if (ANIME_FILTERS.excludedGenres.length > 0) {
-    conditions.push({
-      NOT: {
-        genres: {
-          some: {
-            genre: {
-              name: { in: ANIME_FILTERS.excludedGenres, mode: Prisma.QueryMode.insensitive }
-            }
-          }
-        }
-      }
-    })
-  }
-
-  // Exclude non-anime types (Music, Manga, etc.)
-  if (ANIME_FILTERS.excludedTypes && ANIME_FILTERS.excludedTypes.length > 0) {
-    conditions.push({
-      NOT: {
-        type: { in: ANIME_FILTERS.excludedTypes, mode: Prisma.QueryMode.insensitive }
-      }
-    })
-  }
-
-  return {
-    AND: conditions
-  }
-}
+import { createSeriesEntries } from '../lib/series-grouping.js'
+import { ANIME_FILTERS } from '../types/anime-filters.js'
 
 // Configuration constants for children's show filtering
 // Uses shared filter configuration where applicable
 const CHILDRENS_DEMOGRAPHICS = ANIME_FILTERS.excludedDemographics
 const CHILDRENS_GENRES = ['Kids', ...ANIME_FILTERS.excludedGenres.filter(g => g.toLowerCase() !== 'hentai' && g.toLowerCase() !== 'erotica')]
-const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content
+const CHILDRENS_RATINGS = ['G', 'PG'] // Include PG as it's often children's content (PG-13 is too broad, includes many teen shows)
 const LONG_RUNNING_THRESHOLD_EPISODES = ANIME_FILTERS.longRunningThresholdEpisodes ?? 100
 const LONG_RUNNING_YEARS_OLD = ANIME_FILTERS.longRunningThresholdYears ?? 5
 const EDUCATIONAL_THEMES = ANIME_FILTERS.excludedThemes
-const MIN_QUALITY_RATING_FOR_EXCEPTION = 7.5 // Allow highly-rated anime even if they match children's criteria
+// Stricter exception threshold - require BOTH high rating AND high popularity to bypass children's filter
+const MIN_QUALITY_RATING_FOR_EXCEPTION = 8.0 // Raised from 7.5 - only truly exceptional anime bypass
+const MIN_POPULARITY_FOR_EXCEPTION = 5000 // Require significant popularity to bypass
 
 // Children's show filter to automatically exclude children's content, educational shows, and long-running children's series
 // Uses database metadata (demographics, genres, ratings, themes) instead of hardcoded title patterns
@@ -169,7 +96,7 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
 
   return {
     AND: [
-      // Exclude anime that match children's criteria UNLESS they're highly rated
+      // Exclude anime that match children's criteria UNLESS they're both highly rated AND very popular
       {
         NOT: {
           AND: [
@@ -177,18 +104,20 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
             {
               OR: childrensIndicators
             },
-            // BUT exclude if it's highly rated (exception for quality anime)
+            // BUT allow exception ONLY if BOTH conditions are met (stricter filtering)
             {
               NOT: {
-                averageRating: { gte: MIN_QUALITY_RATING_FOR_EXCEPTION }
-              }
-            },
-            // AND exclude if it's very popular (exception for popular anime)
-            {
-              NOT: {
-                OR: [
-                  { viewCount: { gte: 2000 } },
-                  { popularity: { gte: 2000 } }
+                AND: [
+                  // Must have exceptional rating
+                  { averageRating: { gte: MIN_QUALITY_RATING_FOR_EXCEPTION } },
+                  // AND must have significant popularity (viewCount OR popularity OR members)
+                  {
+                    OR: [
+                      { viewCount: { gte: MIN_POPULARITY_FOR_EXCEPTION } },
+                      { popularity: { gte: MIN_POPULARITY_FOR_EXCEPTION } },
+                      { members: { gte: MIN_POPULARITY_FOR_EXCEPTION } }
+                    ]
+                  }
                 ]
               }
             }
@@ -199,6 +128,87 @@ export const getChildrensShowFilter = (): Prisma.AnimeWhereInput => {
   }
 }
 
+// Content filter to exclude adult content (Hentai, explicit material)
+// Uses shared filter configuration from anime-filters.ts
+// Export for use in other routers (recommendations, social, etc.)
+export const getContentFilter = (): Prisma.AnimeWhereInput => {
+  const conditions: Prisma.AnimeWhereInput[] = []
+
+  // Exclude anime without genres (incomplete data)
+  // Anime must have at least one genre to be included if excludeWithoutGenres is enabled
+  if (ANIME_FILTERS.excludeWithoutGenres !== false) {
+    conditions.push({
+      genres: {
+        some: {} // Must have at least one genre
+      }
+    })
+  }
+
+  // Exclude anime without tags/themes (incomplete data)
+  // Anime must have at least one tag or theme if excludeWithoutTags is enabled
+  if (ANIME_FILTERS.excludeWithoutTags !== false) {
+    conditions.push({
+      OR: [
+        { themes: { isEmpty: false } }, // Has themes
+        { tags: { isEmpty: false } }, // Has tags
+        // If genres are allowed, they can count as tags
+        ...(ANIME_FILTERS.excludeWithoutGenres === false ? [{ genres: { some: {} } }] : [])
+      ]
+    })
+  }
+
+  // Exclude ratings
+  for (const excludedRating of ANIME_FILTERS.excludedRatings) {
+    conditions.push({
+      NOT: {
+        rating: { contains: excludedRating, mode: Prisma.QueryMode.insensitive }
+      }
+    })
+    // Also check for ratings that start with the excluded rating (e.g., "Rx")
+    if (excludedRating.length <= 5) {
+      conditions.push({
+        NOT: {
+          rating: { startsWith: excludedRating, mode: Prisma.QueryMode.insensitive }
+        }
+      })
+    }
+  }
+
+  // Exclude genres
+  if (ANIME_FILTERS.excludedGenres.length > 0) {
+    conditions.push({
+      NOT: {
+        genres: {
+          some: {
+            genre: {
+              name: { in: ANIME_FILTERS.excludedGenres, mode: Prisma.QueryMode.insensitive }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  // Exclude non-anime types (Music, Manga, etc.)
+  if (ANIME_FILTERS.excludedTypes && ANIME_FILTERS.excludedTypes.length > 0) {
+    conditions.push({
+      NOT: {
+        type: { in: ANIME_FILTERS.excludedTypes, mode: Prisma.QueryMode.insensitive }
+      }
+    })
+  }
+
+  // Include children's show filter to exclude children's content
+  const childrensFilter = getChildrensShowFilter()
+  const childrensFilterConditions = Array.isArray(childrensFilter.AND) ? childrensFilter.AND : []
+  if (childrensFilterConditions.length > 0) {
+    conditions.push(...childrensFilterConditions)
+  }
+
+  return {
+    AND: conditions
+  }
+}
 // Quality filter to exclude obscure anime that no one has heard of
 // Filters out low-quality anime based on rating, popularity, and view count
 // More nuanced approach: different thresholds for different eras and considers multiple quality indicators
@@ -762,7 +772,7 @@ export const animeRouter = router({
         buildSeasonGraph, 
         validateSeasonOrder,
         mergeSeasonsFromSources
-      } = await import('../lib/series-grouping')
+      } = await import('../lib/series-grouping.js')
 
       // PRIMARY: Try to get seasons from database relationships
       let dbSeasons = await buildSeasonGraph(anime.id)

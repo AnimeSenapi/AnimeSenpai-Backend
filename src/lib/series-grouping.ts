@@ -3,7 +3,7 @@
  * Groups anime seasons/sequels into series like Crunchyroll
  */
 
-import { db } from './db'
+import { db } from './db.js'
 
 export interface SeasonInfo {
   seasonNumber: number

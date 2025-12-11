@@ -3,7 +3,7 @@
  * Handles all operations related to user anime reviews
  */
 
-import { db } from '../db'
+import { db } from '../db.js'
 
 export interface ReviewQueryParams {
   userId: string

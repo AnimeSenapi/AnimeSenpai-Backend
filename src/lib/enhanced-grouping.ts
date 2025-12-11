@@ -5,7 +5,7 @@
  * with learned pattern confidence scores for improved accuracy.
  */
 
-import { db } from './db'
+import { db } from './db.js'
 import {
   extractSeriesInfo,
   groupAnimeBySeriesName,
@@ -13,12 +13,12 @@ import {
   buildSeasonGraph,
   buildFranchiseGraph,
   identifyFranchiseRoot,
-} from './series-grouping'
+} from './series-grouping.js'
 import {
   getPatternConfidence,
   recordGroupingSuccess,
-} from './grouping-learning'
-import { logger } from './logger'
+} from './grouping-learning.js'
+import { logger } from './logger.js'
 
 // Import franchise building functions from series-grouping
 // These are defined in series-grouping.ts but need to be accessible here

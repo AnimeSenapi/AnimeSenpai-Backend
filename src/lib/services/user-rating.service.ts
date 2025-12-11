@@ -3,9 +3,9 @@
  * Handles anime rating operations
  */
 
-import { db } from '../db'
-import { invalidateUserCaches } from '../recommendations'
-import { createActivity } from '../social'
+import { db } from '../db.js'
+import { invalidateUserCaches } from '../recommendations.js'
+import { createActivity } from '../social.js'
 
 /**
  * Rate an anime

@@ -7,7 +7,7 @@
  * - Beta testing access control
  */
 
-import { db } from './db'
+import { db } from './db.js'
 import { TRPCError } from '@trpc/server'
 
 // Role definitions

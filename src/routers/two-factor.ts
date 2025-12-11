@@ -5,11 +5,11 @@
  */
 
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { createError } from '../lib/errors'
-import { EmailService } from '../lib/email'
-import { logAuth, extractLogContext } from '../lib/logger'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { createError } from '../lib/errors.js'
+import { EmailService } from '../lib/email.js'
+import { logAuth, extractLogContext } from '../lib/logger.js'
 
 /**
  * Generate a random 6-digit code

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, createCipher, createDecipher } from 'crypto'
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 interface SecretConfig {
   encryptionKey: string

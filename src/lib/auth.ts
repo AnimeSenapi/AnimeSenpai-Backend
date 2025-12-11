@@ -8,8 +8,8 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
-import { db } from './db'
-import { emailService } from './email'
+import { db } from './db.js'
+import { emailService } from './email.js'
 
 // JWT Configuration
 // Access tokens are short-lived (1 hour), refresh tokens last longer (30 days)

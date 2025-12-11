@@ -3,8 +3,8 @@
  * Logs all security-sensitive actions for compliance and forensics
  */
 
-import { db } from './db'
-import { logger } from './logger'
+import { db } from './db.js'
+import { logger } from './logger.js'
 
 /**
  * Audit event types

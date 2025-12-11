@@ -43,6 +43,7 @@ export const ANIME_FILTERS: AnimeFilters = {
     'Yuri', // Girls' Love
     'Shoujo Ai', // Girls' Love (alternative)
     'Shounen Ai', // Boys' Love (alternative)
+    'Kids', // Children's genre - explicitly exclude
   ],
 
   // Ratings to exclude (case-insensitive matching)
@@ -74,6 +75,7 @@ export const ANIME_FILTERS: AnimeFilters = {
     'Kids', // Children's content tags
     'Children', // Children's content tags
     'Preschool', // Preschool content
+    'Family', // Family-friendly content (often children's shows)
   ],
 
   // Anime types to exclude (non-anime content)

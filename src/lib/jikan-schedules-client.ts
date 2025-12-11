@@ -5,10 +5,10 @@
  * Uses /schedules endpoint which provides actual episode airing times
  */
 
-import { logger } from './logger'
-import { db } from './db'
-import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils'
-import { fetchAnimeFromJikan, syncAnimeToDatabase } from './anime-sync'
+import { logger } from './logger.js'
+import { db } from './db.js'
+import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils.js'
+import { fetchAnimeFromJikan, syncAnimeToDatabase } from './anime-sync.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)

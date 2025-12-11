@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test'
-import { appRouter } from '../../routers'
-import { db } from '../../lib/db'
-import { hashPassword } from '../../lib/auth'
+import { appRouter } from '../../routers.js'
+import { db } from '../../lib/db.js'
+import { hashPassword } from '../../lib/auth.js'
 
 describe('Auth Integration Tests', () => {
   let testUserId: string

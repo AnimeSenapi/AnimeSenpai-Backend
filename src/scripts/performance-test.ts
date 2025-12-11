@@ -4,7 +4,7 @@
  * Tests all major endpoints and features for speed and reliability
  */
 
-import { db } from '../lib/db'
+import { db } from '../lib/db.js'
 
 interface TestResult {
   name: string

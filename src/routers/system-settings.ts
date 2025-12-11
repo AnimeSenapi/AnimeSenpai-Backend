@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { router, protectedProcedure, publicProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
-import { requireAdmin } from '../lib/roles'
+import { router, protectedProcedure, publicProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { requireAdmin } from '../lib/roles.js'
 import { TRPCError } from '@trpc/server'
-import { logger } from '../lib/logger'
+import { logger } from '../lib/logger.js'
 
 export const systemSettingsRouter = router({
   /**

@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../lib/trpc'
-import { db } from '../lib/db'
-import { logger } from '../lib/logger'
+import { publicProcedure, router } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
+import { logger } from '../lib/logger.js'
 
 interface HealthStatus {
   status: 'healthy' | 'unhealthy' | 'degraded'

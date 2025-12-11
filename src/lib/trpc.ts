@@ -1,10 +1,10 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { Prisma } from '../../generated/prisma/client/client.js'
-import { verifyAccessToken } from './auth'
-import { db } from './db'
-import { appErrorToTRPCError, handleError, createError } from './errors'
-import { logger, extractLogContext } from './logger'
-import { validateInput } from './validation'
+import { verifyAccessToken } from './auth.js'
+import { db } from './db.js'
+import { appErrorToTRPCError, handleError, createError } from './errors.js'
+import { logger, extractLogContext } from './logger.js'
+import { validateInput } from './validation.js'
 
 // Initialize tRPC with enhanced error formatting
 const t = initTRPC.context<Context>().create({
@@ -85,7 +85,7 @@ const rateLimitMiddleware = t.middleware(async ({ next, ctx, path }) => {
   
   try {
     // Import rate limiter
-    const { checkRateLimit } = await import('./rate-limiter')
+    const { checkRateLimit } = await import('./rate-limiter.js')
     
     // Use IP address as identifier for unauthenticated requests
     const identifier = ctx.user?.id || ipAddress
@@ -135,7 +135,7 @@ const csrfProtect = t.middleware(async ({ next, ctx }) => {
   const cookie = ctx.req.headers.get('cookie') || ''
   const headerToken = ctx.req.headers.get('x-csrf-token') || ''
   const cookieToken = cookie.split(';').map(s => s.trim()).find(s => s.startsWith('csrf_token='))?.split('=')[1] || ''
-  const { verifyDoubleSubmitToken } = await import('./csrf')
+  const { verifyDoubleSubmitToken } = await import('./csrf.js')
   if (!verifyDoubleSubmitToken(cookieToken, headerToken)) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'CSRF validation failed' })
   }

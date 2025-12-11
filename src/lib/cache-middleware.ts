@@ -5,8 +5,8 @@
  * with support for cache invalidation and conditional caching.
  */
 
-import { cache, CacheUtils, CACHE_TTL } from './cache'
-import { logger } from './logger'
+import { cache, CacheUtils, CACHE_TTL } from './cache.js'
+import { logger } from './logger.js'
 
 // Cache configuration for different endpoint types
 interface CacheConfig {

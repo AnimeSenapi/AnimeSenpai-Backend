@@ -10,9 +10,9 @@
  * Performance: Cached vectors, optimized computations.
  */
 
-import { db } from './db'
-import { cache } from './cache'
-import { sanitizeHtml } from './validation'
+import { db } from './db.js'
+import { cache } from './cache.js'
+import { sanitizeHtml } from './validation.js'
 
 // Security: Common words to filter out (stop words)
 const STOP_WORDS = new Set([

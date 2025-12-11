@@ -3,8 +3,8 @@
  */
 
 import { beforeEach, afterEach } from 'bun:test'
-import { db } from '../../lib/db'
-import type { Context } from '../../lib/trpc'
+import { db } from '../../lib/db.js'
+import type { Context } from '../../lib/trpc.js'
 
 // Mock request object
 export function createMockRequest(overrides?: Partial<Request>): Request {

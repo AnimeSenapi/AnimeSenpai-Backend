@@ -6,11 +6,11 @@
  */
 
 import { z } from 'zod'
-import { router, protectedProcedure } from '../lib/trpc'
-import { db } from '../lib/db'
+import { router, protectedProcedure } from '../lib/trpc.js'
+import { db } from '../lib/db.js'
 import { TRPCError } from '@trpc/server'
-import { logger, extractLogContext } from '../lib/logger'
-import { checkRateLimit } from '../lib/rate-limiter'
+import { logger, extractLogContext } from '../lib/logger.js'
+import { checkRateLimit } from '../lib/rate-limiter.js'
 
 export const messagingRouter = router({
   /**

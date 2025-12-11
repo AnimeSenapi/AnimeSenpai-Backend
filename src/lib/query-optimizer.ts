@@ -5,8 +5,8 @@
  * for database operations in the AnimeSenpai backend.
  */
 
-import { getBaseClientForEvents } from './db'
-import { logger } from './logger'
+import { getBaseClientForEvents } from './db.js'
+import { logger } from './logger.js'
 
 // Query performance metrics
 interface QueryMetrics {

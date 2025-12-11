@@ -5,8 +5,8 @@
  * for the AnimeSenpai backend system.
  */
 
-import { AppError, ErrorCode } from './errors'
-import { logger } from './logger'
+import { AppError, ErrorCode } from './errors.js'
+import { logger } from './logger.js'
 
 // Error context interface
 interface ErrorContext {

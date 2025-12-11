@@ -8,7 +8,7 @@
  * - Suspicious activity detection
  */
 
-import { logger } from './logger'
+import { logger } from './logger.js'
 import { TRPCError } from '@trpc/server'
 
 // In-memory rate limiter for admin actions

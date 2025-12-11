@@ -4,10 +4,10 @@
  * Simple test script to verify the grouping system works correctly
  */
 
-import { db } from '../lib/db'
-import { groupAnimeWithLearning, getAnimeGrouping } from '../lib/enhanced-grouping'
-import { getGroupingStatistics, getTopPatterns } from '../lib/grouping-learning'
-import { logger } from '../lib/logger'
+import { db } from '../lib/db.js'
+import { groupAnimeWithLearning, getAnimeGrouping } from '../lib/enhanced-grouping.js'
+import { getGroupingStatistics, getTopPatterns } from '../lib/grouping-learning.js'
+import { logger } from '../lib/logger.js'
 
 async function testGrouping() {
   logger.info('Starting grouping system test...')

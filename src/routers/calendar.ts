@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure } from '../lib/trpc'
-import { db, getCacheStrategy } from '../lib/db'
-import { getContentFilter, getQualityFilter } from './anime'
-import { generateEpisodeSchedule } from '../lib/broadcast-parser'
-import { logger } from '../lib/logger'
-import { syncAiringAnimeCalendarData, syncAnimeById } from '../lib/calendar-sync'
+import { router, publicProcedure, protectedProcedure } from '../lib/trpc.js'
+import { db, getCacheStrategy } from '../lib/db.js'
+import { getContentFilter, getQualityFilter } from './anime.js'
+import { generateEpisodeSchedule } from '../lib/broadcast-parser.js'
+import { logger } from '../lib/logger.js'
+import { syncAiringAnimeCalendarData, syncAnimeById } from '../lib/calendar-sync.js'
 import { Prisma } from '@prisma/client'
 
 export const calendarRouter = router({

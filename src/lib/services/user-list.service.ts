@@ -3,10 +3,10 @@
  * Handles all operations related to user anime lists
  */
 
-import { db } from '../db'
-import { logger } from '../logger'
-import { createActivity } from '../social'
-import { invalidateUserCaches } from '../recommendations'
+import { db } from '../db.js'
+import { logger } from '../logger.js'
+import { createActivity } from '../social.js'
+import { invalidateUserCaches } from '../recommendations.js'
 
 export interface ListQueryParams {
   userId: string

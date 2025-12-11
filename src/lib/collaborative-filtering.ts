@@ -10,8 +10,8 @@
  * Performance: Pre-computed similarities cached for fast lookups.
  */
 
-import { db } from './db'
-import { cache } from './cache'
+import { db } from './db.js'
+import { cache } from './cache.js'
 
 interface UserRatingVector {
   userId: string

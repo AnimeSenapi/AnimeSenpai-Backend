@@ -5,8 +5,8 @@
  * for the AnimeSenpai backend system.
  */
 
-import { logger } from './logger'
-import { cache } from './cache'
+import { logger } from './logger.js'
+import { cache } from './cache.js'
 
 // Performance metrics interface
 interface PerformanceMetrics {

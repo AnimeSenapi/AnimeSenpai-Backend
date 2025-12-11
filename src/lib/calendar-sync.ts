@@ -5,14 +5,14 @@
  * Updates broadcast schedules, episode counts, and air dates
  */
 
-import { db } from './db'
-import { logger } from './logger'
+import { db } from './db.js'
+import { logger } from './logger.js'
 import { getContentFilter } from '../routers/anime'
-import { syncAnimeCalendarDataFromAniList } from './anilist-client'
-import { syncCalendarDataFromJikanSchedules } from './jikan-schedules-client'
-import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client'
-import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils'
-import { fetchAnimeFromJikan as fetchFullAnimeFromJikan, syncAnimeToDatabase } from './anime-sync'
+import { syncAnimeCalendarDataFromAniList } from './anilist-client.js'
+import { syncCalendarDataFromJikanSchedules } from './jikan-schedules-client.js'
+import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client.js'
+import { shouldFilterAnimeFromJikanData, shouldFilterAnimeFromJikanFull, type JikanAnimePartial } from './anime-filter-utils.js'
+import { fetchAnimeFromJikan as fetchFullAnimeFromJikan, syncAnimeToDatabase } from './anime-sync.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)

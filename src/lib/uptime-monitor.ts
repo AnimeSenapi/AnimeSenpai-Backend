@@ -1,5 +1,5 @@
-import { logger } from './logger'
-import { sendUptimeAlert } from './alerts'
+import { logger } from './logger.js'
+import { sendUptimeAlert } from './alerts.js'
 
 interface HealthCheck {
   service: string
@@ -160,7 +160,7 @@ class UptimeMonitor {
   private async checkDatabaseHealth(): Promise<HealthCheck> {
     try {
       // Import db from our extended client (includes Optimize and Accelerate)
-      const { db } = await import('./db')
+      const { db } = await import('./db.js')
       
       // Simple query to check database connectivity (use count instead of raw query for Prisma Accelerate compatibility)
       await db.user.count()

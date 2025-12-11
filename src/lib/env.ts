@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 // Comprehensive environment validation schema
 const serverEnvSchema = z.object({

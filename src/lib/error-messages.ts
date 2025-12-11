@@ -3,7 +3,7 @@
  * Centralized user-friendly error messages for consistent error handling
  */
 
-import { ErrorCode } from './errors'
+import { ErrorCode } from './errors.js'
 
 export interface ErrorMessageConfig {
   userMessage: string

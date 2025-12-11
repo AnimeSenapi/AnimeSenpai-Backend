@@ -6,7 +6,7 @@
  * Uses in-memory storage with automatic cleanup.
  */
 
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 // Cache entry interface
 interface CacheEntry<T = any> {

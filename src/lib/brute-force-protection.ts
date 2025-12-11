@@ -4,7 +4,7 @@
  */
 
 import { TRPCError } from '@trpc/server'
-import { db } from './db'
+import { db } from './db.js'
 
 // Configuration
 const MAX_LOGIN_ATTEMPTS = 5

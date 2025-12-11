@@ -16,14 +16,14 @@
  * Built for performance, security, and personalization.
  */
 
-import { db, getCacheStrategy } from './db'
+import { db, getCacheStrategy } from './db.js'
 import { 
   getCollaborativeRecommendations, 
   invalidateUserSimilarityCache as invalidateCFCache
-} from './collaborative-filtering'
+} from './collaborative-filtering.js'
 import {
   findSimilarAnimeByEmbedding
-} from './ml-embeddings'
+} from './ml-embeddings.js'
 
 // Weights for content-based similarity scoring
 const WEIGHTS = {

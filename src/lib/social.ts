@@ -8,7 +8,7 @@
  * Performance: Cached queries, optimized friend lists
  */
 
-import { db } from './db'
+import { db } from './db.js'
 import { TRPCError } from '@trpc/server'
 
 export interface FriendProfile {

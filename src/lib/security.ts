@@ -5,8 +5,8 @@
  * threat detection, and security monitoring for the AnimeSenpai backend.
  */
 
-import { logger } from './logger'
-import { db } from './db'
+import { logger } from './logger.js'
+import { db } from './db.js'
 
 // Security threat types
 enum ThreatType {

@@ -5,8 +5,8 @@
  * to continuously improve anime grouping accuracy.
  */
 
-import { db } from './db'
-import { logger } from './logger'
+import { db } from './db.js'
+import { logger } from './logger.js'
 
 export type PatternType = 'title_pattern' | 'relationship_type' | 'studio_match' | 'year_proximity' | 'fuzzy_match'
 

@@ -5,7 +5,7 @@
  * Uses /seasons/now and /seasons/upcoming endpoints
  */
 
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)

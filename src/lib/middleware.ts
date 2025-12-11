@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
-import { AppError, createError, handleError, formatErrorResponse } from './errors'
-import { logger, extractLogContext, generateRequestId } from './logger'
+import { AppError, createError, handleError, formatErrorResponse } from './errors.js'
+import { logger, extractLogContext, generateRequestId } from './logger.js'
 
 // Request timing middleware
 export function requestTimingMiddleware(req: Request, res: Response, next: Function) {

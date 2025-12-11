@@ -7,7 +7,7 @@
  */
 
 import { TRPCError } from '@trpc/server'
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 interface RateLimitEntry {
   count: number

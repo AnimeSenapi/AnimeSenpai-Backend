@@ -3,7 +3,7 @@
  * For production with multiple servers, consider BullMQ with Redis
  */
 
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 function isDatabaseConnectionError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -322,7 +322,7 @@ export function scheduleSessionCleanup() {
     'session-cleanup',
     async () => {
       try {
-        const { getDbWithoutOptimize } = await import('./db')
+        const { getDbWithoutOptimize } = await import('./db.js')
         const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
         
         // Delete sessions older than 30 days
@@ -355,7 +355,7 @@ export function scheduleTrendingUpdate() {
   jobQueue.schedule(
     'trending-update',
     async () => {
-      const { getDbWithoutOptimize } = await import('./db')
+      const { getDbWithoutOptimize } = await import('./db.js')
       const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
       
       // This is a placeholder - implement your trending algorithm
@@ -421,7 +421,7 @@ export function scheduleTokenCleanup() {
     'token-cleanup',
     async () => {
       try {
-        const { getDbWithoutOptimize } = await import('./db')
+        const { getDbWithoutOptimize } = await import('./db.js')
         const db = getDbWithoutOptimize() // Use client without Optimize to avoid tracing issues
         
         const now = new Date()
@@ -454,7 +454,7 @@ export function scheduleTokenCleanup() {
 export function scheduleCalendarSync() {
   const syncHandler = async () => {
     try {
-      const { syncAiringAnimeCalendarData } = await import('./calendar-sync')
+      const { syncAiringAnimeCalendarData } = await import('./calendar-sync.js')
       await syncAiringAnimeCalendarData()
     } catch (error) {
       logger.error('Calendar sync job failed', error as Error, {}, {})
@@ -484,7 +484,7 @@ export function scheduleCalendarSync() {
 export function scheduleAnimeDataSync() {
   const syncHandler = async () => {
     try {
-      const { syncDailyAnimeData } = await import('./anime-sync')
+      const { syncDailyAnimeData } = await import('./anime-sync.js')
       await syncDailyAnimeData()
     } catch (error) {
       logger.error('Anime data sync job failed', error as Error, {}, {})
@@ -516,7 +516,7 @@ export function scheduleGroupingLearning() {
     'grouping-learning',
     async () => {
       try {
-        const { updatePatternWeights, decayOldPatterns } = await import('./grouping-learning')
+        const { updatePatternWeights, decayOldPatterns } = await import('./grouping-learning.js')
         
         logger.system('Starting grouping learning job...', {}, {})
         

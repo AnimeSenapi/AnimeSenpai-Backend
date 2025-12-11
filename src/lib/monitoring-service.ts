@@ -11,10 +11,10 @@
  * - Performance monitoring
  */
 
-import { logger } from './logger'
-import { cache } from './cache'
-import { db } from './db'
-import { sendAlert } from './alerts'
+import { logger } from './logger.js'
+import { cache } from './cache.js'
+import { db } from './db.js'
+import { sendAlert } from './alerts.js'
 
 // Monitoring configuration
 interface MonitoringConfig {
@@ -284,7 +284,7 @@ class MonitoringService {
   }> {
     try {
       // Use client without Optimize to avoid tracing issues in monitoring context
-      const { getDbWithoutOptimize } = await import('./db')
+      const { getDbWithoutOptimize } = await import('./db.js')
       const dbWithoutOptimize = getDbWithoutOptimize()
       
       const [activeUsers, totalAnime, totalReviews, newUsersToday] = await Promise.all([

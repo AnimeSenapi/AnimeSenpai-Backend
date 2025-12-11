@@ -5,7 +5,7 @@
  * Used by both anime-sync.ts and calendar-sync.ts to ensure unified filtering.
  */
 
-import { ANIME_FILTERS } from '../types/anime-filters'
+import { ANIME_FILTERS } from '../types/anime-filters.js'
 
 // Pre-compute lowercase sets for O(1) lookups (performance optimization)
 const EXCLUDED_GENRES_SET = new Set(ANIME_FILTERS.excludedGenres.map(g => g.toLowerCase()))

@@ -1,4 +1,4 @@
-import { logger } from './logger'
+import { logger } from './logger.js'
 
 interface RetryConfig {
   maxAttempts: number
@@ -280,7 +280,7 @@ export async function retryWithCircuitBreaker<T>(
   retryConfig: RetryConfig,
   circuitBreakerName: string
 ): Promise<T> {
-  const { circuitBreakerManager } = await import('./circuit-breaker')
+  const { circuitBreakerManager } = await import('./circuit-breaker.js')
   const circuitBreaker = circuitBreakerManager.getBreaker(circuitBreakerName)
   
   if (!circuitBreaker) {

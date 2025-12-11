@@ -3,7 +3,7 @@
  * Handles user statistics and profile data
  */
 
-import { db } from '../db'
+import { db } from '../db.js'
 
 /**
  * Get user statistics

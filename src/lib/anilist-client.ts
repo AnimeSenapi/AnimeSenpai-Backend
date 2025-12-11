@@ -5,8 +5,8 @@
  * AniList GraphQL API: https://anilist.co/graphiql
  */
 
-import { logger } from './logger'
-import { db } from './db'
+import { logger } from './logger.js'
+import { db } from './db.js'
 
 const ANILIST_API_URL = 'https://graphql.anilist.co'
 const RATE_LIMIT_DELAY = 700 // 700ms = ~85 req/min (under 90 req/min limit)

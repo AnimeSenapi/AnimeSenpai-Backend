@@ -1,5 +1,5 @@
-import { logger } from './logger'
-import { sendAlert } from './alerts'
+import { logger } from './logger.js'
+import { sendAlert } from './alerts.js'
 
 interface ErrorMetrics {
   timestamp: number

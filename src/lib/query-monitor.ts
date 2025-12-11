@@ -1,5 +1,5 @@
-import { logger } from './logger'
-import { sendAlert, sendPerformanceAlert } from './alerts'
+import { logger } from './logger.js'
+import { sendAlert, sendPerformanceAlert } from './alerts.js'
 
 interface QueryMetrics {
   timestamp: number

@@ -10,7 +10,6 @@
     "@prisma/adapter-pg": "^7.1.0",
     "@prisma/client": "^7.1.0",
     "@prisma/extension-accelerate": "^3.0.1",
-    "@prisma/extension-optimize": "^2.0.0",
     "@prisma/instrumentation": "^7.1.0",
     "@trpc/client": "^10.45.0",
     "@trpc/server": "^10.45.0",
@@ -55,6 +54,9 @@
     "esbuild": "^0.25.10",
     "undici": "^7.16.0",
     "path-to-regexp": "^6.3.0"
+  },
+  "optionalDependencies": {
+    "@prisma/extension-optimize": "^2.0.0"
   },
   "scripts": {
     "dev": "bun run --hot src/index.ts",

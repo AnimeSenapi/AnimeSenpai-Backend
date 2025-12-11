@@ -10,7 +10,6 @@
         "@prisma/adapter-pg": "^7.1.0",
         "@prisma/client": "^7.1.0",
         "@prisma/extension-accelerate": "^3.0.1",
-        "@prisma/extension-optimize": "^2.0.0",
         "@prisma/instrumentation": "^7.1.0",
         "@trpc/client": "^10.45.0",
         "@trpc/server": "^10.45.0",
@@ -45,6 +44,9 @@
         "@vercel/node": "4.0.0",
         "eslint": "^8.57.0",
         "eslint-plugin-eslint-comments": "^3.2.0",
+      },
+      "optionalDependencies": {
+        "@prisma/extension-optimize": "^2.0.0",
       },
     },
   },
@@ -178,7 +180,7 @@
 
     "@opentelemetry/sdk-trace-base": ["@opentelemetry/sdk-trace-base@1.30.1", "", { "dependencies": { "@opentelemetry/core": "1.30.1", "@opentelemetry/resources": "1.30.1", "@opentelemetry/semantic-conventions": "1.28.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.0.0 <1.10.0" } }, "sha512-jVPgBbH1gCy2Lb7X0AVQ8XAfgg0pJ4nvl8/IiQA6nxOsPvS+0zMJaFSs2ltXe0J6C8dqjcnpyqINDJmU30+uOg=="],
 
-    "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.28.0", "", {}, "sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA=="],
+    "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.22.0", "", {}, "sha512-CAOgFOKLybd02uj/GhCdEeeBjOS0yeoDeo/CA7ASBSmenpZHAKGB3iDm/rv3BQLcabb/OprDEsSQ1y0P8A7Siw=="],
 
     "@prisma/adapter-pg": ["@prisma/adapter-pg@7.1.0", "", { "dependencies": { "@prisma/driver-adapter-utils": "7.1.0", "pg": "^8.16.3", "postgres-array": "3.0.4" } }, "sha512-DSAnUwkKfX4bUzhkrjGN4IBQzwg0nvFw2W17H0Oa532I5w9nLtTJ9mAEGDs1nUBEGRAsa0c7qsf8CSgfJ4DsBQ=="],
 
@@ -988,6 +990,12 @@
 
     "zod": ["zod@3.25.76", "", {}, ""],
 
+    "@opentelemetry/core/@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.28.0", "", {}, "sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA=="],
+
+    "@opentelemetry/resources/@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.28.0", "", {}, "sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA=="],
+
+    "@opentelemetry/sdk-trace-base/@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.28.0", "", {}, "sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA=="],
+
     "@prisma/driver-adapter-utils/@prisma/debug": ["@prisma/debug@7.1.0", "", {}, "sha512-pPAckG6etgAsEBusmZiFwM9bldLSNkn++YuC4jCTJACdK5hLOVnOzX7eSL2FgaU6Gomd6wIw21snUX2dYroMZQ=="],
 
     "@prisma/engines/@prisma/debug": ["@prisma/debug@7.1.0", "", {}, "sha512-pPAckG6etgAsEBusmZiFwM9bldLSNkn++YuC4jCTJACdK5hLOVnOzX7eSL2FgaU6Gomd6wIw21snUX2dYroMZQ=="],
@@ -995,8 +1003,6 @@
     "@prisma/engines/@prisma/get-platform": ["@prisma/get-platform@7.1.0", "", { "dependencies": { "@prisma/debug": "7.1.0" } }, "sha512-lq8hMdjKiZftuT5SssYB3EtQj8+YjL24/ZTLflQqzFquArKxBcyp6Xrblto+4lzIKJqnpOjfMiBjMvl7YuD7+Q=="],
 
     "@prisma/extension-optimize/@opentelemetry/instrumentation": ["@opentelemetry/instrumentation@0.53.0", "", { "dependencies": { "@opentelemetry/api-logs": "0.53.0", "@types/shimmer": "^1.2.0", "import-in-the-middle": "^1.8.1", "require-in-the-middle": "^7.1.1", "semver": "^7.5.2", "shimmer": "^1.2.1" }, "peerDependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-DMwg0hy4wzf7K73JJtl95m/e0boSoWhH07rfvHvYzQtBD3Bmv0Wc1x733vyZBqmFm8OjJD0/pfiUg1W3JjFX0A=="],
-
-    "@prisma/extension-optimize/@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.22.0", "", {}, "sha512-CAOgFOKLybd02uj/GhCdEeeBjOS0yeoDeo/CA7ASBSmenpZHAKGB3iDm/rv3BQLcabb/OprDEsSQ1y0P8A7Siw=="],
 
     "@prisma/extension-optimize/zod": ["zod@3.25.56", "", {}, "sha512-rd6eEF3BTNvQnR2e2wwolfTmUTnp70aUTqr0oaGbHifzC3BKJsoV+Gat8vxUMR1hwOKBs6El+qWehrHbCpW6SQ=="],
 

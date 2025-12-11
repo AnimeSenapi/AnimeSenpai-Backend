@@ -1,9 +1,12 @@
 import { PrismaClient } from '../../generated/prisma/client/client.js'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { withAccelerate } from '@prisma/extension-accelerate'
-import { withOptimize } from '@prisma/extension-optimize'
 import { logger } from './logger'
 import pg from 'pg'
+
+// Note: @prisma/extension-optimize@2.0.0 is not compatible with Prisma v7
+// It only supports Prisma Client v5.x and v6.x
+// Optimize functionality is disabled until a v7-compatible version is released
 
 const globalForPrisma = globalThis as unknown as {
   prisma: any | undefined
@@ -61,33 +64,17 @@ function createPrismaClient() {
 
   let client: any = baseClient
 
-  // IMPORTANT: Extension order matters!
-  // Apply Optimize (requires tracing instrumentation) before Accelerate
+  // Note: Prisma Optimize extension is temporarily disabled
+  // @prisma/extension-optimize@2.0.0 only supports Prisma Client v5.x and v6.x
+  // It is not compatible with Prisma v7. Optimize will be re-enabled when a v7-compatible version is released
   const optimizeApiKey = process.env.OPTIMIZE_API_KEY?.trim()
   const enableOptimize = process.env.ENABLE_PRISMA_OPTIMIZE === 'true'
-
+  
   if (optimizeApiKey && enableOptimize) {
-    logger.info('Prisma Optimize enabled', {
-      dashboard: 'https://optimize.prisma.io',
-      apiKeyPreview: `${optimizeApiKey.substring(0, 10)}...${optimizeApiKey.substring(optimizeApiKey.length - 4)}`,
-      environment: process.env.NODE_ENV || 'development',
-      note: 'Make sure tracing instrumentation is initialized before queries (see src/lib/tracing.ts)'
-    })
-    
-    try {
-      const optimizeConfig: any = {
-        apiKey: optimizeApiKey,
-        enable: true,
-      }
-      
-      client = client.$extends(withOptimize(optimizeConfig))
-      console.log('   ✅ Optimize extension loaded successfully')
-    } catch (error: any) {
-      console.error('   ❌ Failed to load Optimize extension:', error?.message || error)
-      console.error('   Stack:', error?.stack)
-    }
-  } else if (optimizeApiKey && !enableOptimize) {
-    console.log('⚠️  Prisma Optimize: DISABLED - Set ENABLE_PRISMA_OPTIMIZE="true" to enable Optimize extension')
+    console.log('⚠️  Prisma Optimize: DISABLED - Not compatible with Prisma v7')
+    console.log('   @prisma/extension-optimize@2.0.0 only supports Prisma Client v5.x and v6.x')
+    console.log('   Optimize will be re-enabled when a Prisma v7-compatible version is released')
+    console.log('   For now, only Accelerate caching is available')
   }
 
   // Apply Accelerate extension

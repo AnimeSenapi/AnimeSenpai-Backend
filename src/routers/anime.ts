@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { router, publicProcedure } from '../lib/trpc.js'
-import { db, getCacheStrategy } from '../lib/db.js'
+import { db, getCacheStrategy, safeQuery } from '../lib/db.js'
 import { Prisma } from '@prisma/client'
 import { createSeriesEntries } from '../lib/series-grouping.js'
 import { ANIME_FILTERS } from '../types/anime-filters.js'
+import { TRPCError } from '@trpc/server'
 
 // Configuration constants for children's show filtering
 // Uses shared filter configuration where applicable
@@ -487,49 +488,53 @@ export const animeRouter = router({
       }
 
       const [anime, total] = await Promise.all([
-        db.anime.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { [sortBy]: sortOrder },
-          ...getCacheStrategy(300), // 5 minutes - use Prisma Accelerate caching
-          select: {
-            id: true,
-            slug: true,
-            title: true,
-            titleEnglish: true,
-            titleJapanese: true,
-            titleSynonyms: true,
-            year: true,
-            rating: true,
-            status: true,
-            type: true,
-            episodes: true,
-            duration: true,
-            season: true,
-            coverImage: true,
-            bannerImage: true,
-            trailerUrl: true,
-            viewCount: true,
-            ratingCount: true,
-            averageRating: true,
-            genres: {
-              select: {
-                genre: {
-                  select: {
-                    name: true,
-                    slug: true,
+        safeQuery((cacheStrategy) => 
+          db.anime.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: { [sortBy]: sortOrder },
+            ...cacheStrategy,
+            select: {
+              id: true,
+              slug: true,
+              title: true,
+              titleEnglish: true,
+              titleJapanese: true,
+              titleSynonyms: true,
+              year: true,
+              rating: true,
+              status: true,
+              type: true,
+              episodes: true,
+              duration: true,
+              season: true,
+              coverImage: true,
+              bannerImage: true,
+              trailerUrl: true,
+              viewCount: true,
+              ratingCount: true,
+              averageRating: true,
+              genres: {
+                select: {
+                  genre: {
+                    select: {
+                      name: true,
+                      slug: true,
+                    }
                   }
-                }
-              },
-              take: 5 // Limit genres to top 5 for performance
+                },
+                take: 5 // Limit genres to top 5 for performance
+              }
             }
-          }
-        }),
-        db.anime.count({ 
-          where,
-          ...getCacheStrategy(300) // 5 minutes - use Prisma Accelerate caching
-        })
+          }), 300
+        ),
+        safeQuery((cacheStrategy) => 
+          db.anime.count({ 
+            where,
+            ...cacheStrategy
+          }), 300
+        )
       ])
 
       const result = {

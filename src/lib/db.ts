@@ -275,6 +275,41 @@ export function getCacheStrategy(ttl: number): { cacheStrategy?: { ttl: number }
   return {}
 }
 
+// Helper function to execute a query with automatic cacheStrategy error handling
+// If query fails with cacheStrategy, retries without cacheStrategy
+export async function safeQuery<T>(
+  queryFn: (cacheStrategy: { cacheStrategy?: { ttl: number } }) => Promise<T>,
+  ttl: number = 300
+): Promise<T> {
+  const cacheStrategy = getCacheStrategy(ttl)
+  
+  try {
+    return await queryFn(cacheStrategy)
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error || '')
+    const errorStack = error?.stack || ''
+    
+    // Check if error is related to cacheStrategy/Accelerate
+    const isCacheStrategyError = 
+      errorMessage.includes('cacheStrategy') ||
+      errorMessage.includes('cache') ||
+      errorMessage.includes('Accelerate') ||
+      errorStack.includes('cacheStrategy') ||
+      (cacheStrategy.cacheStrategy && !accelerateConnectionFailed)
+    
+    // If error is cacheStrategy-related and we haven't already disabled it, retry without cacheStrategy
+    if (isCacheStrategyError && cacheStrategy.cacheStrategy && !accelerateConnectionFailed) {
+      console.warn('⚠️  Query failed with cacheStrategy, retrying without cache:', errorMessage.substring(0, 200))
+      accelerateConnectionFailed = true
+      // Retry without cacheStrategy
+      return await queryFn({})
+    }
+    
+    // Re-throw if not a cacheStrategy error or if retry already failed
+    throw error
+  }
+}
+
 // Query performance monitoring
 // Use base client for event listeners since extended clients don't expose $on
 if (process.env.NODE_ENV === 'development' && baseClientForEvents) {

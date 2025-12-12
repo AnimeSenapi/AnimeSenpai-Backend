@@ -346,10 +346,18 @@ if (!unhandledRejectionHandlerAdded) {
     const errorMessage = reason?.message || String(reason || '')
     const errorStack = reason?.stack || ''
     
-    // Only catch Accelerate connection errors during initialization, not actual query failures
-    if (errorMessage.includes('fetch failed') && 
-        (errorStack.includes('getConnectionInfo') || errorStack.includes('Dt.start'))) {
-      console.warn('⚠️  Prisma Accelerate connection error during initialization (will retry on first query):', errorMessage.substring(0, 200))
+    // Catch Accelerate connection errors (during initialization or queries)
+    const isAccelerateError = 
+      errorMessage.includes('fetch failed') ||
+      errorMessage.includes('cacheStrategy') ||
+      errorMessage.includes('Accelerate') ||
+      errorMessage.includes('P6002') ||
+      errorStack.includes('getConnectionInfo') ||
+      errorStack.includes('Dt.start') ||
+      errorStack.includes('cacheStrategy')
+    
+    if (isAccelerateError) {
+      console.warn('⚠️  Prisma Accelerate error detected, disabling cacheStrategy:', errorMessage.substring(0, 200))
       // Mark Accelerate connection as failed - disable cacheStrategy to prevent query errors
       accelerateConnectionFailed = true
       // Don't crash - Prisma will retry on actual query

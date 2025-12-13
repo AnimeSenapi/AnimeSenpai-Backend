@@ -13,6 +13,22 @@
       "runtime": "@vercel/node@3.2.29",
       "maxDuration": 300
     },
+    "api/sync/batch-anime.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
+    "api/sync/batch-anime-1.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
+    "api/sync/batch-anime-2.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
+    "api/sync/batch-anime-3.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
     "api/jobs/session-cleanup.ts": {
       "runtime": "@vercel/node@3.2.29",
       "maxDuration": 60
@@ -53,6 +69,18 @@
     {
       "path": "/api/sync/calendar",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/sync/batch-anime-1",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/sync/batch-anime-2",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/sync/batch-anime-3",
+      "schedule": "0 18 * * *"
     },
     {
       "path": "/api/jobs/session-cleanup",

@@ -585,3 +585,188 @@ export async function syncDailyAnimeData(): Promise<{
   }
 }
 
+/**
+ * Batch sync function - processes top anime pages incrementally
+ * Designed to gradually build up database by processing batches over multiple runs
+ */
+export async function syncBatchAnimeData(options: {
+  startPage: number
+  pagesToProcess: number
+  maxAnimePerRun: number
+}): Promise<{
+  added: number
+  updated: number
+  filtered: number
+  errors: number
+  skipped: number
+}> {
+  const startTime = Date.now()
+  const { startPage, pagesToProcess, maxAnimePerRun } = options
+  
+  logger.system('Starting batch anime data sync...', {}, {
+    startPage,
+    pagesToProcess,
+    maxAnimePerRun,
+  })
+
+  let added = 0
+  let updated = 0
+  let filtered = 0
+  let errors = 0
+  let skipped = 0
+  const processedMalIds = new Set<number>()
+
+  try {
+    // Fetch top anime pages
+    const topAnimeMalIds: number[] = []
+    const endPage = startPage + pagesToProcess - 1
+    
+    logger.system(`Fetching top anime pages ${startPage} to ${endPage}...`, {}, {
+      startPage,
+      endPage,
+    })
+
+    for (let page = startPage; page <= endPage; page++) {
+      const response = await fetchTopAnimeFromJikan(page)
+      if (response?.data) {
+        topAnimeMalIds.push(...response.data.map(a => a.mal_id))
+        logger.system(`Fetched page ${page}: ${response.data.length} anime`, {}, {
+          page,
+          count: response.data.length,
+        })
+      }
+      if (page < endPage) {
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+      }
+    }
+
+    logger.system(`Fetched ${topAnimeMalIds.length} top anime MAL IDs from pages ${startPage}-${endPage}`, {}, {
+      count: topAnimeMalIds.length,
+      pages: `${startPage}-${endPage}`,
+    })
+
+    // Check which anime already exist and were recently updated (skip if updated in last 7 days)
+    const existingAnime = await db.anime.findMany({
+      where: {
+        malId: { in: topAnimeMalIds },
+        updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // Updated in last 7 days
+      },
+      select: { malId: true },
+    })
+    const recentlyUpdatedMalIds = new Set(existingAnime.map(a => a.malId))
+    const skippedCount = recentlyUpdatedMalIds.size
+    
+    logger.system(`Skipping ${skippedCount} recently updated anime (updated in last 7d)`, {}, {
+      skipped: skippedCount,
+      toProcess: topAnimeMalIds.length - skippedCount,
+    })
+
+    let processedCount = 0
+    const totalCount = topAnimeMalIds.length
+    const maxToProcess = Math.min(totalCount - skippedCount, maxAnimePerRun)
+    
+    logger.system(`Will process up to ${maxToProcess} anime`, {}, {
+      maxToProcess,
+      available: totalCount - skippedCount,
+      skipped: skippedCount,
+    })
+
+    // Process each anime
+    let processedInThisRun = 0
+    for (const malId of topAnimeMalIds) {
+      if (processedMalIds.has(malId)) {
+        continue
+      }
+      processedMalIds.add(malId)
+
+      // Skip if recently updated
+      if (recentlyUpdatedMalIds.has(malId)) {
+        skipped++
+        continue
+      }
+
+      // Hard limit check
+      if (processedInThisRun >= maxToProcess) {
+        logger.system(`Reached processing limit of ${maxToProcess} anime, stopping`, {}, {
+          processed: processedInThisRun,
+          limit: maxToProcess,
+        })
+        break
+      }
+
+      try {
+        // Fetch full anime details
+        const animeData = await fetchAnimeFromJikan(malId)
+        if (!animeData) {
+          errors++
+          continue
+        }
+
+        // Apply filters
+        if (shouldFilterAnimeFromJikanFull(animeData)) {
+          filtered++
+          await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+          continue
+        }
+
+        // Sync to database
+        const result = await syncAnimeToDatabase(animeData)
+        if (result.created) {
+          added++
+        } else if (result.updated) {
+          updated++
+        }
+
+        // Rate limit between requests
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+        processedInThisRun++
+      } catch (error) {
+        errors++
+        logger.error(`Error processing anime ${malId}`, error as Error, {}, {
+          malId,
+        })
+      }
+      
+      processedCount++
+      // Log progress every 10 anime
+      if (processedCount % 10 === 0 || processedInThisRun >= maxToProcess) {
+        logger.system(`Batch sync progress: ${processedCount}/${totalCount} anime processed (${processedInThisRun}/${maxToProcess} in this run)`, {}, {
+          processed: processedCount,
+          total: totalCount,
+          processedInRun: processedInThisRun,
+          maxInRun: maxToProcess,
+          added,
+          updated,
+          filtered,
+          errors,
+          skipped,
+        })
+      }
+    }
+
+    const duration = Date.now() - startTime
+    logger.system('Batch anime data sync completed', {}, {
+      startPage,
+      endPage,
+      added,
+      updated,
+      filtered,
+      errors,
+      skipped,
+      total: processedMalIds.size,
+      duration: `${Math.round(duration / 1000)}s`,
+    })
+
+    return {
+      added,
+      updated,
+      filtered,
+      errors,
+      skipped,
+    }
+  } catch (error) {
+    logger.error('Batch anime data sync failed', error as Error, {}, {})
+    throw error
+  }
+}
+

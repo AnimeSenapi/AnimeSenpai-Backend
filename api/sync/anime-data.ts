@@ -66,20 +66,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Run sync in background (don't wait for completion)
+    // Register with job queue so frontend can track status
+    const { jobQueue } = await import('../../src/lib/background-jobs.js')
     const { syncDailyAnimeData } = await import('../../src/lib/anime-sync.js')
-    syncDailyAnimeData()
-      .then((result: { added: number; updated: number; filtered: number; errors: number }) => {
-        console.log('Anime data sync completed', {
-          added: result.added,
-          updated: result.updated,
-          filtered: result.filtered,
-          errors: result.errors,
-        })
+    
+    // Enqueue the job so it's tracked in the job queue
+    await jobQueue.enqueue('anime-data-sync', async () => {
+      const result = await syncDailyAnimeData()
+      console.log('Anime data sync completed', {
+        added: result.added,
+        updated: result.updated,
+        filtered: result.filtered,
+        errors: result.errors,
       })
-      .catch((error: unknown) => {
-        console.error('Anime data sync failed', error)
-      })
+      return result
+    })
 
     return res.status(202).json({
       status: 'started',

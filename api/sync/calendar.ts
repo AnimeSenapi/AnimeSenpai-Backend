@@ -66,15 +66,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Run sync in background (don't wait for completion)
+    // Register with job queue so frontend can track status
+    const { jobQueue } = await import('../../src/lib/background-jobs.js')
     const { syncAiringAnimeCalendarData } = await import('../../src/lib/calendar-sync.js')
-    syncAiringAnimeCalendarData()
-      .then(() => {
-        console.log('Calendar sync completed')
-      })
-      .catch((error: unknown) => {
-        console.error('Calendar sync failed', error)
-      })
+    
+    // Enqueue the job so it's tracked in the job queue
+    await jobQueue.enqueue('calendar-sync', async () => {
+      await syncAiringAnimeCalendarData()
+      console.log('Calendar sync completed')
+    })
 
     return res.status(202).json({
       status: 'started',

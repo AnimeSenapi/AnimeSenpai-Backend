@@ -13,7 +13,8 @@ import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-sea
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
 const RATE_LIMIT_DELAY = 1000 // 1000ms = 1 req/sec (still safe, Jikan allows 3 req/sec)
 const MAX_RETRIES = 3
-const TOP_ANIME_PAGES = 2 // Fetch first 2 pages of top anime (50 anime) - reduced to fit within timeout
+const TOP_ANIME_PAGES = 1 // Fetch first page of top anime (25 anime) - reduced to fit within Vercel timeout
+const MAX_ANIME_TO_PROCESS = 100 // Hard limit to prevent timeout
 
 /**
  * Full Jikan anime response from /anime/{id} endpoint
@@ -408,6 +409,7 @@ export async function syncDailyAnimeData(): Promise<{
   let updated = 0
   let filtered = 0
   let errors = 0
+  let skipped = 0
   const processedMalIds = new Set<number>()
 
   try {
@@ -451,15 +453,54 @@ export async function syncDailyAnimeData(): Promise<{
       total: allMalIds.size,
     })
 
+    // Check which anime already exist and were recently updated (skip if updated in last 24 hours)
+    const malIdsArray = Array.from(allMalIds)
+    const existingAnime = await db.anime.findMany({
+      where: {
+        malId: { in: malIdsArray },
+        updatedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Updated in last 24 hours
+      },
+      select: { malId: true },
+    })
+    const recentlyUpdatedMalIds = new Set(existingAnime.map(a => a.malId))
+    const skippedCount = recentlyUpdatedMalIds.size
+    
+    logger.system(`Skipping ${skippedCount} recently updated anime (updated in last 24h)`, {}, {
+      skipped: skippedCount,
+      toProcess: allMalIds.size - skippedCount,
+    })
+
     let processedCount = 0
     const totalCount = allMalIds.size
+    const maxToProcess = Math.min(totalCount - skipped, MAX_ANIME_TO_PROCESS)
+    
+    logger.system(`Will process up to ${maxToProcess} anime (${totalCount - skipped} available after skipping recently updated)`, {}, {
+      maxToProcess,
+      available: totalCount - skipped,
+      skipped,
+    })
 
-    // Process each anime
+    // Process each anime (with hard limit to prevent timeout)
+    let processedInThisRun = 0
     for (const malId of allMalIds) {
+      // Hard limit check
+      if (processedInThisRun >= maxToProcess) {
+        logger.system(`Reached processing limit of ${maxToProcess} anime, stopping to prevent timeout`, {}, {
+          processed: processedInThisRun,
+          limit: maxToProcess,
+        })
+        break
+      }
       if (processedMalIds.has(malId)) {
         continue
       }
       processedMalIds.add(malId)
+
+      // Skip if recently updated (saves API calls and time)
+      if (recentlyUpdatedMalIds.has(malId)) {
+        skipped++
+        continue
+      }
 
       try {
         // Fetch full anime details
@@ -490,6 +531,7 @@ export async function syncDailyAnimeData(): Promise<{
 
         // Rate limit between requests
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
+        processedInThisRun++
       } catch (error) {
         errors++
         logger.error(`Error processing anime ${malId}`, error as Error, {}, {
@@ -499,14 +541,17 @@ export async function syncDailyAnimeData(): Promise<{
       
       processedCount++
       // Log progress every 10 anime or at the end
-      if (processedCount % 10 === 0 || processedCount === totalCount) {
-        logger.system(`Sync progress: ${processedCount}/${totalCount} anime processed`, {}, {
+      if (processedCount % 10 === 0 || processedCount === totalCount || processedInThisRun >= maxToProcess) {
+        logger.system(`Sync progress: ${processedCount}/${totalCount} anime processed (${processedInThisRun}/${maxToProcess} in this run)`, {}, {
           processed: processedCount,
           total: totalCount,
+          processedInRun: processedInThisRun,
+          maxInRun: maxToProcess,
           added,
           updated,
           filtered,
           errors,
+          skipped,
         })
       }
     }
@@ -517,6 +562,7 @@ export async function syncDailyAnimeData(): Promise<{
       updated,
       filtered,
       errors,
+      skipped,
       total: processedMalIds.size,
       duration: `${Math.round(duration / 1000)}s`,
     })

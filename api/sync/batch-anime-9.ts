@@ -3,9 +3,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 export const dynamic = 'force-dynamic'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Redirect to batch-anime with page 41-45
+  // Redirect to batch-anime with page 57-63 (7 pages = ~175 anime, target ~50 new)
   const batchHandler = (await import('./batch-anime.js')).default
-  req.query = { startPage: '41', pages: '5', maxAnime: '100' }
+  req.query = { startPage: '57', pages: '7', maxAnime: '150' }
   return batchHandler(req, res)
 }
 

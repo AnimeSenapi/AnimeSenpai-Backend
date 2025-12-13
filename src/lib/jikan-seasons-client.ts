@@ -8,8 +8,9 @@
 import { logger } from './logger.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)
+const RATE_LIMIT_DELAY = 1000 // 1000ms = 1 req/sec (still safe, Jikan allows 3 req/sec)
 const MAX_RETRIES = 3
+const MAX_SEASON_PAGES = 2 // Limit pages to prevent timeout (2 pages = ~50 anime per season)
 
 interface JikanSeasonAnime {
   mal_id: number
@@ -172,14 +173,14 @@ export async function fetchJikanSeasonUpcoming(
 }
 
 /**
- * Fetch all pages of current season anime
+ * Fetch all pages of current season anime (limited to MAX_SEASON_PAGES)
  */
 export async function fetchAllJikanSeasonNow(): Promise<JikanSeasonAnime[]> {
   const allAnime: JikanSeasonAnime[] = []
   let page = 1
   let hasMore = true
 
-  while (hasMore) {
+  while (hasMore && page <= MAX_SEASON_PAGES) {
     const response = await fetchJikanSeasonNow(page)
     
     if (!response?.data) {
@@ -194,23 +195,29 @@ export async function fetchAllJikanSeasonNow(): Promise<JikanSeasonAnime[]> {
     page++
 
     // Rate limit between pages
-    if (hasMore) {
+    if (hasMore && page <= MAX_SEASON_PAGES) {
       await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
     }
   }
+
+  logger.system(`Fetched ${allAnime.length} anime from season now (${page - 1} pages)`, {}, {
+    count: allAnime.length,
+    pages: page - 1,
+    limit: MAX_SEASON_PAGES,
+  })
 
   return allAnime
 }
 
 /**
- * Fetch all pages of upcoming season anime
+ * Fetch all pages of upcoming season anime (limited to MAX_SEASON_PAGES)
  */
 export async function fetchAllJikanSeasonUpcoming(): Promise<JikanSeasonAnime[]> {
   const allAnime: JikanSeasonAnime[] = []
   let page = 1
   let hasMore = true
 
-  while (hasMore) {
+  while (hasMore && page <= MAX_SEASON_PAGES) {
     const response = await fetchJikanSeasonUpcoming(page)
     
     if (!response?.data) {
@@ -225,10 +232,16 @@ export async function fetchAllJikanSeasonUpcoming(): Promise<JikanSeasonAnime[]>
     page++
 
     // Rate limit between pages
-    if (hasMore) {
+    if (hasMore && page <= MAX_SEASON_PAGES) {
       await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
     }
   }
+
+  logger.system(`Fetched ${allAnime.length} anime from season upcoming (${page - 1} pages)`, {}, {
+    count: allAnime.length,
+    pages: page - 1,
+    limit: MAX_SEASON_PAGES,
+  })
 
   return allAnime
 }

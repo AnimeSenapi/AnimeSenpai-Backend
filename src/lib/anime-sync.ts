@@ -413,22 +413,27 @@ export async function syncDailyAnimeData(): Promise<{
   const processedMalIds = new Set<number>()
 
   try {
-    // Step 1: Fetch current season anime
+    // Step 1: Fetch current season anime (with timeout protection)
     logger.system('Step 1: Fetching current season anime...', {}, {})
+    const step1Start = Date.now()
     const seasonNowAnime = await fetchAllJikanSeasonNow()
-    logger.system(`Fetched ${seasonNowAnime.length} anime from current season`, {}, {
+    logger.system(`Fetched ${seasonNowAnime.length} anime from current season (took ${Math.round((Date.now() - step1Start) / 1000)}s)`, {}, {
       count: seasonNowAnime.length,
+      duration: Math.round((Date.now() - step1Start) / 1000),
     })
 
-    // Step 2: Fetch upcoming season anime
+    // Step 2: Fetch upcoming season anime (with timeout protection)
     logger.system('Step 2: Fetching upcoming season anime...', {}, {})
+    const step2Start = Date.now()
     const seasonUpcomingAnime = await fetchAllJikanSeasonUpcoming()
-    logger.system(`Fetched ${seasonUpcomingAnime.length} anime from upcoming season`, {}, {
+    logger.system(`Fetched ${seasonUpcomingAnime.length} anime from upcoming season (took ${Math.round((Date.now() - step2Start) / 1000)}s)`, {}, {
       count: seasonUpcomingAnime.length,
+      duration: Math.round((Date.now() - step2Start) / 1000),
     })
 
     // Step 3: Fetch top anime
     logger.system('Step 3: Fetching top anime...', {}, {})
+    const step3Start = Date.now()
     const topAnimeMalIds: number[] = []
     for (let page = 1; page <= TOP_ANIME_PAGES; page++) {
       const response = await fetchTopAnimeFromJikan(page)
@@ -439,8 +444,9 @@ export async function syncDailyAnimeData(): Promise<{
         await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
       }
     }
-    logger.system(`Fetched ${topAnimeMalIds.length} top anime MAL IDs`, {}, {
+    logger.system(`Fetched ${topAnimeMalIds.length} top anime MAL IDs (took ${Math.round((Date.now() - step3Start) / 1000)}s)`, {}, {
       count: topAnimeMalIds.length,
+      duration: Math.round((Date.now() - step3Start) / 1000),
     })
 
     // Combine all MAL IDs

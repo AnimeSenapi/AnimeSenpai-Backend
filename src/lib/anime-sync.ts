@@ -451,6 +451,9 @@ export async function syncDailyAnimeData(): Promise<{
       total: allMalIds.size,
     })
 
+    let processedCount = 0
+    const totalCount = allMalIds.size
+
     // Process each anime
     for (const malId of allMalIds) {
       if (processedMalIds.has(malId)) {
@@ -491,6 +494,19 @@ export async function syncDailyAnimeData(): Promise<{
         errors++
         logger.error(`Error processing anime ${malId}`, error as Error, {}, {
           malId,
+        })
+      }
+      
+      processedCount++
+      // Log progress every 10 anime or at the end
+      if (processedCount % 10 === 0 || processedCount === totalCount) {
+        logger.system(`Sync progress: ${processedCount}/${totalCount} anime processed`, {}, {
+          processed: processedCount,
+          total: totalCount,
+          added,
+          updated,
+          filtered,
+          errors,
         })
       }
     }

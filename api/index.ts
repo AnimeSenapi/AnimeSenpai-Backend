@@ -52,6 +52,39 @@ export default async function handler(req: any, res: any) {
     return
   }
 
+  // Only handle tRPC requests - let other paths be handled by dedicated route files
+  // Parse URL to get pathname without query params
+  const urlPath = req.url?.split('?')[0] || ''
+  
+  // List of paths that should be handled by dedicated route files (not tRPC)
+  const dedicatedRoutes = [
+    '/api/sync/anime-data',
+    '/api/sync/calendar',
+    '/api/jobs/session-cleanup',
+    '/api/jobs/token-cleanup',
+    '/api/jobs/trending-update'
+  ]
+  
+  // Check if this is a dedicated route (cron jobs, etc.)
+  const isDedicatedRoute = dedicatedRoutes.some(route => urlPath === route || urlPath.startsWith(route + '/'))
+  
+  // Only process tRPC requests - skip dedicated routes and other non-tRPC paths
+  const isTrpcRequest = urlPath.startsWith('/api/trpc') || 
+                         (urlPath === '/api' && req.url?.includes('trpc'))
+  
+  if (isDedicatedRoute || (!isTrpcRequest && urlPath.startsWith('/api/') && urlPath !== '/health' && urlPath !== '/')) {
+    // This is not a tRPC request - don't process it here
+    // Vercel should route to dedicated files, but if it reaches here, return 404
+    res.status(404).json({ 
+      error: 'Not found',
+      message: 'This endpoint should be handled by a dedicated route file',
+      path: urlPath,
+      isDedicatedRoute,
+      url: req.url
+    })
+    return
+  }
+
   // Convert Vercel Request to Fetch Request
   const url = `https://${req.headers.host}${req.url}`
   const method = req.method || 'GET'

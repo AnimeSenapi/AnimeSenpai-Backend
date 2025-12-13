@@ -4,6 +4,26 @@
     "api/index.ts": {
       "runtime": "@vercel/node@3.2.29",
       "maxDuration": 30
+    },
+    "api/sync/anime-data.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
+    "api/sync/calendar.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 300
+    },
+    "api/jobs/session-cleanup.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 60
+    },
+    "api/jobs/token-cleanup.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 60
+    },
+    "api/jobs/trending-update.ts": {
+      "runtime": "@vercel/node@3.2.29",
+      "maxDuration": 60
     }
   },
   "outputDirectory": ".",

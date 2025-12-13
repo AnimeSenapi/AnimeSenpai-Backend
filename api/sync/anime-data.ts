@@ -66,32 +66,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Register with job queue so frontend can track status
-    const { jobQueue } = await import('../../src/lib/background-jobs.js')
+    // Run sync and wait for completion (Vercel cron jobs can run up to 5 minutes)
     const { syncDailyAnimeData } = await import('../../src/lib/anime-sync.js')
     
-    // Enqueue the job so it's tracked in the job queue
-    await jobQueue.enqueue('anime-data-sync', async () => {
-      const result = await syncDailyAnimeData()
-      console.log('Anime data sync completed', {
+    console.log('Starting anime data sync...')
+    const startTime = Date.now()
+    
+    // Execute sync and wait for it to complete
+    const result = await syncDailyAnimeData()
+    
+    const duration = Date.now() - startTime
+    
+    console.log('Anime data sync completed', {
+      added: result.added,
+      updated: result.updated,
+      filtered: result.filtered,
+      errors: result.errors,
+      duration: `${Math.round(duration / 1000)}s`,
+    })
+
+    return res.status(200).json({
+      status: 'completed',
+      message: 'Anime data sync completed successfully',
+      timestamp: new Date().toISOString(),
+      duration: `${Math.round(duration / 1000)}s`,
+      results: {
         added: result.added,
         updated: result.updated,
         filtered: result.filtered,
         errors: result.errors,
-      })
-      return result
-    })
-
-    return res.status(202).json({
-      status: 'started',
-      message: 'Anime data sync started',
-      timestamp: new Date().toISOString(),
+      },
     })
   } catch (error: any) {
-    console.error('Error starting anime data sync', error)
+    console.error('Error during anime data sync', error)
     return res.status(500).json({
-      error: 'Failed to start sync',
+      error: 'Sync failed',
       message: error.message,
+      timestamp: new Date().toISOString(),
     })
   }
 }

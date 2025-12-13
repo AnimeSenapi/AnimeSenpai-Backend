@@ -66,26 +66,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Register with job queue so frontend can track status
-    const { jobQueue } = await import('../../src/lib/background-jobs.js')
+    // Run sync and wait for completion (Vercel cron jobs can run up to 5 minutes)
     const { syncAiringAnimeCalendarData } = await import('../../src/lib/calendar-sync.js')
     
-    // Enqueue the job so it's tracked in the job queue
-    await jobQueue.enqueue('calendar-sync', async () => {
-      await syncAiringAnimeCalendarData()
-      console.log('Calendar sync completed')
+    console.log('Starting calendar sync...')
+    const startTime = Date.now()
+    
+    // Execute sync and wait for it to complete
+    await syncAiringAnimeCalendarData()
+    
+    const duration = Date.now() - startTime
+    
+    console.log('Calendar sync completed', {
+      duration: `${Math.round(duration / 1000)}s`,
     })
 
-    return res.status(202).json({
-      status: 'started',
-      message: 'Calendar sync started',
+    return res.status(200).json({
+      status: 'completed',
+      message: 'Calendar sync completed successfully',
       timestamp: new Date().toISOString(),
+      duration: `${Math.round(duration / 1000)}s`,
     })
   } catch (error: any) {
-    console.error('Error starting calendar sync', error)
+    console.error('Error during calendar sync', error)
     return res.status(500).json({
-      error: 'Failed to start sync',
+      error: 'Sync failed',
       message: error.message,
+      timestamp: new Date().toISOString(),
     })
   }
 }

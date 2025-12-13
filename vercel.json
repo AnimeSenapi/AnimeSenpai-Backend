@@ -14,14 +14,6 @@
       "destination": "/api"
     },
     {
-      "source": "/api/sync/:path*",
-      "destination": "/api"
-    },
-    {
-      "source": "/api/jobs/:path*",
-      "destination": "/api"
-    },
-    {
       "source": "/health",
       "destination": "/api"
     }

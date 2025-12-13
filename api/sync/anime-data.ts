@@ -66,7 +66,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Run sync and wait for completion (Vercel cron jobs can run up to 5 minutes)
+    // Run sync and wait for completion (Vercel cron jobs max 300 seconds)
+    // Optimizations: Reduced TOP_ANIME_PAGES to 2, rate limit to 1s
     const { syncDailyAnimeData } = await import('../../src/lib/anime-sync.js')
     
     console.log('Starting anime data sync...')

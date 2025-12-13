@@ -11,9 +11,9 @@ import { shouldFilterAnimeFromJikanFull } from './anime-filter-utils.js'
 import { fetchAllJikanSeasonNow, fetchAllJikanSeasonUpcoming } from './jikan-seasons-client.js'
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4'
-const RATE_LIMIT_DELAY = 1200 // 1200ms = 0.83 req/sec (safe rate)
+const RATE_LIMIT_DELAY = 1000 // 1000ms = 1 req/sec (still safe, Jikan allows 3 req/sec)
 const MAX_RETRIES = 3
-const TOP_ANIME_PAGES = 3 // Fetch first 3 pages of top anime (75 anime)
+const TOP_ANIME_PAGES = 2 // Fetch first 2 pages of top anime (50 anime) - reduced to fit within timeout
 
 /**
  * Full Jikan anime response from /anime/{id} endpoint

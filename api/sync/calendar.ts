@@ -10,26 +10,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Check if this is a Vercel Cron Job request
-  const isVercelCron = req.headers['x-vercel-cron'] === '1'
+  // Check header case-insensitively
+  const vercelCronHeader = req.headers['x-vercel-cron'] || req.headers['X-Vercel-Cron']
+  const isVercelCron = vercelCronHeader === '1' || vercelCronHeader === 'true'
   const authHeader = req.headers.authorization as string | undefined
   const cronSecret = process.env.CRON_SECRET
   const syncSecretToken = process.env.SYNC_SECRET_TOKEN || 'change-me-in-production'
 
+  // Debug logging (remove in production if needed)
+  console.log('Cron job auth check:', {
+    isVercelCron,
+    vercelCronHeader,
+    hasAuthHeader: !!authHeader,
+    hasCronSecret: !!cronSecret,
+    hasSyncSecretToken: !!syncSecretToken,
+    userAgent: req.headers['user-agent']
+  })
+
   // Verify authentication
-  // Vercel sends CRON_SECRET as Authorization header, or we check x-vercel-cron header
+  // Vercel sends CRON_SECRET as Authorization header value (not "Bearer <token>")
+  // Or we check x-vercel-cron header
   if (!isVercelCron) {
+    // Extract token from Authorization header (could be "Bearer <token>" or just "<token>")
     const providedToken = authHeader?.startsWith('Bearer ')
       ? authHeader.substring(7)
-      : (req.query.token as string | undefined)
+      : authHeader || (req.query.token as string | undefined)
 
-    // Check CRON_SECRET first (Vercel's recommended method)
-    if (cronSecret && providedToken !== cronSecret) {
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
-
-    // Fallback to SYNC_SECRET_TOKEN if CRON_SECRET is not set
-    if (!cronSecret && providedToken !== syncSecretToken) {
-      return res.status(401).json({ error: 'Unauthorized' })
+    // If CRON_SECRET is set, Vercel sends it as Authorization header value
+    if (cronSecret) {
+      if (providedToken !== cronSecret) {
+        return res.status(401).json({ 
+          error: 'Unauthorized',
+          message: 'Invalid CRON_SECRET'
+        })
+      }
+    } else {
+      // Fallback to SYNC_SECRET_TOKEN if CRON_SECRET is not set
+      if (!providedToken || providedToken !== syncSecretToken) {
+        return res.status(401).json({ 
+          error: 'Unauthorized',
+          message: 'Invalid SYNC_SECRET_TOKEN'
+        })
+      }
     }
   }
 

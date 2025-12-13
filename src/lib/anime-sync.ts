@@ -645,20 +645,22 @@ export async function syncBatchAnimeData(options: {
       pages: `${startPage}-${endPage}`,
     })
 
-    // Check which anime already exist and were recently updated (skip if updated in last 7 days)
+    // Check which anime already exist and were recently updated (skip if updated in last 1 day for batch sync)
+    // For bulk import, we use a shorter skip window to allow more updates
     const existingAnime = await db.anime.findMany({
       where: {
         malId: { in: topAnimeMalIds },
-        updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // Updated in last 7 days
+        updatedAt: { gte: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) }, // Updated in last 1 day
       },
       select: { malId: true },
     })
     const recentlyUpdatedMalIds = new Set(existingAnime.map(a => a.malId))
     const skippedCount = recentlyUpdatedMalIds.size
     
-    logger.system(`Skipping ${skippedCount} recently updated anime (updated in last 7d)`, {}, {
+    logger.system(`Skipping ${skippedCount} recently updated anime (updated in last 1d)`, {}, {
       skipped: skippedCount,
       toProcess: topAnimeMalIds.length - skippedCount,
+      totalFetched: topAnimeMalIds.length,
     })
 
     let processedCount = 0
@@ -745,16 +747,32 @@ export async function syncBatchAnimeData(options: {
     }
 
     const duration = Date.now() - startTime
-    logger.system('Batch anime data sync completed', {}, {
+    const totalFetched = topAnimeMalIds.length
+    const totalProcessed = processedInThisRun
+    const summary = {
       startPage,
       endPage,
+      totalFetched,
+      skipped,
+      totalProcessed,
       added,
       updated,
       filtered,
       errors,
-      skipped,
-      total: processedMalIds.size,
       duration: `${Math.round(duration / 1000)}s`,
+    }
+    
+    logger.system('Batch anime data sync completed', {}, summary)
+    console.log('📊 Batch Sync Summary:', {
+      'Pages processed': `${startPage}-${endPage}`,
+      'Anime fetched': totalFetched,
+      'Skipped (recently updated)': skipped,
+      'Processed in this run': totalProcessed,
+      '✅ Added': added,
+      '🔄 Updated': updated,
+      '🚫 Filtered out': filtered,
+      '❌ Errors': errors,
+      '⏱️ Duration': `${Math.round(duration / 1000)}s`,
     })
 
     return {

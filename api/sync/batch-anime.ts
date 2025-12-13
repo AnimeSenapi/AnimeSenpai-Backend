@@ -59,10 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Get batch parameters from query or use defaults
-    // Default: process 5 pages (125 anime), max 100 per run to fit within timeout
+    // Default: process 5 pages (125 anime), max 150 per run to fit within timeout
     const startPage = parseInt(req.query.startPage as string) || 1
     const pagesToProcess = parseInt(req.query.pages as string) || 5 // Process 5 pages per run (~125 anime)
-    const maxAnimePerRun = parseInt(req.query.maxAnime as string) || 100 // Hard limit per run
+    const maxAnimePerRun = parseInt(req.query.maxAnime as string) || 150 // Hard limit per run (increased for bulk import)
 
     console.log('Starting batch anime sync...', {
       startPage,
